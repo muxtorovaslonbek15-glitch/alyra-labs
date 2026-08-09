@@ -28,29 +28,6 @@ import type {
   ToolTraceItem,
 } from "./types";
 
-const SUGGESTIONS = [
-  {
-    label: "Solid woody rose",
-    prompt:
-      "Create a luxury niche solid perfume: deep woody rose with oud, sandalwood, and a touch of sweetness. Give top/heart/base, %, solid wax constraints, and cost if possible.",
-  },
-  {
-    label: "Fix harsh opening",
-    prompt:
-      "Improve this weak formula: bergamot 18%, lemon 12%, rose absolute 8%, iso e super 25%, hedione 15%, ambroxan 5%, musks 12%, ethanol qs. Harsh opening, poor longevity. Give precise percent mods.",
-  },
-  {
-    label: "Inspired-by woody rose",
-    prompt:
-      "Give an approximate inspired-by structure for a known woody-rose niche scent (disclaimer + useful accord, not a copy). Prefer materials we can source.",
-  },
-  {
-    label: "IFRA / substitute",
-    prompt:
-      "What is a good IFRA-aware substitute for lyral in a floral heart, and what current IFRA notes should I watch for rose oxide / methyl ionone?",
-  },
-];
-
 function formatChatTime(iso: string) {
   try {
     const d = new Date(iso);
@@ -673,11 +650,7 @@ export function PerfumerChat() {
                 Loading conversation…
               </p>
             ) : empty ? (
-              <EmptyState
-                onSuggestion={(s) => {
-                  void sendText(s);
-                }}
-              />
+              <EmptyState />
             ) : (
               messages.map((m) => <MessageBubble key={m.id} message={m} />)
             )}
@@ -716,7 +689,7 @@ export function PerfumerChat() {
   );
 }
 
-function EmptyState({ onSuggestion }: { onSuggestion: (s: string) => void }) {
+function EmptyState() {
   return (
     <div className="mx-auto flex max-w-md flex-col items-center px-2 py-10 text-center md:py-16">
       <AlyraMark size="md" href={null} className="justify-center" />
@@ -728,22 +701,6 @@ function EmptyState({ onSuggestion }: { onSuggestion: (s: string) => void }) {
         EDP, and we&apos;ll compose with materials, IFRA caution, and cost in
         view.
       </p>
-      <ul className="mt-8 w-full space-y-1.5 text-left">
-        {SUGGESTIONS.map((s) => (
-          <li key={s.label}>
-            <button
-              type="button"
-              onClick={() => onSuggestion(s.prompt)}
-              className="min-h-12 w-full rounded-lg px-3 py-3 text-left text-sm text-lab-ink transition-colors hover:bg-lab-wash/80"
-            >
-              <span className="font-medium">{s.label}</span>
-              <span className="mt-0.5 block line-clamp-1 text-[12px] text-lab-muted">
-                {s.prompt}
-              </span>
-            </button>
-          </li>
-        ))}
-      </ul>
     </div>
   );
 }
