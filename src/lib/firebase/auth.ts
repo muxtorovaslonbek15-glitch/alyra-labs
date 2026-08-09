@@ -10,7 +10,7 @@ import {
   type Unsubscribe,
 } from "firebase/auth";
 import { FirebaseError } from "firebase/app";
-import { getFirebaseAuth } from "./client";
+import { getFirebaseAuth, isFirebaseConfigured } from "./client";
 import {
   ensureUserProfile,
   type SignupProfileFields,
@@ -119,5 +119,10 @@ export async function signOut() {
 }
 
 export function subscribeAuth(callback: (user: User | null) => void): Unsubscribe {
+  // Soft-fail when Firebase env is missing so Perfumer / guest Lab still load locally.
+  if (!isFirebaseConfigured()) {
+    callback(null);
+    return () => {};
+  }
   return onAuthStateChanged(getFirebaseAuth(), callback);
 }

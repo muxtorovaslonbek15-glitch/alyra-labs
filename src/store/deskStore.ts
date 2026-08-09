@@ -52,7 +52,7 @@ interface DeskState {
     vesselId: string,
     chemicalId: string,
     amountMl?: number,
-    opts?: { consumeStock?: boolean },
+    opts?: { consumeStock?: boolean; bypassGuestLimit?: boolean },
   ) => boolean;
   setChemicalAmount: (
     vesselId: string,
@@ -229,7 +229,9 @@ export const useDeskStore = create<DeskState>()(
       },
 
       addChemicalToVessel: (vesselId, chemicalId, amountMl, opts) => {
-        if (!assertLabActionAllowed()) return false;
+        // Bulk hydrate (Open in Lab / market remix) must not trip the 2-pour guest gate mid-loop.
+        const bypassGuestLimit = opts?.bypassGuestLimit === true;
+        if (!bypassGuestLimit && !assertLabActionAllowed()) return false;
 
         let added = false;
         const color = getChemical(chemicalId)?.color;
@@ -299,7 +301,7 @@ export const useDeskStore = create<DeskState>()(
           showToast(labCopy.pourOverflow);
         }
         const auth = useAuthStore.getState();
-        if (!auth.user) {
+        if (!auth.user && !bypassGuestLimit) {
           auth.recordGuestChemicalAdd();
         }
         return true;
@@ -685,15 +687,20 @@ export const useDeskStore = create<DeskState>()(
           for (const c of contents) {
             get().addChemicalToVessel(id, c.chemicalId, c.amountMl, {
               consumeStock: false,
+              bypassGuestLimit: true,
             });
           }
         } else {
           for (const chemId of contentIds) {
             get().addChemicalToVessel(id, chemId, undefined, {
               consumeStock: false,
+              bypassGuestLimit: true,
             });
           }
         }
+        // Count formula hydrate as a single guest action (not one per line).
+        const auth = useAuthStore.getState();
+        if (!auth.user) auth.recordGuestChemicalAdd();
         if (heatAttached) get().attachHeat(id);
         if (coolAttached) get().attachCool(id);
         const stirTimes = Math.max(0, Math.min(3, stirLevel));

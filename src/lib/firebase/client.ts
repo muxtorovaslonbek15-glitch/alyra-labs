@@ -11,8 +11,13 @@ const firebaseConfig = {
   appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
 };
 
+/** True when public Firebase web config is present (prod / configured local). */
+export function isFirebaseConfigured(): boolean {
+  return Boolean(firebaseConfig.apiKey && firebaseConfig.projectId);
+}
+
 function assertConfig() {
-  if (!firebaseConfig.apiKey || !firebaseConfig.projectId) {
+  if (!isFirebaseConfigured()) {
     throw new Error(
       "Firebase is not configured. Set NEXT_PUBLIC_FIREBASE_* in .env.local",
     );

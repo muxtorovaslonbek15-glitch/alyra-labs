@@ -6,6 +6,7 @@ import type {
   PerfumerApiError,
   StructuredPayload,
   ChatSections,
+  LabBridgeFormula,
 } from "./types";
 
 function baseUrl(): string {
@@ -366,6 +367,7 @@ export async function streamChat(
     onTool?: (tool: string, ok?: boolean) => void;
     onToken?: (text: string) => void;
     onStructured?: (s: StructuredPayload, sections?: ChatSections) => void;
+    onLabBridge?: (payload: LabBridgeFormula) => void;
     onDone?: (
       reply: string,
       sections?: ChatSections,
@@ -454,6 +456,9 @@ export async function streamChat(
           if (evt.type === "token") handlers.onToken?.(evt.text || "");
           if (evt.type === "structured") {
             handlers.onStructured?.(evt.structured || {}, evt.sections);
+          }
+          if (evt.type === "lab_bridge" && evt.payload) {
+            handlers.onLabBridge?.(evt.payload as LabBridgeFormula);
           }
           if (evt.type === "done") {
             sawDone = true;

@@ -377,6 +377,15 @@ export function PerfumerChat() {
             sections: sections || undefined,
           });
         },
+        onLabBridge: (payload) => {
+          patchAssistant((m) => ({
+            ...m,
+            structured: {
+              ...(m.structured || {}),
+              lab_bridge: payload,
+            },
+          }));
+        },
         onDone: (reply, sections, structured, chatId) => {
           updateChats((prev) =>
             prev.map((c) => {

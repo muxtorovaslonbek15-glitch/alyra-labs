@@ -1,6 +1,9 @@
 "use client";
 
+import { useRouter } from "next/navigation";
+import { useState } from "react";
 import type { CostBreakdown, FormulaLine, StructuredPayload } from "./types";
+import { buildLabBridgeFromStructured, storeLabBridge } from "./labBridge";
 
 function AccordionRow({
   label,
@@ -34,14 +37,51 @@ export function FormulaCard({
     improvements?: string;
   };
 }) {
+  const router = useRouter();
+  const [opening, setOpening] = useState(false);
+  const [mapNote, setMapNote] = useState<string | null>(null);
+
   const gen = structured?.formula;
   const lines: FormulaLine[] = gen?.formula || [];
   const accord = gen?.accord;
   const cost: CostBreakdown | null | undefined = structured?.cost || gen?.cost;
   const dupe = structured?.dupe;
+  const bridge =
+    structured?.lab_bridge || buildLabBridgeFromStructured(structured);
+  const canOpenLab = Boolean(bridge?.lines?.some((l) => l.labChemicalId));
 
   if (!lines.length && !sections?.formula && !sections?.accord) {
     return null;
+  }
+
+  function openInLab() {
+    const payload =
+      structured?.lab_bridge || buildLabBridgeFromStructured(structured);
+    if (!payload) {
+      setMapNote("No formula lines to place on the desk.");
+      return;
+    }
+    const mapped = payload.mappingReport?.mappedCount ?? 0;
+    if (mapped === 0) {
+      setMapNote(
+        "None of these materials are in Lab inventory yet. Expand Lab fragrance stock in a later pass.",
+      );
+      return;
+    }
+    setOpening(true);
+    storeLabBridge(payload);
+    const unmapped = payload.mappingReport?.unmappedCount ?? 0;
+    if (unmapped > 0) {
+      const ids = (payload.mappingReport?.unmappedIds || []).slice(0, 8).join(", ");
+      setMapNote(
+        `Placing ${mapped} of ${mapped + unmapped} materials. Not in Lab yet: ${ids}${
+          (payload.mappingReport?.unmappedIds?.length || 0) > 8 ? "…" : ""
+        }`,
+      );
+    } else {
+      setMapNote(null);
+    }
+    router.push("/lab?bridge=1");
   }
 
   return (
@@ -131,6 +171,32 @@ export function FormulaCard({
               </li>
             ))}
           </ul>
+        </div>
+      ) : null}
+
+      {lines.length ? (
+        <div className="space-y-2 pt-1">
+          <button
+            type="button"
+            onClick={openInLab}
+            disabled={!canOpenLab || opening}
+            className="min-h-11 w-full rounded-lg bg-lab-ink px-4 py-2.5 text-sm font-semibold text-lab-foam transition hover:bg-lab-ink/90 disabled:cursor-not-allowed disabled:opacity-40 md:min-h-0 md:w-auto md:py-2"
+          >
+            {opening ? "Opening Lab…" : "Open in Lab"}
+          </button>
+          {bridge?.mappingReport ? (
+            <p className="text-[11px] leading-relaxed text-lab-muted">
+              Lab can place {bridge.mappingReport.mappedCount} material
+              {bridge.mappingReport.mappedCount === 1 ? "" : "s"}
+              {bridge.mappingReport.unmappedCount > 0
+                ? `; ${bridge.mappingReport.unmappedCount} not in Lab inventory yet`
+                : ""}
+              . Proxies are teaching stand-ins.
+            </p>
+          ) : null}
+          {mapNote ? (
+            <p className="text-[11px] leading-relaxed text-lab-amber">{mapNote}</p>
+          ) : null}
         </div>
       ) : null}
     </div>

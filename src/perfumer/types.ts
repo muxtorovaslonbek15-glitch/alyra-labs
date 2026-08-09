@@ -62,6 +62,9 @@ export interface CostBreakdown {
 export interface StructuredPayload {
   formula?: {
     formula?: FormulaLine[];
+    type?: "EDP" | "Oil" | "Solid" | string;
+    vibe?: string;
+    family?: string;
     accord?: { top: string[]; heart: string[]; base: string[] };
     cost?: CostBreakdown;
     solid?: unknown;
@@ -74,6 +77,60 @@ export interface StructuredPayload {
   dupe?: { disclaimer?: string; target?: string } | null;
   citations?: string[];
   ifraFlags?: Array<{ id: string; name: string; severity: string; ifraNotes?: string }>;
+  /** Lab desk hydrate payload (schema v1) */
+  lab_bridge?: LabBridgeFormula | null;
+}
+
+export type LabBridgeMapStatus = "exact" | "alias" | "proxy" | "unmapped";
+
+export interface LabBridgeFormula {
+  schemaVersion: 1;
+  title: string;
+  format: "EDP" | "Oil" | "Solid";
+  batchGrams?: number;
+  vessel: {
+    equipmentId: "beaker" | "flask" | "test-tube";
+    autoMix?: boolean;
+    heatAttached?: boolean;
+  };
+  lines: Array<{
+    perfumerIngredientId: string;
+    labChemicalId: string | null;
+    name: string;
+    percent: number;
+    role?:
+      | "solvent"
+      | "top"
+      | "heart"
+      | "base"
+      | "fixative"
+      | "wax"
+      | "carrier"
+      | "other";
+    amountMl?: number;
+    mapStatus?: LabBridgeMapStatus;
+  }>;
+  solidChassis?: {
+    waxPercent?: number;
+    oilPercent?: number;
+    fragranceLoadPercent?: number;
+  };
+  costInr?: {
+    totalCostInr?: number;
+    batchGrams?: number;
+    summary?: string;
+  };
+  indiaContext?: {
+    climateNote?: string;
+    occasion?: string;
+    preferenceTags?: string[];
+  };
+  mappingReport: {
+    mappedCount: number;
+    unmappedCount: number;
+    unmappedIds?: string[];
+  };
+  disclaimer?: string;
 }
 
 export interface ChatSections {

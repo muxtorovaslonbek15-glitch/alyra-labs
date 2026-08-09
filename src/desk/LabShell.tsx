@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import dynamic from "next/dynamic";
+import { useRouter } from "next/navigation";
 import {
   DndContext,
   DragOverlay,
@@ -44,6 +45,10 @@ import { getPerfumeRecipe } from "@/domains/chemistry/perfume";
 import { InventionShelf } from "@/invention/InventionShelf";
 import { InventionRemixWatcher } from "@/invention/InventionRemixWatcher";
 import { useInventionStore } from "@/store/inventionStore";
+import {
+  consumeLabBridge,
+  deskContentsFromBridge,
+} from "@/perfumer/labBridge";
 import type { User } from "firebase/auth";
 
 const ScanWorkbench = dynamic(
@@ -66,10 +71,13 @@ export function LabShell() {
   const attachHeat = useDeskStore((s) => s.attachHeat);
   const attachCool = useDeskStore((s) => s.attachCool);
   const stirVessel = useDeskStore((s) => s.stirVessel);
+  const loadFormula = useDeskStore((s) => s.loadFormula);
   const activeVesselId = useDeskStore((s) => s.activeVesselId);
   const vessels = useDeskStore((s) => s.vessels);
   const lastExplanationVesselId = useDeskStore((s) => s.lastExplanationVesselId);
   const recordDiscovery = useProgressStore((s) => s.recordDiscovery);
+  const router = useRouter();
+  const bridgeApplied = useRef(false);
 
   const [mode, setMode] = useState<LabMode>("desk");
   const [activeDrag, setActiveDrag] = useState<DragPayload | null>(null);
@@ -104,6 +112,70 @@ export function LabShell() {
   useEffect(() => {
     track("page_view", { surface: "lab" });
   }, []);
+
+  /** Perfumer → Lab bridge: sessionStorage payload + ?bridge=1 */
+  useEffect(() => {
+    if (!hydrated || bridgeApplied.current) return;
+    if (typeof window === "undefined") return;
+    const wantsBridge = new URLSearchParams(window.location.search).get("bridge") === "1";
+    if (!wantsBridge) return;
+    bridgeApplied.current = true;
+    const bridge = consumeLabBridge();
+    router.replace("/lab", { scroll: false });
+    if (!bridge) {
+      showToast({
+        title: "No formula to load",
+        detail: "Open a formula from Perfumer again.",
+      });
+      return;
+    }
+    const contents = deskContentsFromBridge(bridge);
+    if (!contents.length) {
+      showToast({
+        title: "Nothing mapped",
+        detail: "These materials are not in Lab inventory yet.",
+      });
+      return;
+    }
+    const vesselId = loadFormula({
+      equipmentId: bridge.vessel?.equipmentId || "beaker",
+      contents,
+      contentIds: contents.map((c) => c.chemicalId),
+      autoMix: Boolean(bridge.vessel?.autoMix),
+      heatAttached: Boolean(bridge.vessel?.heatAttached),
+    });
+    if (!vesselId) {
+      showToast({
+        title: "Could not load",
+        detail: "Sign in or finish the guest gate to place materials.",
+      });
+      return;
+    }
+    const mapped = bridge.mappingReport?.mappedCount ?? contents.length;
+    const unmapped = bridge.mappingReport?.unmappedCount ?? 0;
+    const total = mapped + unmapped;
+    track("perfumer_lab_bridge", {
+      mapped,
+      unmapped,
+      title: bridge.title,
+    });
+    if (unmapped > 0) {
+      const missing = (bridge.mappingReport?.unmappedIds || [])
+        .slice(0, 6)
+        .join(", ");
+      showToast({
+        title: `Placed ${mapped} of ${total} materials`,
+        detail: missing
+          ? `Not in Lab yet: ${missing}${(bridge.mappingReport?.unmappedIds?.length || 0) > 6 ? "…" : ""}`
+          : bridge.title,
+      });
+    } else {
+      showToast({
+        title: "On your desk",
+        detail: bridge.title,
+      });
+    }
+  }, [hydrated, loadFormula, router]);
 
   useEffect(() => {
     if (process.env.NODE_ENV !== "development") return;

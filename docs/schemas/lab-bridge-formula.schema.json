@@ -1,0 +1,127 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://alyra.labs/schemas/lab-bridge-formula.schema.json",
+  "title": "LabBridgeFormula",
+  "description": "Structured formula payload for Perfumer → Alyra Lab desk hydrate. Stub for planning; implement mapper + open_in_lab in P0.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "title", "format", "lines", "vessel"],
+  "properties": {
+    "schemaVersion": {
+      "type": "integer",
+      "const": 1
+    },
+    "title": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 120
+    },
+    "format": {
+      "type": "string",
+      "enum": ["EDP", "Oil", "Solid"]
+    },
+    "batchGrams": {
+      "type": "number",
+      "exclusiveMinimum": 0,
+      "default": 100
+    },
+    "vessel": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["equipmentId"],
+      "properties": {
+        "equipmentId": {
+          "type": "string",
+          "enum": ["beaker", "flask", "test-tube"],
+          "description": "Maps to desk placeEquipment ids; default beaker."
+        },
+        "autoMix": { "type": "boolean", "default": false },
+        "heatAttached": { "type": "boolean", "default": false }
+      }
+    },
+    "lines": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 40,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["perfumerIngredientId", "name", "percent"],
+        "properties": {
+          "perfumerIngredientId": {
+            "type": "string",
+            "description": "Canonical id from alyra-perfumer ingredients DB"
+          },
+          "labChemicalId": {
+            "type": ["string", "null"],
+            "description": "Inventory Chemical.id after mapping; null if unmapped"
+          },
+          "name": { "type": "string" },
+          "percent": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "maximum": 100
+          },
+          "role": {
+            "type": "string",
+            "enum": ["solvent", "top", "heart", "base", "fixative", "wax", "carrier", "other"]
+          },
+          "amountMl": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "description": "Desk pour volume; derived from percent × batch for EDP teaching scale"
+          },
+          "mapStatus": {
+            "type": "string",
+            "enum": ["exact", "alias", "proxy", "unmapped"]
+          }
+        }
+      }
+    },
+    "solidChassis": {
+      "type": "object",
+      "description": "Present when format is Solid",
+      "properties": {
+        "waxPercent": { "type": "number" },
+        "oilPercent": { "type": "number" },
+        "fragranceLoadPercent": { "type": "number" }
+      }
+    },
+    "costInr": {
+      "type": "object",
+      "properties": {
+        "totalCostInr": { "type": "number" },
+        "batchGrams": { "type": "number" },
+        "summary": { "type": "string" }
+      }
+    },
+    "indiaContext": {
+      "type": "object",
+      "description": "Optional wear context for Lab / tutor copy",
+      "properties": {
+        "climateNote": { "type": "string" },
+        "occasion": { "type": "string" },
+        "preferenceTags": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "mappingReport": {
+      "type": "object",
+      "required": ["mappedCount", "unmappedCount"],
+      "properties": {
+        "mappedCount": { "type": "integer", "minimum": 0 },
+        "unmappedCount": { "type": "integer", "minimum": 0 },
+        "unmappedIds": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "disclaimer": {
+      "type": "string",
+      "description": "IFRA / educational disclaimer"
+    }
+  }
+}
