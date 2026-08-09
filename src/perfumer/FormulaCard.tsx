@@ -40,8 +40,8 @@ export function FormulaCard({
   }
 
   return (
-    <div className="space-y-3 rounded-xl border border-lab-line bg-lab-panel/95 p-4 shadow-[0_8px_24px_-20px_rgba(12,12,12,0.4)]">
-      <p className="font-display text-lg text-lab-ink">Formula</p>
+    <div className="space-y-3 rounded-xl border border-lab-line bg-lab-panel/95 p-3 shadow-[0_8px_24px_-20px_rgba(12,12,12,0.4)] md:p-4">
+      <p className="font-display text-base text-lab-ink md:text-lg">Formula</p>
 
       {dupe?.disclaimer ? (
         <p className="rounded-md border border-lab-line/80 bg-lab-wash/80 px-2.5 py-2 text-[11px] leading-snug text-lab-muted">

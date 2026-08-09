@@ -470,51 +470,65 @@ export function PerfumerChat() {
   const empty = messages.length === 0 && loadingChatId !== active?.id;
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-3">
+    <div className="flex min-h-0 flex-1 flex-col gap-2 md:gap-3">
       {banner ? (
-        <ErrorBanner error={banner} onDismiss={() => setBanner(null)} />
+        <div className="px-3 md:px-0">
+          <ErrorBanner error={banner} onDismiss={() => setBanner(null)} />
+        </div>
       ) : null}
 
       {health && !health.groqConfigured ? (
-        <ErrorBanner
-          error={{
-            code: "missing_env",
-            title: "Groq key missing",
-            message:
-              "The server has no GROQ_API_KEY — chat will fail until it is set.",
-            actionable: "Add GROQ_API_KEY to ZPL_BACKEND/.env and restart.",
-          }}
-        />
+        <div className="px-3 md:px-0">
+          <ErrorBanner
+            error={{
+              code: "missing_env",
+              title: "Groq key missing",
+              message:
+                "The server has no GROQ_API_KEY — chat will fail until it is set.",
+              actionable: "Add GROQ_API_KEY to ZPL_BACKEND/.env and restart.",
+            }}
+          />
+        </div>
       ) : null}
 
-      <div className="relative flex min-h-0 flex-1 overflow-hidden rounded-2xl border border-lab-line bg-lab-panel/90 shadow-[0_12px_40px_-24px_rgba(12,12,12,0.35)]">
+      <div className="relative flex min-h-0 flex-1 overflow-hidden border-y border-lab-line bg-lab-panel/95 md:rounded-2xl md:border md:shadow-[0_12px_40px_-24px_rgba(12,12,12,0.35)]">
         {sidebarOpen ? (
           <button
             type="button"
             aria-label="Close chats"
-            className="absolute inset-0 z-20 bg-lab-ink/30 backdrop-blur-[1px] transition-opacity md:hidden"
+            className="absolute inset-0 z-20 bg-lab-ink/35 backdrop-blur-[1px] md:hidden"
             onClick={() => setSidebarOpen(false)}
           />
         ) : null}
 
+        {/* Phone: slide-over drawer; md+: static rail */}
         <aside
-          className={`absolute inset-y-0 left-0 z-30 flex w-[16rem] flex-col border-r border-lab-line bg-lab-wash/98 transition-transform duration-300 ease-out md:static md:z-0 md:translate-x-0 ${
+          className={`absolute inset-y-0 left-0 z-30 flex w-[min(18.5rem,86vw)] flex-col border-r border-lab-line bg-lab-wash shadow-[8px_0_24px_-16px_rgba(12,12,12,0.35)] transition-transform duration-300 ease-out md:static md:z-0 md:w-[15.5rem] md:translate-x-0 md:shadow-none ${
             sidebarOpen ? "translate-x-0" : "-translate-x-full"
           }`}
         >
-          <div className="flex items-center justify-between gap-2 border-b border-lab-line px-3 py-2.5">
+          <div className="flex items-center justify-between gap-2 border-b border-lab-line px-3 py-2.5 pt-[max(0.625rem,env(safe-area-inset-top))] md:pt-2.5">
             <p className="font-display text-sm tracking-wide text-lab-ink">
               Chats
             </p>
-            <button
-              type="button"
-              onClick={createChat}
-              className="min-h-9 rounded-md bg-lab-ink px-2.5 py-1.5 text-[11px] font-semibold text-lab-foam hover:bg-black"
-            >
-              New
-            </button>
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={createChat}
+                className="min-h-11 rounded-md bg-lab-ink px-3 text-xs font-semibold text-lab-foam hover:bg-black md:min-h-9 md:px-2.5 md:text-[11px]"
+              >
+                New
+              </button>
+              <button
+                type="button"
+                onClick={() => setSidebarOpen(false)}
+                className="min-h-11 rounded-md border border-lab-line px-3 text-xs font-semibold text-lab-ink md:hidden"
+              >
+                Done
+              </button>
+            </div>
           </div>
-          <ul className="scroll-thin flex-1 space-y-0.5 overflow-y-auto p-2">
+          <ul className="scroll-thin flex-1 space-y-1 overflow-y-auto p-2">
             {chats.map((c) => {
               const selected = c.id === activeId;
               const preview =
@@ -535,75 +549,98 @@ export function PerfumerChat() {
                         value={renameValue}
                         onChange={(e) => setRenameValue(e.target.value)}
                         onBlur={commitRename}
-                        className="w-full rounded-md border border-lab-line bg-lab-panel px-2 py-1.5 text-xs text-lab-ink"
+                        className="min-h-11 w-full rounded-md border border-lab-line bg-lab-panel px-2 py-2 text-sm text-lab-ink md:min-h-0 md:py-1.5 md:text-xs"
                       />
                     </form>
                   ) : (
-                    <button
-                      type="button"
-                      onClick={() => void selectChat(c.id)}
-                      onDoubleClick={() => startRename(c)}
-                      className={`flex w-full flex-col gap-0.5 rounded-lg px-2.5 py-2 text-left transition-colors ${
-                        selected
-                          ? "bg-lab-ink text-lab-foam"
-                          : "text-lab-ink hover:bg-white/70"
+                    <div
+                      className={`flex items-stretch gap-0.5 rounded-lg ${
+                        selected ? "bg-lab-ink" : "hover:bg-white/70"
                       }`}
                     >
-                      <span className="flex w-full items-baseline justify-between gap-2">
-                        <span className="line-clamp-1 flex-1 text-xs font-medium leading-snug">
-                          {c.title}
+                      <button
+                        type="button"
+                        onClick={() => void selectChat(c.id)}
+                        className={`flex min-h-11 min-w-0 flex-1 flex-col justify-center gap-0.5 px-2.5 py-2 text-left transition-colors md:min-h-0 ${
+                          selected ? "text-lab-foam" : "text-lab-ink"
+                        }`}
+                      >
+                        <span className="flex w-full items-baseline justify-between gap-2">
+                          <span className="line-clamp-1 flex-1 text-sm font-medium leading-snug md:text-xs">
+                            {c.title}
+                          </span>
+                          <span
+                            className={`shrink-0 font-mono text-[10px] md:text-[9px] ${
+                              selected ? "text-lab-foam/55" : "text-lab-muted"
+                            }`}
+                          >
+                            {formatChatTime(c.updatedAt)}
+                          </span>
                         </span>
                         <span
-                          className={`shrink-0 font-mono text-[9px] ${
-                            selected ? "text-lab-foam/55" : "text-lab-muted"
+                          className={`line-clamp-1 text-[11px] leading-snug md:text-[10px] ${
+                            selected ? "text-lab-foam/60" : "text-lab-muted"
                           }`}
                         >
-                          {formatChatTime(c.updatedAt)}
+                          {preview}
                         </span>
-                      </span>
-                      <span
-                        className={`line-clamp-1 text-[10px] leading-snug ${
-                          selected ? "text-lab-foam/60" : "text-lab-muted"
-                        }`}
-                      >
-                        {preview}
-                      </span>
-                    </button>
-                  )}
-                  {renamingId !== c.id ? (
-                    <div className="absolute right-1 top-1 hidden gap-0.5 group-hover:flex">
-                      <button
-                        type="button"
-                        title="Rename"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          startRename(c);
-                        }}
-                        className={`rounded px-1.5 py-0.5 text-[10px] ${
-                          selected
-                            ? "bg-white/15 text-lab-foam"
-                            : "bg-lab-panel text-lab-muted"
-                        }`}
-                      >
-                        ✎
                       </button>
-                      <button
-                        type="button"
-                        title="Delete"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          void removeChat(c.id);
-                        }}
-                        className={`rounded px-1.5 py-0.5 text-[10px] ${
-                          selected
-                            ? "bg-white/15 text-lab-foam"
-                            : "bg-lab-panel text-lab-muted"
-                        }`}
-                      >
-                        ×
-                      </button>
+                      <div className="flex shrink-0 flex-col justify-center gap-0.5 pr-1 md:hidden">
+                        <button
+                          type="button"
+                          title="Rename"
+                          aria-label="Rename chat"
+                          onClick={() => startRename(c)}
+                          className={`min-h-9 min-w-9 rounded text-xs ${
+                            selected
+                              ? "bg-white/15 text-lab-foam"
+                              : "bg-lab-panel text-lab-muted"
+                          }`}
+                        >
+                          ✎
+                        </button>
+                        <button
+                          type="button"
+                          title="Delete"
+                          aria-label="Delete chat"
+                          onClick={() => void removeChat(c.id)}
+                          className={`min-h-9 min-w-9 rounded text-xs ${
+                            selected
+                              ? "bg-white/15 text-lab-foam"
+                              : "bg-lab-panel text-lab-muted"
+                          }`}
+                        >
+                          ×
+                        </button>
+                      </div>
+                      <div className="hidden shrink-0 flex-col justify-center gap-0.5 pr-1 opacity-0 transition-opacity group-hover:opacity-100 md:flex">
+                        <button
+                          type="button"
+                          title="Rename"
+                          onClick={() => startRename(c)}
+                          className={`rounded px-1.5 py-0.5 text-[10px] ${
+                            selected
+                              ? "bg-white/15 text-lab-foam"
+                              : "bg-lab-panel text-lab-muted"
+                          }`}
+                        >
+                          ✎
+                        </button>
+                        <button
+                          type="button"
+                          title="Delete"
+                          onClick={() => void removeChat(c.id)}
+                          className={`rounded px-1.5 py-0.5 text-[10px] ${
+                            selected
+                              ? "bg-white/15 text-lab-foam"
+                              : "bg-lab-panel text-lab-muted"
+                          }`}
+                        >
+                          ×
+                        </button>
+                      </div>
                     </div>
-                  ) : null}
+                  )}
                 </li>
               );
             })}
@@ -618,10 +655,10 @@ export function PerfumerChat() {
         </aside>
 
         <div className="flex min-w-0 flex-1 flex-col">
-          <div className="flex items-center gap-2 border-b border-lab-line px-3 py-2.5 md:px-4">
+          <div className="flex items-center gap-2 border-b border-lab-line px-3 py-2 md:px-4 md:py-2.5">
             <button
               type="button"
-              className="min-h-9 rounded-md border border-lab-line px-2.5 py-1.5 text-xs text-lab-ink md:hidden"
+              className="min-h-11 rounded-md border border-lab-line px-3 text-sm font-medium text-lab-ink md:hidden"
               onClick={() => setSidebarOpen(true)}
             >
               Chats
@@ -629,12 +666,12 @@ export function PerfumerChat() {
             <h2 className="min-w-0 flex-1 truncate font-display text-base text-lab-ink md:text-lg">
               {active?.title || "Master Perfumer"}
             </h2>
-            <span className="hidden font-mono text-[10px] text-lab-muted sm:inline">
+            <span className="hidden font-mono text-[10px] text-lab-muted md:inline">
               {getPerfumerBaseUrl().replace(/^https?:\/\//, "")}
             </span>
           </div>
 
-          <div className="scroll-thin flex-1 space-y-4 overflow-y-auto px-3 py-4 md:px-5">
+          <div className="scroll-thin flex-1 space-y-3 overflow-y-auto overscroll-contain px-3 py-3 md:space-y-4 md:px-5 md:py-4">
             {loadingChatId === active?.id ? (
               <p className="py-8 text-center text-sm text-lab-muted">
                 Loading conversation…
@@ -651,7 +688,7 @@ export function PerfumerChat() {
             <div ref={bottomRef} />
           </div>
 
-          <div className="border-t border-lab-line bg-lab-wash/50 px-3 py-3 md:px-4">
+          <div className="border-t border-lab-line bg-lab-wash/60 px-3 py-2.5 pb-[max(0.625rem,env(safe-area-inset-bottom))] md:px-4 md:py-3 md:pb-3">
             <div className="flex gap-2">
               <textarea
                 value={input}
@@ -663,15 +700,15 @@ export function PerfumerChat() {
                   }
                 }}
                 rows={2}
-                placeholder="Brief me — goal, type, vibe, constraints…"
-                className="min-h-[44px] flex-1 resize-none rounded-lg border border-lab-line bg-lab-panel px-3 py-2.5 text-sm text-lab-ink placeholder:text-lab-muted/70 focus:outline-none focus:ring-1 focus:ring-lab-ink/30"
+                placeholder="Brief me — goal, type, vibe…"
+                className="min-h-[48px] flex-1 resize-none rounded-xl border border-lab-line bg-lab-panel px-3 py-3 text-base text-lab-ink placeholder:text-lab-muted/70 focus:outline-none focus:ring-1 focus:ring-lab-ink/30 md:min-h-[44px] md:rounded-lg md:py-2.5 md:text-sm"
                 disabled={busy}
               />
               <button
                 type="button"
                 onClick={() => void onSend()}
                 disabled={busy || !input.trim()}
-                className="h-11 shrink-0 self-end rounded-lg bg-lab-ink px-4 text-sm font-semibold text-lab-foam transition-opacity hover:bg-black disabled:opacity-50"
+                className="h-12 w-16 shrink-0 self-end rounded-xl bg-lab-ink text-sm font-semibold text-lab-foam transition-opacity hover:bg-black disabled:opacity-50 md:h-11 md:w-auto md:rounded-lg md:px-4"
               >
                 Send
               </button>
@@ -685,23 +722,32 @@ export function PerfumerChat() {
 
 function EmptyState({ onSuggestion }: { onSuggestion: (s: string) => void }) {
   return (
-    <div className="mx-auto flex max-w-lg flex-col items-center px-2 py-8 text-center md:py-14">
-      <AlyraMark size="lg" href={null} className="justify-center" />
-      <p className="mt-6 font-display text-2xl leading-tight text-lab-ink md:text-3xl">
+    <div className="mx-auto flex max-w-lg flex-col items-center px-1 py-6 text-center md:px-2 md:py-14">
+      <AlyraMark
+        size="md"
+        href={null}
+        className="justify-center md:hidden"
+      />
+      <AlyraMark
+        size="lg"
+        href={null}
+        className="hidden justify-center md:inline-flex"
+      />
+      <p className="mt-5 font-display text-2xl leading-tight text-lab-ink md:mt-6 md:text-[1.75rem]">
         Hey — welcome to Alyra Labs
       </p>
-      <p className="mt-3 max-w-md text-sm leading-relaxed text-lab-muted">
+      <p className="mt-2.5 max-w-md text-sm leading-relaxed text-lab-muted">
         I&apos;m your Master Perfumer. Brief me like a client — solid, oil, or
         EDP — and we&apos;ll compose with materials, IFRA caution, and cost in
         view.
       </p>
-      <ul className="mt-8 grid w-full gap-2 sm:grid-cols-2">
+      <ul className="mt-6 grid w-full gap-2 md:mt-8 md:grid-cols-2">
         {SUGGESTIONS.map((s) => (
           <li key={s.label}>
             <button
               type="button"
               onClick={() => onSuggestion(s.prompt)}
-              className="w-full rounded-xl border border-lab-line bg-white/35 px-3 py-3 text-left transition-all duration-300 hover:border-lab-ink/25 hover:bg-white/70 hover:shadow-sm"
+              className="min-h-14 w-full rounded-xl border border-lab-line bg-white/40 px-3.5 py-3.5 text-left transition-all duration-300 active:scale-[0.99] hover:border-lab-ink/25 hover:bg-white/70 hover:shadow-sm md:min-h-0 md:py-3"
             >
               <span className="block text-sm font-medium text-lab-ink">
                 {s.label}
