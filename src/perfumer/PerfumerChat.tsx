@@ -692,7 +692,7 @@ export function PerfumerChat({
 
   return (
     <div
-      className={`flex min-h-0 flex-1 flex-col ${
+      className={`flex h-full min-h-0 flex-1 flex-col ${
         shell ? "gap-0" : "gap-2 md:gap-3"
       }`}
     >
@@ -718,7 +718,7 @@ export function PerfumerChat({
       <div
         className={`relative flex min-h-0 flex-1 overflow-hidden ${
           shell
-            ? "border-0 bg-lab-panel"
+            ? "h-full border-0 bg-lab-panel"
             : "border-y border-lab-line/70 bg-lab-panel/80 md:rounded-2xl md:border md:border-lab-line/70"
         }`}
       >
@@ -848,7 +848,7 @@ export function PerfumerChat({
         </aside>
         ) : null}
 
-        <div className="flex min-w-0 flex-1 flex-col">
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
           {shell ? (
             <div
               className={`flex shrink-0 items-center gap-1 border-b border-lab-line/60 ${
@@ -1007,7 +1007,7 @@ export function PerfumerChat({
           )}
 
           <div
-            className={`scroll-thin flex-1 space-y-2 overflow-y-auto overscroll-contain ${
+            className={`scroll-thin min-h-0 flex-1 space-y-2 overflow-y-auto overscroll-contain ${
               bottomDock
                 ? "px-2.5 py-2"
                 : shell
@@ -1052,7 +1052,7 @@ export function PerfumerChat({
           </div>
 
           <div
-            className={`border-t border-lab-line/50 bg-lab-panel ${
+            className={`mt-auto shrink-0 border-t border-lab-line/50 bg-lab-panel ${
               bottomDock
                 ? "px-2 py-1.5"
                 : shell
@@ -1191,8 +1191,8 @@ function EmptyState({
   if (compact) {
     return (
       <div
-        className={`mx-auto flex w-full max-w-sm flex-col items-center px-2 text-center ${
-          dense ? "py-3" : "py-8"
+        className={`flex w-full max-w-sm flex-col items-start px-1 ${
+          dense ? "py-2" : "py-4"
         }`}
       >
         <p

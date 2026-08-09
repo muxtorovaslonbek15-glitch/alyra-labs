@@ -36,8 +36,8 @@ export function ChatRail({
   const building = mode === "building";
 
   const body = (
-    <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-      <div className="min-h-0 flex-1 overflow-hidden">
+    <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
         <PerfumerChat
           variant="shell"
           dock={mobileSheet ? "sheet" : dock}
