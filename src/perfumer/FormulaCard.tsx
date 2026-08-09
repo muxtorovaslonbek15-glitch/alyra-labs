@@ -2,7 +2,12 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import type { CostBreakdown, FormulaLine, StructuredPayload } from "./types";
+import type {
+  CostBreakdown,
+  FormulaDiff,
+  FormulaLine,
+  StructuredPayload,
+} from "./types";
 import { buildLabBridgeFromStructured, storeLabBridge } from "./labBridge";
 
 function AccordionRow({
@@ -46,6 +51,10 @@ export function FormulaCard({
   const accord = gen?.accord;
   const cost: CostBreakdown | null | undefined = structured?.cost || gen?.cost;
   const dupe = structured?.dupe;
+  const diff: FormulaDiff | null | undefined =
+    structured?.formulaDiff ||
+    (gen as { formulaDiff?: FormulaDiff } | undefined)?.formulaDiff;
+  const brief = structured?.brief;
   const bridge =
     structured?.lab_bridge || buildLabBridgeFromStructured(structured);
   const canOpenLab = Boolean(bridge?.lines?.some((l) => l.labChemicalId));
@@ -92,6 +101,29 @@ export function FormulaCard({
         </p>
       ) : null}
 
+      {brief?.goal || brief?.constraints?.longevityHours ? (
+        <div>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-lab-muted">
+            Brief
+          </p>
+          <p className="mt-1.5 text-sm leading-relaxed text-lab-ink/85">
+            {[
+              brief?.name,
+              brief?.type,
+              brief?.goal,
+              brief?.constraints?.longevityHours
+                ? `${brief.constraints.longevityHours}+ hours`
+                : null,
+              brief?.constraints?.projection
+                ? `${brief.constraints.projection} projection`
+                : null,
+            ]
+              .filter(Boolean)
+              .join(" · ")}
+          </p>
+        </div>
+      ) : null}
+
       {accord ? (
         <div className="space-y-2">
           <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-lab-muted">
@@ -104,6 +136,8 @@ export function FormulaCard({
       ) : sections?.accord ? (
         <Section title="Accord" body={sections.accord} />
       ) : null}
+
+      {diff?.changes?.length ? <DiffView diff={diff} /> : null}
 
       {lines.length ? (
         <div>
@@ -199,6 +233,59 @@ export function FormulaCard({
           ) : null}
         </div>
       ) : null}
+    </div>
+  );
+}
+
+function DiffView({ diff }: { diff: FormulaDiff }) {
+  return (
+    <div>
+      <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-lab-muted">
+        Changes
+      </p>
+      {diff.summary ? (
+        <p className="mt-1.5 text-[12px] leading-relaxed text-lab-muted">
+          {diff.summary}
+        </p>
+      ) : null}
+      <ul className="mt-2 space-y-1">
+        {diff.changes.slice(0, 10).map((c) => {
+          const sign = c.delta > 0 ? "+" : "";
+          const tone =
+            c.delta > 0
+              ? "text-emerald-800"
+              : c.delta < 0
+                ? "text-lab-amber"
+                : "text-lab-muted";
+          return (
+            <li
+              key={`${c.id}-${c.before}-${c.after}`}
+              className="flex items-baseline justify-between gap-3 text-sm"
+            >
+              <span className="text-lab-ink">
+                {c.name}
+                {c.added ? (
+                  <span className="ml-1.5 text-[10px] uppercase text-lab-muted">
+                    added
+                  </span>
+                ) : null}
+                {c.removed ? (
+                  <span className="ml-1.5 text-[10px] uppercase text-lab-muted">
+                    removed
+                  </span>
+                ) : null}
+              </span>
+              <span className={`font-mono text-[13px] ${tone}`}>
+                {sign}
+                {c.delta}%
+                <span className="ml-1.5 text-[11px] text-lab-muted">
+                  ({c.before} → {c.after})
+                </span>
+              </span>
+            </li>
+          );
+        })}
+      </ul>
     </div>
   );
 }

@@ -85,6 +85,46 @@ export interface StructuredPayload {
     wearAdvice?: string;
     family?: string;
   };
+  /** Refine delta for FormulaCard */
+  formulaDiff?: FormulaDiff | null;
+  /** Structured brief memory across turns */
+  brief?: PerfumerBrief | null;
+  wearGoals?: {
+    longevityHours?: number;
+    projection?: string;
+    softOpening?: boolean;
+  };
+}
+
+export interface FormulaDiffChange {
+  id: string;
+  name: string;
+  before: number;
+  after: number;
+  delta: number;
+  added?: boolean;
+  removed?: boolean;
+}
+
+export interface FormulaDiff {
+  changes: FormulaDiffChange[];
+  summary?: string;
+}
+
+export interface PerfumerBrief {
+  goal?: string | null;
+  name?: string | null;
+  type?: string | null;
+  vibe?: string | null;
+  constraints?: {
+    longevityHours?: number | null;
+    projection?: string | null;
+    india?: boolean;
+    budget?: string | null;
+    climate?: string | null;
+  };
+  notesWanted?: string[];
+  occasion?: string | null;
 }
 
 export type LabBridgeMapStatus = "exact" | "alias" | "proxy" | "unmapped";

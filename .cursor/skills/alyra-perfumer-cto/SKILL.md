@@ -43,14 +43,17 @@ Full scorecard + ranked actions: **`docs/alyra-perfumer-brain-readiness.md`**.
 
 **Stance:** Smarter system, not a bigger DB (~1009 ingredients is enough). No LangChain. Lab bridge is a separate workstream.
 
-**Double down (in order):**
-1. `formulaGenerator.js` — score picks, usage bands, India/occasion/budget heuristics, real harsh/sweet refine (not samey family templates)
-2. Cleaner bot — no prose `%` dump when FormulaCard has structured lines; forced Alyra catalog tools on catalog intent
-3. Golden eval harness (birthday cake, woody rose solid, harsh fix, Alyra lineup)
-4. Paid Groq for prod; template narrate only as 429/survival
-5. Cache golden briefs; tokens/intent/fallback metrics; then `refine_formula`
+**Shipped in smarter-brain package (2026-08-09):**
+1. Ranked scoring nose (clash / solid-heat / longevity / projection / ₹) + `pickLog`
+2. `refine_formula` with FormulaCard diff + brief memory reinjection + `lab_bridge` refresh
+3. Forced Alyra catalog fast path (never invent house scents; offline uses real catalog)
+4. Golden `npm run perfumer:eval` CI-style gate
+5. Local tools first; Groq only 1–3 sentence coaching when free tier allows
 
-**Do not:** 5k ingredient scrape, LangChain, more `/perfumer` chrome before the nose improves.
+**Still next:**
+- Paid Groq for soft-launch capacity (template is survival, not traffic plan)
+- Tokens/intent/fallback metrics in prod
+- Human nose loop for brand-trust formulas
 
 ---
 
