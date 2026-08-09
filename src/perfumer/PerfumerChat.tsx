@@ -32,6 +32,7 @@ import {
 import { Prose } from "./Prose";
 import { ThinkingPanel } from "./ThinkingPanel";
 import { useBuilderStore } from "@/store/builderStore";
+import { ChatDockHandle } from "@/desk/ChatDockDrag";
 import { track } from "@/lib/analytics/track";
 import type {
   ChatMessage,
@@ -58,10 +59,13 @@ function formatChatTime(iso: string) {
 export function PerfumerChat({
   variant = "page",
   onCloseSheet,
+  showDockControls = false,
 }: {
   /** page = standalone (redirect target); shell = Lab right rail / phone sheet */
   variant?: "page" | "shell";
   onCloseSheet?: () => void;
+  /** Desktop Lab: dock drag handle + Right/Bottom switch */
+  showDockControls?: boolean;
 } = {}) {
   const shell = variant === "shell";
   const user = useAuthStore((s) => s.user);
@@ -72,6 +76,9 @@ export function PerfumerChat({
   const narration = useBuilderStore((s) => s.narration);
   const chatAgentMode = useBuilderStore((s) => s.chatAgentMode);
   const setChatAgentMode = useBuilderStore((s) => s.setChatAgentMode);
+  const chatDock = useBuilderStore((s) => s.chatDock);
+  const setChatDock = useBuilderStore((s) => s.setChatDock);
+  const setRightOpen = useBuilderStore((s) => s.setRightOpen);
   const builderMode = useBuilderStore((s) => s.mode);
   const buildStepIndex = useBuilderStore((s) => s.buildStepIndex);
   const buildSteps = useBuilderStore((s) => s.buildSteps);
@@ -794,6 +801,9 @@ export function PerfumerChat({
           >
             {shell ? (
               <>
+                {showDockControls ? (
+                  <ChatDockHandle dock={chatDock} onDock={setChatDock} />
+                ) : null}
                 <p className="text-xs font-semibold tracking-wide text-lab-ink">
                   Perfumer
                 </p>
@@ -822,6 +832,22 @@ export function PerfumerChat({
                       : "Agent"}
                 </span>
                 <div className="flex-1" />
+                {showDockControls ? (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setChatDock(chatDock === "right" ? "bottom" : "right")
+                    }
+                    className="hidden min-h-8 rounded-md px-2 text-[11px] font-medium text-lab-muted hover:bg-lab-wash hover:text-lab-ink md:inline"
+                    title={
+                      chatDock === "right"
+                        ? "Dock chat below desk"
+                        : "Dock chat to the right"
+                    }
+                  >
+                    {chatDock === "right" ? "Bottom" : "Right"}
+                  </button>
+                ) : null}
                 <button
                   type="button"
                   onClick={() => setSidebarOpen(true)}
@@ -836,6 +862,17 @@ export function PerfumerChat({
                 >
                   New
                 </button>
+                {showDockControls ? (
+                  <button
+                    type="button"
+                    onClick={() => setRightOpen(false)}
+                    className="hidden min-h-8 rounded-md px-2 text-[11px] font-medium text-lab-muted hover:bg-lab-wash hover:text-lab-ink md:inline"
+                    title="Hide chat (⌘T)"
+                    aria-label="Hide chat"
+                  >
+                    Hide
+                  </button>
+                ) : null}
                 {onCloseSheet ? (
                   <button
                     type="button"

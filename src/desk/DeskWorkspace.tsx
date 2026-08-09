@@ -342,6 +342,9 @@ export function DeskWorkspace({
                 {(
                   [
                     ["Open Chat", "Header → Chat"],
+                    ["Toggle inventory", "⌘B / Ctrl+B"],
+                    ["Toggle chat", "⌘T / Ctrl+T"],
+                    ["Dock chat", "Drag ⋮⋮ · Right or Bottom"],
                     ["Inventory", "Left rail · drag oils & glass"],
                     ["Build", "Plan ready → Build"],
                     ["How it works", "⋯ → Guide"],

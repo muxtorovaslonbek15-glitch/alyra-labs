@@ -16,6 +16,7 @@ const TOC = [
   { href: "#plan-vs-build", label: "Plan vs Build" },
   { href: "#plan-vs-agent", label: "Plan vs Agent" },
   { href: "#panes", label: "Panes & mode" },
+  { href: "#shortcuts", label: "Shortcuts & dock" },
   { href: "#prompts", label: "Copyable briefs" },
   { href: "#components", label: "Component prompts" },
   { href: "#refine", label: "Refine & bridge" },
@@ -232,6 +233,42 @@ export default function LabGuidePage() {
                 or{" "}
                 <code className="rounded bg-lab-panel px-1 font-mono text-[11px] text-lab-ink">
                   /lab?tab=tutor
+                </code>
+                .
+              </li>
+            </ul>
+          </div>
+        </section>
+
+        <section>
+          <SectionHeading id="shortcuts">Shortcuts & chat dock</SectionHeading>
+          <div className="mt-3 space-y-3 text-sm leading-relaxed text-lab-muted">
+            <p>
+              Desktop only (phone keeps sheets). While focus is in the Lab, we
+              call{" "}
+              <code className="rounded bg-lab-panel px-1 font-mono text-[11px] text-lab-ink">
+                preventDefault
+              </code>{" "}
+              so ⌘T does not open a browser tab.
+            </p>
+            <ul className="list-disc space-y-1.5 pl-5">
+              <li>
+                <strong className="font-semibold text-lab-ink">⌘B</strong> /
+                Ctrl+B — toggle left inventory.
+              </li>
+              <li>
+                <strong className="font-semibold text-lab-ink">⌘T</strong> /
+                Ctrl+T — toggle right Chat or Tutor panel.
+              </li>
+              <li>
+                Drag the{" "}
+                <strong className="font-semibold text-lab-ink">⋮⋮</strong> handle
+                on the chat header to dock chat on the{" "}
+                <strong className="font-semibold text-lab-ink">Right</strong> or{" "}
+                <strong className="font-semibold text-lab-ink">Bottom</strong>{" "}
+                (under the wood desk). Preference persists as{" "}
+                <code className="rounded bg-lab-panel px-1 font-mono text-[11px] text-lab-ink">
+                  alyra.builder.chatDock.v1
                 </code>
                 .
               </li>

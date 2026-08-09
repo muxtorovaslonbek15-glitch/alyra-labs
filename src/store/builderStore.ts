@@ -9,6 +9,8 @@ export type BuilderTab = "tutor" | "chat";
 export type RightSlot = "tutor" | "chat";
 /** Cursor-style chat orchestration: Plan = deliberate propose; Agent = normal tools. */
 export type ChatAgentMode = "plan" | "agent";
+/** Desktop chat placement: right rail or under the desk canvas. */
+export type ChatDock = "right" | "bottom";
 export type BuilderMode =
   | "idle"
   | "planning"
@@ -33,6 +35,8 @@ export interface PanelPrefs {
 
 const PANEL_PREFS_KEY = "alyra.builder.panels.v1";
 const CHAT_MODE_KEY = "alyra.builder.chatMode.v1";
+const CHAT_DOCK_KEY = "alyra.builder.chatDock.v1";
+const BOTTOM_CHAT_HEIGHT_KEY = "alyra.builder.bottomChatHeight.v1";
 
 export const PANEL_WIDTH = {
   leftMin: 180,
@@ -41,6 +45,12 @@ export const PANEL_WIDTH = {
   rightMin: 280,
   rightMax: 520,
   rightDefault: 360,
+} as const;
+
+export const BOTTOM_CHAT = {
+  min: 180,
+  max: 480,
+  default: 280,
 } as const;
 
 function clamp(n: number, min: number, max: number) {
@@ -118,6 +128,46 @@ function saveChatAgentMode(mode: ChatAgentMode) {
   }
 }
 
+function loadChatDock(): ChatDock {
+  if (typeof window === "undefined") return "right";
+  try {
+    const raw = localStorage.getItem(CHAT_DOCK_KEY);
+    if (raw === "right" || raw === "bottom") return raw;
+  } catch {
+    /* ignore */
+  }
+  return "right";
+}
+
+function saveChatDock(dock: ChatDock) {
+  try {
+    localStorage.setItem(CHAT_DOCK_KEY, dock);
+  } catch {
+    /* ignore */
+  }
+}
+
+function loadBottomChatHeight(): number {
+  if (typeof window === "undefined") return BOTTOM_CHAT.default;
+  try {
+    const n = Number(localStorage.getItem(BOTTOM_CHAT_HEIGHT_KEY));
+    if (Number.isFinite(n)) {
+      return clamp(n, BOTTOM_CHAT.min, BOTTOM_CHAT.max);
+    }
+  } catch {
+    /* ignore */
+  }
+  return BOTTOM_CHAT.default;
+}
+
+function saveBottomChatHeight(height: number) {
+  try {
+    localStorage.setItem(BOTTOM_CHAT_HEIGHT_KEY, String(height));
+  } catch {
+    /* ignore */
+  }
+}
+
 interface BuilderState {
   tab: BuilderTab;
   rightSlot: RightSlot;
@@ -125,6 +175,9 @@ interface BuilderState {
   rightOpen: boolean;
   leftWidth: number;
   rightWidth: number;
+  /** Desktop: chat as right rail or under desk */
+  chatDock: ChatDock;
+  bottomChatHeight: number;
   /** Phone chat sheet */
   chatSheetOpen: boolean;
   /** Cursor-like Plan | Agent chat mode (default Agent) */
@@ -144,6 +197,8 @@ interface BuilderState {
   setRightOpen: (open: boolean) => void;
   setLeftWidth: (width: number) => void;
   setRightWidth: (width: number) => void;
+  setChatDock: (dock: ChatDock) => void;
+  setBottomChatHeight: (height: number) => void;
   setChatSheetOpen: (open: boolean) => void;
   setChatAgentMode: (mode: ChatAgentMode) => void;
   hydratePanelPrefs: () => void;
@@ -170,6 +225,8 @@ export const useBuilderStore = create<BuilderState>((set, get) => ({
   rightOpen: true,
   leftWidth: PANEL_WIDTH.leftDefault,
   rightWidth: PANEL_WIDTH.rightDefault,
+  chatDock: "right",
+  bottomChatHeight: BOTTOM_CHAT.default,
   chatSheetOpen: false,
   chatAgentMode: "agent",
   mode: "idle",
@@ -189,12 +246,25 @@ export const useBuilderStore = create<BuilderState>((set, get) => ({
       leftWidth: prefs.leftWidth,
       rightWidth: prefs.rightWidth,
       chatAgentMode: loadChatAgentMode(),
+      chatDock: loadChatDock(),
+      bottomChatHeight: loadBottomChatHeight(),
     });
   },
 
   setChatAgentMode: (chatAgentMode) => {
     set({ chatAgentMode });
     saveChatAgentMode(chatAgentMode);
+  },
+
+  setChatDock: (chatDock) => {
+    set({ chatDock, rightOpen: true });
+    saveChatDock(chatDock);
+  },
+
+  setBottomChatHeight: (height) => {
+    const bottomChatHeight = clamp(height, BOTTOM_CHAT.min, BOTTOM_CHAT.max);
+    set({ bottomChatHeight });
+    saveBottomChatHeight(bottomChatHeight);
   },
 
   setTab: (tab) => {

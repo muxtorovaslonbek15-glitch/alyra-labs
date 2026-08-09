@@ -58,6 +58,10 @@ import { LAB_CHEMICAL_IDS } from "@/perfumer/labIngredientMap";
 import { MobileBuilderChrome } from "@/desk/MobileBuilderChrome";
 import { DesktopBuilderChrome } from "@/desk/DesktopBuilderChrome";
 import {
+  ChatDockDropZones,
+  useChatDockDragState,
+} from "@/desk/ChatDockDrag";
+import {
   LabModeToggle,
   LabOverflowMenu,
   type LabOverflowAction,
@@ -115,12 +119,44 @@ export function LabShell() {
   const rightOpen = useBuilderStore((s) => s.rightOpen);
   const rightSlot = useBuilderStore((s) => s.rightSlot);
   const setRightOpen = useBuilderStore((s) => s.setRightOpen);
+  const chatDock = useBuilderStore((s) => s.chatDock);
   const setPlan = useBuilderStore((s) => s.setPlan);
   const hydratePanelPrefs = useBuilderStore((s) => s.hydratePanelPrefs);
+  const dockDrag = useChatDockDragState();
 
   useEffect(() => {
     hydratePanelPrefs();
   }, [hydratePanelPrefs]);
+
+  /** ⌘B / Ctrl+B inventory · ⌘T / Ctrl+T chat|tutor (steal new-tab while in Lab). */
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!(e.metaKey || e.ctrlKey)) return;
+      const key = e.key.toLowerCase();
+      if (key !== "b" && key !== "t") return;
+      const lab = document.querySelector(".lab-app");
+      const target = e.target as Node | null;
+      const inLab =
+        Boolean(lab && target && lab.contains(target)) ||
+        document.activeElement === document.body ||
+        document.activeElement === document.documentElement ||
+        Boolean(
+          lab &&
+            document.activeElement &&
+            lab.contains(document.activeElement),
+        );
+      if (!inLab) return;
+      e.preventDefault();
+      e.stopPropagation();
+      if (key === "b") {
+        setLeftOpen(!useBuilderStore.getState().leftOpen);
+        return;
+      }
+      setRightOpen(!useBuilderStore.getState().rightOpen);
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, [setLeftOpen, setRightOpen]);
 
   useEffect(() => {
     const finish = () => setHydrated(true);
@@ -300,13 +336,15 @@ export function LabShell() {
     setBuilderTab(next);
     if (next === "tutor") setTutorOpen(true);
     else setTutorOpen(false);
+    // Strip ?tab= without router.replace — App Router can restore the old search.
     const keep = new URLSearchParams();
     if (params.get("fromLab") === "1") keep.set("fromLab", "1");
     const qs = keep.toString();
     const path = qs ? `/lab?${qs}` : "/lab";
-    window.history.replaceState(null, "", path);
-    router.replace(path, { scroll: false });
-  }, [router, setBuilderTab]);
+    if (window.location.pathname + window.location.search !== path) {
+      window.history.replaceState(window.history.state, "", path);
+    }
+  }, [setBuilderTab]);
 
   useEffect(() => {
     if (process.env.NODE_ENV !== "development") return;
@@ -784,34 +822,46 @@ export function LabShell() {
               }}
             />
             <div className="relative flex min-h-0 min-w-0 flex-1 flex-col gap-0 overflow-hidden p-0 md:gap-1 md:p-2">
-              <DeskWorkspace
-                onOpenAtelier={() => {
-                  setShopOpen(false);
-                  setMarketOpen(false);
-                  setFreeformOpen(false);
-                  useInventionStore.getState().setShelfOpen(false);
-                  setAtelierOpen(true);
-                }}
-              />
-              <div className="pointer-events-none absolute bottom-[calc(4.5rem+env(safe-area-inset-bottom,0px))] left-3 right-3 z-30 flex flex-col items-start gap-2 md:bottom-3 md:left-3 md:right-auto">
-                {canSendToPerfumer ? (
+              <div className="relative min-h-0 min-w-0 flex-1 overflow-hidden">
+                <DeskWorkspace
+                  onOpenAtelier={() => {
+                    setShopOpen(false);
+                    setMarketOpen(false);
+                    setFreeformOpen(false);
+                    useInventionStore.getState().setShelfOpen(false);
+                    setAtelierOpen(true);
+                  }}
+                />
+                <div
+                  className={`pointer-events-none absolute left-3 right-3 z-30 flex flex-col items-start gap-2 md:left-3 md:right-auto ${
+                    chatDock === "bottom" && rightSlot === "chat" && rightOpen
+                      ? "bottom-3"
+                      : "bottom-[calc(4.5rem+env(safe-area-inset-bottom,0px))] md:bottom-3"
+                  }`}
+                >
+                  {canSendToPerfumer ? (
+                    <div className="pointer-events-auto w-[min(100%,17rem)] max-w-sm">
+                      <button
+                        type="button"
+                        onClick={sendDeskToPerfumer}
+                        className="min-h-11 w-full rounded-lg bg-lab-ink px-4 py-2.5 text-sm font-semibold text-lab-foam shadow-lg transition hover:bg-lab-ink/90 md:min-h-10"
+                      >
+                        Send desk to Chat
+                      </button>
+                      <p className="mt-1 px-0.5 text-[10px] leading-snug text-white/70 drop-shadow-sm">
+                        Continue refining this blend in Chat
+                      </p>
+                    </div>
+                  ) : null}
                   <div className="pointer-events-auto w-[min(100%,17rem)] max-w-sm">
-                    <button
-                      type="button"
-                      onClick={sendDeskToPerfumer}
-                      className="min-h-11 w-full rounded-lg bg-lab-ink px-4 py-2.5 text-sm font-semibold text-lab-foam shadow-lg transition hover:bg-lab-ink/90 md:min-h-10"
-                    >
-                      Send desk to Chat
-                    </button>
-                    <p className="mt-1 px-0.5 text-[10px] leading-snug text-white/70 drop-shadow-sm">
-                      Continue refining this blend in Chat
-                    </p>
+                    <GoalGuidePanel />
                   </div>
-                ) : null}
-                <div className="pointer-events-auto w-[min(100%,17rem)] max-w-sm">
-                  <GoalGuidePanel />
                 </div>
               </div>
+              {/* Desktop bottom dock — under wood canvas; phone keeps sheets */}
+              {chatDock === "bottom" ? (
+                <DesktopBuilderChrome dock="bottom" />
+              ) : null}
             </div>
             <ExplanationPanel
               mobileOpen={tutorOpen}
@@ -828,11 +878,18 @@ export function LabShell() {
                 }
               }}
             />
-            <DesktopBuilderChrome />
+            {chatDock === "right" ? (
+              <DesktopBuilderChrome dock="right" />
+            ) : null}
             {/* Phone-only Chat/Plan/Build sheets — desktop uses DesktopBuilderChrome */}
             <MobileBuilderChrome
               tutorOpen={tutorOpen}
               onTutorOpenChange={setTutorOpen}
+            />
+            <ChatDockDropZones
+              active={dockDrag.active}
+              hover={dockDrag.hover}
+              chatDock={chatDock}
             />
           </div>
         )}

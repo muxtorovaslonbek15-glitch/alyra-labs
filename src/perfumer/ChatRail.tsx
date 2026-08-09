@@ -12,6 +12,8 @@ export function ChatRail({
   onInstant,
   onCloseSheet,
   mobileSheet,
+  /** Desktop placement: right rail or under desk */
+  dock = "right",
 }: {
   onBuild: () => void;
   onStop: () => void;
@@ -20,6 +22,7 @@ export function ChatRail({
   onCloseSheet?: () => void;
   /** Full-height phone sheet over desk */
   mobileSheet?: boolean;
+  dock?: "right" | "bottom";
 }) {
   const plan = useBuilderStore((s) => s.plan);
   const structured = useBuilderStore((s) => s.structured);
@@ -28,12 +31,18 @@ export function ChatRail({
   const buildSteps = useBuilderStore((s) => s.buildSteps);
   const rightWidth = useBuilderStore((s) => s.rightWidth);
   const setRightWidth = useBuilderStore((s) => s.setRightWidth);
+  const bottomChatHeight = useBuilderStore((s) => s.bottomChatHeight);
+  const setBottomChatHeight = useBuilderStore((s) => s.setBottomChatHeight);
   const building = mode === "building";
 
   const body = (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
       <div className="min-h-0 flex-1 overflow-hidden">
-        <PerfumerChat variant="shell" onCloseSheet={onCloseSheet} />
+        <PerfumerChat
+          variant="shell"
+          onCloseSheet={onCloseSheet}
+          showDockControls
+        />
       </div>
       <PlanPanel
         bridge={plan}
@@ -45,7 +54,7 @@ export function ChatRail({
         onStop={onStop}
         onUndo={onUndo}
         onInstant={onInstant}
-        compact={Boolean(mobileSheet)}
+        compact={Boolean(mobileSheet) || dock === "bottom"}
       />
     </div>
   );
@@ -87,6 +96,28 @@ export function ChatRail({
     );
   }
 
+  if (dock === "bottom") {
+    return (
+      <div
+        className="relative hidden w-full shrink-0 flex-col md:flex"
+        style={{ height: bottomChatHeight }}
+      >
+        <PanelResizeHandle
+          side="top"
+          onResize={(dy) => setBottomChatHeight(bottomChatHeight + dy)}
+        />
+        <aside className="panel-glass flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-lab-line/60">
+          {body}
+        </aside>
+        {building ? (
+          <span className="sr-only">
+            Building step {buildStepIndex + 1} of {buildSteps.length}
+          </span>
+        ) : null}
+      </div>
+    );
+  }
+
   return (
     <div className="relative hidden h-full shrink-0 md:flex">
       <PanelResizeHandle
@@ -99,7 +130,6 @@ export function ChatRail({
       >
         {body}
       </aside>
-      {/* Keep building HUD out of chat body noise */}
       {building ? (
         <span className="sr-only">
           Building step {buildStepIndex + 1} of {buildSteps.length}

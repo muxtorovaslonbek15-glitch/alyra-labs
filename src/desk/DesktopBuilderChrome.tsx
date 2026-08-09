@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect } from "react";
+import { useCallback } from "react";
 import { ChatRail } from "@/perfumer/ChatRail";
 import { deriveBuildSteps, runBuildQueue } from "@/perfumer/BuildQueue";
 import {
@@ -14,10 +14,14 @@ import { showToast } from "@/gamification/ToastHost";
 import { useMdUp } from "@/desk/useMdUp";
 
 /**
- * Desktop right-rail Chat + Plan + Build orchestration.
+ * Desktop Chat + Plan + Build orchestration (right rail or bottom dock).
  * Phone uses MobileBuilderChrome sheets instead.
  */
-export function DesktopBuilderChrome() {
+export function DesktopBuilderChrome({
+  dock = "right",
+}: {
+  dock?: "right" | "bottom";
+} = {}) {
   const mdUp = useMdUp();
   const rightSlot = useBuilderStore((s) => s.rightSlot);
   const rightOpen = useBuilderStore((s) => s.rightOpen);
@@ -104,13 +108,28 @@ export function DesktopBuilderChrome() {
   if (rightSlot !== "chat") return null;
 
   if (!rightOpen) {
+    if (dock === "bottom") {
+      return (
+        <div className="relative hidden w-full shrink-0 md:block">
+          <button
+            type="button"
+            onClick={() => setRightOpen(true)}
+            aria-label="Show chat"
+            title="Show chat (⌘T)"
+            className="flex h-8 w-full items-center justify-center gap-2 rounded-lg border border-lab-line/70 bg-lab-panel/95 text-[11px] font-medium text-lab-muted hover:text-lab-ink"
+          >
+            Show chat
+          </button>
+        </div>
+      );
+    }
     return (
       <div className="relative hidden h-full w-0 shrink-0 md:block">
         <button
           type="button"
           onClick={() => setRightOpen(true)}
           aria-label="Show chat"
-          title="Show chat"
+          title="Show chat (⌘T)"
           className="absolute right-0 top-1/2 z-20 flex h-16 w-5 -translate-y-1/2 items-center justify-center rounded-l-md border border-r-0 border-lab-line/70 bg-lab-panel/95 text-lab-muted shadow-sm hover:text-lab-ink"
         >
           ‹
@@ -119,31 +138,47 @@ export function DesktopBuilderChrome() {
     );
   }
 
+  const buildingHud =
+    mode === "building" ? (
+      <div
+        className={`pointer-events-none z-20 rounded-md border border-lab-line/60 bg-lab-wash/95 px-2 py-1.5 shadow-sm ${
+          dock === "bottom"
+            ? "absolute left-3 right-3 top-2"
+            : "absolute inset-x-3 top-10"
+        }`}
+      >
+        <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-lab-muted">
+          Building
+          {buildSteps.length
+            ? ` · ${Math.min(buildStepIndex + 1, buildSteps.length)}/${buildSteps.length}`
+            : ""}
+        </p>
+        <p className="mt-0.5 truncate text-xs text-lab-ink">
+          {narration[narration.length - 1]?.text || "Pouring…"}
+        </p>
+      </div>
+    ) : null;
+
+  if (dock === "bottom") {
+    return (
+      <div className="relative hidden w-full shrink-0 md:block">
+        {buildingHud}
+        <ChatRail
+          dock="bottom"
+          onBuild={onBuild}
+          onStop={onStop}
+          onUndo={onUndo}
+          onInstant={onInstant}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="relative hidden h-full shrink-0 md:flex">
-      <button
-        type="button"
-        onClick={() => setRightOpen(false)}
-        aria-label="Hide chat"
-        title="Hide chat"
-        className="absolute left-2 top-1.5 z-30 flex h-7 w-7 items-center justify-center rounded-md text-lab-muted hover:bg-lab-wash hover:text-lab-ink"
-      >
-        ›
-      </button>
-      {mode === "building" ? (
-        <div className="pointer-events-none absolute inset-x-3 top-10 z-20 rounded-md border border-lab-line/60 bg-lab-wash/95 px-2 py-1.5 shadow-sm">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-lab-muted">
-            Building
-            {buildSteps.length
-              ? ` · ${Math.min(buildStepIndex + 1, buildSteps.length)}/${buildSteps.length}`
-              : ""}
-          </p>
-          <p className="mt-0.5 truncate text-xs text-lab-ink">
-            {narration[narration.length - 1]?.text || "Pouring…"}
-          </p>
-        </div>
-      ) : null}
+      {buildingHud}
       <ChatRail
+        dock="right"
         onBuild={onBuild}
         onStop={onStop}
         onUndo={onUndo}

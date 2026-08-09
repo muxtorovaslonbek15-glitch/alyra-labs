@@ -2,42 +2,52 @@
 
 import { useCallback, useEffect, useRef } from "react";
 
+type ResizeSide = "left" | "right" | "top" | "bottom";
+
 /**
- * Thin drag handle between Lab columns. Cursor-like resize affordance.
+ * Thin drag handle between Lab columns / rows. Cursor-like resize affordance.
  */
 export function PanelResizeHandle({
   side,
   onResize,
   className = "",
 }: {
-  side: "left" | "right";
+  side: ResizeSide;
   onResize: (deltaPx: number) => void;
   className?: string;
 }) {
   const dragging = useRef(false);
-  const lastX = useRef(0);
+  const last = useRef(0);
+  const vertical = side === "top" || side === "bottom";
 
   const onPointerDown = useCallback(
     (e: React.PointerEvent<HTMLDivElement>) => {
       e.preventDefault();
       dragging.current = true;
-      lastX.current = e.clientX;
+      last.current = vertical ? e.clientY : e.clientX;
       e.currentTarget.setPointerCapture(e.pointerId);
-      document.body.style.cursor = "col-resize";
+      document.body.style.cursor = vertical ? "row-resize" : "col-resize";
       document.body.style.userSelect = "none";
     },
-    [],
+    [vertical],
   );
 
   const onPointerMove = useCallback(
     (e: React.PointerEvent<HTMLDivElement>) => {
       if (!dragging.current) return;
-      const dx = e.clientX - lastX.current;
-      lastX.current = e.clientX;
-      // Left panel grows with +dx; right panel grows with −dx.
-      onResize(side === "left" ? dx : -dx);
+      if (vertical) {
+        const dy = e.clientY - last.current;
+        last.current = e.clientY;
+        // Bottom panel grows when dragging its top edge upward (−dy).
+        onResize(side === "top" ? -dy : dy);
+      } else {
+        const dx = e.clientX - last.current;
+        last.current = e.clientX;
+        // Left panel grows with +dx; right panel grows with −dx.
+        onResize(side === "left" ? dx : -dx);
+      }
     },
-    [onResize, side],
+    [onResize, side, vertical],
   );
 
   const endDrag = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
@@ -59,19 +69,39 @@ export function PanelResizeHandle({
     };
   }, []);
 
+  const label =
+    side === "left"
+      ? "Resize inventory"
+      : side === "right"
+        ? "Resize chat"
+        : "Resize chat height";
+
   return (
     <div
       role="separator"
-      aria-orientation="vertical"
-      aria-label={side === "left" ? "Resize inventory" : "Resize chat"}
+      aria-orientation={vertical ? "horizontal" : "vertical"}
+      aria-label={label}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={endDrag}
       onPointerCancel={endDrag}
-      className={`group relative z-20 hidden w-1 shrink-0 cursor-col-resize touch-none md:block ${className}`}
+      className={
+        vertical
+          ? `group relative z-20 hidden h-1 w-full shrink-0 cursor-row-resize touch-none md:block ${className}`
+          : `group relative z-20 hidden w-1 shrink-0 cursor-col-resize touch-none md:block ${className}`
+      }
     >
-      <div className="absolute inset-y-0 -left-1 -right-1" />
-      <div className="absolute inset-y-8 left-0 w-px bg-lab-line/50 transition group-hover:bg-lab-ink/35 group-active:bg-lab-ink/50" />
+      {vertical ? (
+        <>
+          <div className="absolute inset-x-0 -top-1 -bottom-1" />
+          <div className="absolute inset-x-8 top-0 h-px bg-lab-line/50 transition group-hover:bg-lab-ink/35 group-active:bg-lab-ink/50" />
+        </>
+      ) : (
+        <>
+          <div className="absolute inset-y-0 -left-1 -right-1" />
+          <div className="absolute inset-y-8 left-0 w-px bg-lab-line/50 transition group-hover:bg-lab-ink/35 group-active:bg-lab-ink/50" />
+        </>
+      )}
     </div>
   );
 }
