@@ -84,7 +84,8 @@ export function PerfumerChat({
   const chatDock = useBuilderStore((s) => s.chatDock);
   const setChatDock = useBuilderStore((s) => s.setChatDock);
   const setRightOpen = useBuilderStore((s) => s.setRightOpen);
-  const openChatHistory = useBuilderStore((s) => s.openChatHistory);
+  const centerView = useBuilderStore((s) => s.centerView);
+  const toggleChatHistory = useBuilderStore((s) => s.toggleChatHistory);
   const closeChatHistory = useBuilderStore((s) => s.closeChatHistory);
   const builderMode = useBuilderStore((s) => s.mode);
   const buildStepIndex = useBuilderStore((s) => s.buildStepIndex);
@@ -923,15 +924,34 @@ export function PerfumerChat({
                 type="button"
                 onClick={() => {
                   if (shell) {
-                    openChatHistory();
-                    track("builder_history_open", { dock: chatDock });
+                    const wasOpen = centerView === "history";
+                    toggleChatHistory();
+                    track(
+                      wasOpen
+                        ? "builder_history_close"
+                        : "builder_history_open",
+                      { dock: chatDock, via: "toggle" },
+                    );
                     return;
                   }
                   setSidebarOpen(true);
                 }}
-                className="flex h-7 w-7 items-center justify-center rounded-md text-lab-muted hover:bg-lab-wash hover:text-lab-ink"
-                title="Chat history"
-                aria-label="Chat history"
+                className={`flex h-7 w-7 items-center justify-center rounded-md hover:bg-lab-wash hover:text-lab-ink ${
+                  shell && centerView === "history"
+                    ? "bg-lab-wash text-lab-ink"
+                    : "text-lab-muted"
+                }`}
+                title={
+                  shell && centerView === "history"
+                    ? "Back to desk"
+                    : "Chat history"
+                }
+                aria-label={
+                  shell && centerView === "history"
+                    ? "Back to desk"
+                    : "Chat history"
+                }
+                aria-pressed={shell ? centerView === "history" : undefined}
               >
                 <span aria-hidden className="font-mono text-[12px] leading-none">
                   ◷

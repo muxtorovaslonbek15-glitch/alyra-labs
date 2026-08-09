@@ -207,6 +207,8 @@ interface BuilderState {
   setCenterView: (view: CenterView) => void;
   openChatHistory: () => void;
   closeChatHistory: () => void;
+  /** Clock icon: open history, or return to desk if already open. */
+  toggleChatHistory: () => void;
   setChatAgentMode: (mode: ChatAgentMode) => void;
   hydratePanelPrefs: () => void;
   setPlanFromStructured: (
@@ -288,6 +290,21 @@ export const useBuilderStore = create<BuilderState>((set, get) => ({
     }),
 
   closeChatHistory: () => set({ centerView: "desk" }),
+
+  toggleChatHistory: () => {
+    const s = get();
+    if (s.centerView === "history") {
+      set({ centerView: "desk" });
+      return;
+    }
+    set({
+      centerView: "history",
+      tab: "chat",
+      rightSlot: "chat",
+      rightOpen: true,
+      chatSheetOpen: true,
+    });
+  },
 
   setTab: (tab) => {
     if (tab === "tutor") {

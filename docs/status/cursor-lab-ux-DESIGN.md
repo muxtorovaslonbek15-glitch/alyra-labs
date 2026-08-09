@@ -26,6 +26,7 @@ Bottom-docked chat is a half-baked strip: messy right-rail header reused under t
 | Action | Result |
 |--------|--------|
 | Click ◷ History | `centerView: history` — list titles/times in center (not a cramped rail drawer) |
+| Click ◷ again | Toggle back to desk (`centerView: desk`) |
 | Select chat | Load thread in Perfumer; restore Plan from last `lab_bridge` if present; return center to desk |
 | Back to desk / Esc | `centerView: desk` |
 | Phone | Full sheet over dimmed desk |
