@@ -163,17 +163,26 @@ function Section({
 }
 
 function CostBreakdownView({ cost }: { cost: CostBreakdown }) {
+  const total =
+    cost.totalCostInr ??
+    (typeof cost.totalCostUsd === "number" ? cost.totalCostUsd : null);
+  if (total == null) return null;
   return (
     <div>
       <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-lab-muted">
         Cost estimate
       </p>
       <p className="mt-1 font-display text-xl text-lab-ink">
-        ${cost.totalCostUsd?.toFixed(2)}
+        ₹{Math.round(total).toLocaleString("en-IN")}
         <span className="ml-2 font-sans text-xs font-normal text-lab-muted">
           / {cost.batchGrams || 100}g batch
         </span>
       </p>
+      {cost.summary ? (
+        <p className="mt-1 text-[11px] leading-relaxed text-lab-muted">
+          {cost.summary}
+        </p>
+      ) : null}
     </div>
   );
 }

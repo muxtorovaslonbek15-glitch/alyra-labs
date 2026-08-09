@@ -698,8 +698,7 @@ function EmptyState() {
       </p>
       <p className="mt-3 text-sm leading-relaxed text-lab-muted">
         I&apos;m your Master Perfumer. Brief me like a client: solid, oil, or
-        EDP, and we&apos;ll compose with materials, IFRA caution, and cost in
-        view.
+        EDP, and we&apos;ll compose with materials, IFRA caution, and cost in ₹.
       </p>
     </div>
   );

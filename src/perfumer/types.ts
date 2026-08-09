@@ -28,8 +28,15 @@ export interface FormulaLine {
 
 export interface CostBreakdown {
   ok: boolean;
+  currency?: string;
+  fxUsdInr?: number;
   batchGrams?: number;
   percentSum?: number;
+  /** Primary: Indian Rupees */
+  totalCostInr?: number;
+  costPerGramInr?: number;
+  summary?: string;
+  /** Legacy field — may hold INR after API migration */
   totalCostUsd?: number;
   costPerGramUsd?: number;
   items?: Array<{
@@ -37,9 +44,11 @@ export interface CostBreakdown {
     name: string;
     percent: number;
     grams: number;
-    unitCostPerGramUsd: number;
+    unitCostPerGramInr?: number;
+    unitCostPerGramUsd?: number;
     costTier: string;
-    lineCostUsd: number;
+    lineCostInr?: number;
+    lineCostUsd?: number;
   }>;
   warnings?: string[];
   ifraFlags?: Array<{ id: string; name: string; severity: string; ifraNotes?: string }>;
