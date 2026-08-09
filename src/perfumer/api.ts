@@ -39,9 +39,10 @@ async function parseJson(res: Response) {
 
 function normalizeError(data: unknown, status: number): PerfumerApiError {
   const d = data as {
-    error?: PerfumerApiError;
+    error?: PerfumerApiError & { retryAfterSec?: number };
     message?: string;
     code?: string;
+    retryAfterSec?: number;
   };
   if (d?.error) {
     return {
@@ -50,13 +51,17 @@ function normalizeError(data: unknown, status: number): PerfumerApiError {
       message: d.error.message || "Request failed",
       details: d.error.details,
       actionable: d.error.actionable,
+      retryAfterSec: d.error.retryAfterSec ?? d.retryAfterSec,
     };
   }
   if (status === 429) {
     return {
       code: "rate_limited",
-      title: "Rate limit hit",
-      message: "Too many requests. Wait a moment and try again.",
+      title: "Model is busy",
+      message:
+        "The perfume model is rate-limited right now. Try again in a moment.",
+      actionable: "Wait about 30s, then send again.",
+      retryAfterSec: 30,
     };
   }
   if (status === 0 || status >= 500) {
@@ -412,6 +417,7 @@ export async function streamChat(
     const decoder = new TextDecoder();
     let buffer = "";
     let sawDone = false;
+    let sawError = false;
 
     while (true) {
       const { done, value } = await reader.read();
@@ -459,11 +465,16 @@ export async function streamChat(
             );
           }
           if (evt.type === "error") {
+            sawError = true;
+            const err = evt.error || {
+              code: "internal",
+              title: "Stream error",
+              message: "Streaming failed",
+            };
             handlers.onError?.(
-              evt.error || {
-                code: "internal",
-                title: "Stream error",
-                message: "Streaming failed",
+              {
+                ...err,
+                retryAfterSec: err.retryAfterSec ?? evt.retryAfterSec,
               },
               evt.chatId,
             );
@@ -474,8 +485,8 @@ export async function streamChat(
       }
     }
 
-    if (!sawDone) {
-      // Stream closed without a done/error event — fall back to non-stream
+    // Do not hammer Groq: only fall back when stream died with neither done nor error
+    if (!sawDone && !sawError) {
       const result = await sendChat(body);
       if (!result.ok) {
         handlers.onError?.(result.error, result.chatId);
@@ -492,6 +503,7 @@ export async function streamChat(
       );
     }
   } catch {
+    // Network/transport failure only — one non-stream attempt, no loop
     const result = await sendChat(body);
     if (!result.ok) {
       handlers.onError?.(result.error, result.chatId);

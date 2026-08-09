@@ -1,11 +1,12 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import type { PerfumerApiError } from "./types";
 
 const CODE_HINTS: Record<string, string> = {
   missing_env: "A server key is missing.",
   groq_down: "The model is briefly unavailable.",
-  rate_limited: "Too many requests. Pause a moment.",
+  rate_limited: "Busy / rate limited — try again in a moment.",
   timeout: "That took too long.",
   tool_use_failed: "A formulation step misfired.",
   invalid_formula: "Formula materials look off.",
@@ -24,6 +25,32 @@ export function ErrorBanner({
   error: PerfumerApiError;
   onDismiss?: () => void;
 }) {
+  const initial =
+    error.retryAfterSec && error.retryAfterSec > 0
+      ? Math.ceil(error.retryAfterSec)
+      : error.code === "rate_limited"
+        ? 30
+        : 0;
+  const [left, setLeft] = useState(initial);
+
+  useEffect(() => {
+    setLeft(initial);
+    if (initial <= 0) return;
+    const id = window.setInterval(() => {
+      setLeft((n) => (n <= 1 ? 0 : n - 1));
+    }, 1000);
+    return () => window.clearInterval(id);
+  }, [error.code, error.message, initial]);
+
+  const title =
+    error.code === "rate_limited"
+      ? "Model is busy"
+      : error.title || "Something went wrong";
+  const message =
+    error.code === "rate_limited"
+      ? "The perfume model is rate-limited right now. Your brief is saved — try again shortly."
+      : error.message;
+
   return (
     <div
       role="alert"
@@ -31,14 +58,18 @@ export function ErrorBanner({
     >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="font-display text-[15px] text-lab-ink">{error.title}</p>
+          <p className="font-display text-[15px] text-lab-ink">{title}</p>
           <p className="mt-0.5 text-xs text-lab-muted">
             {CODE_HINTS[error.code] || error.code}
           </p>
           <p className="mt-1.5 text-sm leading-relaxed text-lab-ink/90">
-            {error.message}
+            {message}
           </p>
-          {error.actionable ? (
+          {left > 0 ? (
+            <p className="mt-1.5 text-xs font-medium text-lab-muted">
+              Retry in {left}s
+            </p>
+          ) : error.actionable ? (
             <p className="mt-1.5 text-xs text-lab-muted">{error.actionable}</p>
           ) : null}
         </div>

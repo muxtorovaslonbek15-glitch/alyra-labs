@@ -4,11 +4,14 @@ export type PerfumerErrorCode =
   | "missing_env"
   | "groq_down"
   | "rate_limited"
+  | "timeout"
+  | "tool_use_failed"
   | "invalid_formula"
   | "ifra_warning"
   | "search_failure"
   | "not_found"
   | "bad_request"
+  | "network"
   | "internal";
 
 export interface PerfumerApiError {
@@ -17,6 +20,8 @@ export interface PerfumerApiError {
   message: string;
   details?: unknown;
   actionable?: string | null;
+  /** Suggested wait before retry (seconds) */
+  retryAfterSec?: number;
 }
 
 export interface FormulaLine {
