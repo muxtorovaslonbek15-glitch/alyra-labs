@@ -20,6 +20,7 @@ import {
   saveLocalStore,
   uid,
 } from "./storage";
+import { Prose } from "./Prose";
 import { ThinkingPanel } from "./ThinkingPanel";
 import type {
   ChatMessage,
@@ -32,7 +33,7 @@ const SUGGESTIONS = [
   {
     label: "Solid woody rose",
     prompt:
-      "Create a luxury niche solid perfume — deep woody rose with oud, sandalwood, and a touch of sweetness. Give top/heart/base, %, solid wax constraints, and cost if possible.",
+      "Create a luxury niche solid perfume: deep woody rose with oud, sandalwood, and a touch of sweetness. Give top/heart/base, %, solid wax constraints, and cost if possible.",
   },
   {
     label: "Fix harsh opening",
@@ -309,7 +310,7 @@ export function PerfumerChat() {
               role: "assistant",
               content: "",
               status: "streaming",
-              thinkingLabel: "Listening to the brief…",
+              thinkingLabel: "Listening to the brief...",
               toolTrace: [],
             },
           ],
@@ -491,7 +492,7 @@ export function PerfumerChat() {
         </div>
       ) : null}
 
-      <div className="relative flex min-h-0 flex-1 overflow-hidden border-y border-lab-line bg-lab-panel/95 md:rounded-2xl md:border md:shadow-[0_12px_40px_-24px_rgba(12,12,12,0.35)]">
+      <div className="relative flex min-h-0 flex-1 overflow-hidden border-y border-lab-line/70 bg-lab-panel/80 md:rounded-2xl md:border md:border-lab-line/70">
         {sidebarOpen ? (
           <button
             type="button"
@@ -722,37 +723,26 @@ export function PerfumerChat() {
 
 function EmptyState({ onSuggestion }: { onSuggestion: (s: string) => void }) {
   return (
-    <div className="mx-auto flex max-w-lg flex-col items-center px-1 py-6 text-center md:px-2 md:py-14">
-      <AlyraMark
-        size="md"
-        href={null}
-        className="justify-center md:hidden"
-      />
-      <AlyraMark
-        size="lg"
-        href={null}
-        className="hidden justify-center md:inline-flex"
-      />
-      <p className="mt-5 font-display text-2xl leading-tight text-lab-ink md:mt-6 md:text-[1.75rem]">
-        Hey — welcome to Alyra Labs
+    <div className="mx-auto flex max-w-md flex-col items-center px-2 py-10 text-center md:py-16">
+      <AlyraMark size="md" href={null} className="justify-center" />
+      <p className="mt-6 font-display text-2xl leading-snug tracking-tight text-lab-ink">
+        Hey, welcome to Alyra Labs
       </p>
-      <p className="mt-2.5 max-w-md text-sm leading-relaxed text-lab-muted">
-        I&apos;m your Master Perfumer. Brief me like a client — solid, oil, or
-        EDP — and we&apos;ll compose with materials, IFRA caution, and cost in
+      <p className="mt-3 text-sm leading-relaxed text-lab-muted">
+        I&apos;m your Master Perfumer. Brief me like a client: solid, oil, or
+        EDP, and we&apos;ll compose with materials, IFRA caution, and cost in
         view.
       </p>
-      <ul className="mt-6 grid w-full gap-2 md:mt-8 md:grid-cols-2">
+      <ul className="mt-8 w-full space-y-1.5 text-left">
         {SUGGESTIONS.map((s) => (
           <li key={s.label}>
             <button
               type="button"
               onClick={() => onSuggestion(s.prompt)}
-              className="min-h-14 w-full rounded-xl border border-lab-line bg-white/40 px-3.5 py-3.5 text-left transition-all duration-300 active:scale-[0.99] hover:border-lab-ink/25 hover:bg-white/70 hover:shadow-sm md:min-h-0 md:py-3"
+              className="min-h-12 w-full rounded-lg px-3 py-3 text-left text-sm text-lab-ink transition-colors hover:bg-lab-wash/80"
             >
-              <span className="block text-sm font-medium text-lab-ink">
-                {s.label}
-              </span>
-              <span className="mt-1 line-clamp-2 block text-[11px] leading-snug text-lab-muted">
+              <span className="font-medium">{s.label}</span>
+              <span className="mt-0.5 block line-clamp-1 text-[12px] text-lab-muted">
                 {s.prompt}
               </span>
             </button>
@@ -775,18 +765,16 @@ function MessageBubble({ message }: { message: ChatMessage }) {
     !(message.content && message.content.length);
 
   return (
-    <div
-      className={`flex ${isUser ? "justify-end" : "justify-start"}`}
-    >
+    <div className={`flex ${isUser ? "justify-end" : "justify-start"}`}>
       <div
-        className={`max-w-[95%] space-y-2 md:max-w-[88%] ${
+        className={`max-w-[min(42rem,100%)] ${
           isUser
-            ? "rounded-2xl rounded-br-md bg-lab-ink px-3.5 py-2.5 text-lab-foam"
-            : "w-full"
+            ? "rounded-2xl bg-lab-ink px-4 py-2.5 text-lab-foam"
+            : "w-full space-y-3"
         }`}
       >
         {isUser ? (
-          <p className="whitespace-pre-wrap text-sm leading-relaxed">
+          <p className="whitespace-pre-wrap text-[15px] leading-relaxed">
             {message.content}
           </p>
         ) : (
@@ -810,40 +798,32 @@ function MessageBubble({ message }: { message: ChatMessage }) {
             ) : null}
 
             {streamingEmpty ? (
-              <ThinkingPanel
-                label={message.thinkingLabel}
-                tools={message.toolTrace}
-              />
+              <ThinkingPanel label={message.thinkingLabel} />
             ) : null}
 
             {message.content ? (
-              <div className="rounded-2xl rounded-bl-md border border-lab-line bg-white/55 px-3.5 py-2.5">
-                {message.status === "streaming" && message.thinkingLabel ? (
-                  <p className="mb-2 font-display text-xs text-lab-muted">
-                    {message.thinkingLabel}
-                  </p>
+              <div>
+                {message.status === "streaming" &&
+                !message.content &&
+                message.thinkingLabel ? (
+                  <ThinkingPanel label={message.thinkingLabel} />
                 ) : null}
-                <p className="whitespace-pre-wrap text-sm leading-relaxed text-lab-ink">
-                  {message.content}
-                  {message.status === "streaming" ? (
-                    <span className="ml-0.5 inline-block h-3 w-[2px] animate-pulse bg-lab-ink/70 align-middle" />
-                  ) : null}
-                </p>
+                <Prose text={message.content} />
+                {message.status === "streaming" ? (
+                  <span className="ml-0.5 inline-block h-4 w-[2px] translate-y-0.5 animate-pulse bg-lab-ink/50" />
+                ) : null}
               </div>
             ) : null}
 
             {message.toolTrace?.length && message.status === "ok" ? (
-              <details className="rounded-lg border border-lab-line/70 bg-lab-wash/40 px-3 py-2">
-                <summary className="cursor-pointer text-[10px] font-semibold uppercase tracking-[0.14em] text-lab-muted">
-                  Research & tools
+              <details className="text-[11px] text-lab-muted">
+                <summary className="cursor-pointer tracking-wide">
+                  Tools used
                 </summary>
-                <ul className="mt-2 space-y-1">
+                <ul className="mt-1.5 space-y-0.5 font-mono">
                   {message.toolTrace.map((t, i) => (
-                    <li
-                      key={`${t.tool}-${i}`}
-                      className="font-mono text-[11px] text-lab-ink/80"
-                    >
-                      {t.ok === false ? "✗" : "·"} {t.tool.replace(/_/g, " ")}
+                    <li key={`${t.tool}-${i}`}>
+                      {t.tool.replace(/_/g, " ")}
                     </li>
                   ))}
                 </ul>
