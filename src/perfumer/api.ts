@@ -8,6 +8,7 @@ import type {
   ChatSections,
   LabBridgeFormula,
 } from "./types";
+import { getAuthHeaders } from "@/lib/client/authHeaders";
 
 function baseUrl(): string {
   const raw =
@@ -17,10 +18,34 @@ function baseUrl(): string {
   return raw.replace(/\/$/, "");
 }
 
-const headers = {
-  "Content-Type": "application/json",
+const PUBLIC_HEADERS = {
   "ngrok-skip-browser-warning": "1",
 } as const;
+
+async function authHeadersOrError(): Promise<
+  | { ok: true; headers: Record<string, string> }
+  | { ok: false; error: PerfumerApiError }
+> {
+  const headers = await getAuthHeaders();
+  if (!headers) {
+    return {
+      ok: false,
+      error: {
+        code: "auth_required",
+        title: "Sign in required",
+        message: "Sign in to use Master Perfumer.",
+        actionable: "Open Sign in from the top bar, then try again.",
+      },
+    };
+  }
+  return {
+    ok: true,
+    headers: {
+      ...headers,
+      "ngrok-skip-browser-warning": "1",
+    },
+  };
+}
 
 async function parseJson(res: Response) {
   const text = await res.text();
@@ -55,6 +80,14 @@ function normalizeError(data: unknown, status: number): PerfumerApiError {
       retryAfterSec: d.error.retryAfterSec ?? d.retryAfterSec,
     };
   }
+  if (status === 401) {
+    return {
+      code: "auth_required",
+      title: "Sign in required",
+      message: d?.message || "Sign in to use Master Perfumer.",
+      actionable: "Sign in, then try again.",
+    };
+  }
   if (status === 429) {
     return {
       code: "rate_limited",
@@ -87,7 +120,7 @@ export async function checkPerfumerHealth(): Promise<{
 }> {
   try {
     const res = await fetch(`${baseUrl()}/health`, {
-      headers: { "ngrok-skip-browser-warning": "1" },
+      headers: { ...PUBLIC_HEADERS },
     });
     const data = await parseJson(res);
     if (!res.ok) return { ok: false, error: normalizeError(data, res.status) };
@@ -99,7 +132,8 @@ export async function checkPerfumerHealth(): Promise<{
         code: "groq_down",
         title: "Cannot reach Perfumer",
         message: "The studio is offline right now.",
-        actionable: "Try again in a moment. If this keeps happening, the backend may need a restart.",
+        actionable:
+          "Try again in a moment. If this keeps happening, the backend may need a restart.",
       },
     };
   }
@@ -108,9 +142,11 @@ export async function checkPerfumerHealth(): Promise<{
 export async function listServerChats(): Promise<
   { ok: true; chats: ChatListItem[] } | { ok: false; error: PerfumerApiError }
 > {
+  const auth = await authHeadersOrError();
+  if (!auth.ok) return auth;
   try {
     const res = await fetch(`${baseUrl()}/chats`, {
-      headers: { "ngrok-skip-browser-warning": "1" },
+      headers: auth.headers,
     });
     const data = await parseJson(res);
     if (!res.ok || data.ok === false) {
@@ -132,10 +168,12 @@ export async function listServerChats(): Promise<
 export async function createServerChat(title?: string): Promise<
   { ok: true; chat: ChatSession } | { ok: false; error: PerfumerApiError }
 > {
+  const auth = await authHeadersOrError();
+  if (!auth.ok) return auth;
   try {
     const res = await fetch(`${baseUrl()}/chats`, {
       method: "POST",
-      headers,
+      headers: auth.headers,
       body: JSON.stringify(title ? { title } : {}),
     });
     const data = await parseJson(res);
@@ -171,9 +209,11 @@ export async function fetchServerChat(
 ): Promise<
   { ok: true; chat: ChatSession } | { ok: false; error: PerfumerApiError }
 > {
+  const auth = await authHeadersOrError();
+  if (!auth.ok) return auth;
   try {
     const res = await fetch(`${baseUrl()}/chats/${encodeURIComponent(id)}`, {
-      headers: { "ngrok-skip-browser-warning": "1" },
+      headers: auth.headers,
     });
     const data = await parseJson(res);
     if (!res.ok || data.ok === false) {
@@ -207,10 +247,12 @@ export async function renameServerChat(
   id: string,
   title: string,
 ): Promise<{ ok: true } | { ok: false; error: PerfumerApiError }> {
+  const auth = await authHeadersOrError();
+  if (!auth.ok) return auth;
   try {
     const res = await fetch(`${baseUrl()}/chats/${encodeURIComponent(id)}`, {
       method: "PATCH",
-      headers,
+      headers: auth.headers,
       body: JSON.stringify({ title }),
     });
     const data = await parseJson(res);
@@ -233,10 +275,12 @@ export async function renameServerChat(
 export async function deleteServerChat(
   id: string,
 ): Promise<{ ok: true } | { ok: false; error: PerfumerApiError }> {
+  const auth = await authHeadersOrError();
+  if (!auth.ok) return auth;
   try {
     const res = await fetch(`${baseUrl()}/chats/${encodeURIComponent(id)}`, {
       method: "DELETE",
-      headers: { "ngrok-skip-browser-warning": "1" },
+      headers: auth.headers,
     });
     const data = await parseJson(res);
     if (!res.ok || data.ok === false) {
@@ -290,6 +334,9 @@ export async function sendChat(body: {
     }
   | { ok: false; error: PerfumerApiError; chatId?: string }
 > {
+  const auth = await authHeadersOrError();
+  if (!auth.ok) return { ok: false, error: auth.error };
+
   const payload: Record<string, unknown> = {
     message: body.message,
     messages: body.messages,
@@ -309,7 +356,7 @@ export async function sendChat(body: {
   try {
     const res = await fetch(`${baseUrl()}/chat`, {
       method: "POST",
-      headers,
+      headers: auth.headers,
       body: JSON.stringify(payload),
     });
     const data = await parseJson(res);
@@ -377,6 +424,12 @@ export async function streamChat(
     onError?: (error: PerfumerApiError, chatId?: string) => void;
   },
 ): Promise<void> {
+  const auth = await authHeadersOrError();
+  if (!auth.ok) {
+    handlers.onError?.(auth.error);
+    return;
+  }
+
   const payload: Record<string, unknown> = {
     message: body.message,
     messages: body.messages,
@@ -400,7 +453,7 @@ export async function streamChat(
     const res = await fetch(`${baseUrl()}/chat/stream`, {
       method: "POST",
       headers: {
-        ...headers,
+        ...auth.headers,
         Accept: "text/event-stream",
       },
       body: JSON.stringify(payload),

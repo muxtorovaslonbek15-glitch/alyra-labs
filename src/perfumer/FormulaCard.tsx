@@ -6,6 +6,7 @@ import type {
   CostBreakdown,
   FormulaDiff,
   FormulaLine,
+  LabBridgeFormula,
   StructuredPayload,
 } from "./types";
 import { buildLabBridgeFromStructured, storeLabBridge } from "./labBridge";
@@ -33,6 +34,8 @@ function AccordionRow({
 export function FormulaCard({
   structured,
   sections,
+  onBuild,
+  hideLabCta,
 }: {
   structured?: StructuredPayload;
   sections?: {
@@ -41,6 +44,10 @@ export function FormulaCard({
     explanation?: string;
     improvements?: string;
   };
+  /** When set (Lab shell), primary CTA is Build — no route hop. */
+  onBuild?: (bridge: LabBridgeFormula) => void;
+  /** Shell shows PlanPanel Build — hide duplicate CTA on the card. */
+  hideLabCta?: boolean;
 }) {
   const router = useRouter();
   const [opening, setOpening] = useState(false);
@@ -63,9 +70,12 @@ export function FormulaCard({
     return null;
   }
 
+  function resolveBridge(): LabBridgeFormula | null {
+    return structured?.lab_bridge || buildLabBridgeFromStructured(structured);
+  }
+
   function openInLab() {
-    const payload =
-      structured?.lab_bridge || buildLabBridgeFromStructured(structured);
+    const payload = resolveBridge();
     if (!payload) {
       setMapNote("No formula lines to place on the desk.");
       return;
@@ -75,6 +85,10 @@ export function FormulaCard({
       setMapNote(
         "None of these materials are in Lab inventory yet. Expand Lab fragrance stock in a later pass.",
       );
+      return;
+    }
+    if (onBuild) {
+      onBuild(payload);
       return;
     }
     setOpening(true);
@@ -90,7 +104,8 @@ export function FormulaCard({
     } else {
       setMapNote(null);
     }
-    router.push("/lab?bridge=1");
+    // Deep-link: Lab opens Chat + plan_ready (not silent pour). Instant via Apply in Plan.
+    router.push("/lab?bridge=1&tab=chat");
   }
 
   return (
@@ -208,7 +223,7 @@ export function FormulaCard({
         </div>
       ) : null}
 
-      {lines.length ? (
+      {lines.length && !hideLabCta ? (
         <div className="space-y-2 pt-1">
           <button
             type="button"
@@ -216,7 +231,11 @@ export function FormulaCard({
             disabled={!canOpenLab || opening}
             className="min-h-11 w-full rounded-lg bg-lab-ink px-4 py-2.5 text-sm font-semibold text-lab-foam transition hover:bg-lab-ink/90 disabled:cursor-not-allowed disabled:opacity-40 md:min-h-0 md:w-auto md:py-2"
           >
-            {opening ? "Opening Lab…" : "Open in Lab"}
+            {opening
+              ? "Preparing…"
+              : onBuild
+                ? "Use in Plan"
+                : "Open in Lab"}
           </button>
           {bridge?.mappingReport ? (
             <p className="text-[11px] leading-relaxed text-lab-muted">
@@ -225,7 +244,8 @@ export function FormulaCard({
               {bridge.mappingReport.unmappedCount > 0
                 ? `; ${bridge.mappingReport.unmappedCount} not in Lab inventory yet`
                 : ""}
-              . Proxies are teaching stand-ins.
+              . Proxies are teaching stand-ins. Build from the Plan panel to pour
+              step by step.
             </p>
           ) : null}
           {mapNote ? (

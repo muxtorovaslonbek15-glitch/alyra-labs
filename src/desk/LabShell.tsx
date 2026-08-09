@@ -56,6 +56,9 @@ import {
 } from "@/perfumer/labBridge";
 import { getVesselContents } from "@/desk/vesselContents";
 import { LAB_CHEMICAL_IDS } from "@/perfumer/labIngredientMap";
+import { MobileBuilderChrome } from "@/desk/MobileBuilderChrome";
+import { DesktopBuilderChrome } from "@/desk/DesktopBuilderChrome";
+import { useBuilderStore, type BuilderTab } from "@/store/builderStore";
 import type { User } from "firebase/auth";
 
 const ScanWorkbench = dynamic(
@@ -97,6 +100,20 @@ export function LabShell() {
   const lastRecorded = useRef<string | null>(null);
   const deskPointer = useRef<{ x: number; y: number } | null>(null);
 
+  const builderTab = useBuilderStore((s) => s.tab);
+  const setBuilderTab = useBuilderStore((s) => s.setTab);
+  const leftOpen = useBuilderStore((s) => s.leftOpen);
+  const setLeftOpen = useBuilderStore((s) => s.setLeftOpen);
+  const rightOpen = useBuilderStore((s) => s.rightOpen);
+  const rightSlot = useBuilderStore((s) => s.rightSlot);
+  const setRightOpen = useBuilderStore((s) => s.setRightOpen);
+  const setPlan = useBuilderStore((s) => s.setPlan);
+  const hydratePanelPrefs = useBuilderStore((s) => s.hydratePanelPrefs);
+
+  useEffect(() => {
+    hydratePanelPrefs();
+  }, [hydratePanelPrefs]);
+
   useEffect(() => {
     const finish = () => setHydrated(true);
     const unsubDesk = useDeskStore.persist.onFinishHydration(finish);
@@ -120,22 +137,52 @@ export function LabShell() {
     track("page_view", { surface: "lab" });
   }, []);
 
-  /** Perfumer → Lab bridge: sessionStorage payload + ?bridge=1 */
+  /** Perfumer → Lab bridge: ?bridge=1 loads Plan (default) or instant with ?instant=1 */
   useEffect(() => {
     if (!hydrated || bridgeApplied.current) return;
     if (typeof window === "undefined") return;
-    const wantsBridge = new URLSearchParams(window.location.search).get("bridge") === "1";
+    const params = new URLSearchParams(window.location.search);
+    const wantsBridge = params.get("bridge") === "1";
+    const tabParam = params.get("tab");
+    if (tabParam === "chat" || tabParam === "tutor" || tabParam === "lab") {
+      setBuilderTab(tabParam as BuilderTab);
+    }
     if (!wantsBridge) return;
     bridgeApplied.current = true;
     const bridge = consumeLabBridge();
+    const instant = params.get("instant") === "1";
     router.replace("/lab", { scroll: false });
     if (!bridge) {
       showToast({
         title: "No formula to load",
-        detail: "Open a formula from Perfumer again.",
+        detail: "Open a formula from Chat again.",
       });
       return;
     }
+    setPlan(bridge);
+    storeLabSession(bridge);
+    track("builder_plan_ready", {
+      mapped: bridge.mappingReport?.mappedCount ?? 0,
+      unmapped: bridge.mappingReport?.unmappedCount ?? 0,
+      title: bridge.title,
+      from: "bridge",
+    });
+    setBuilderTab("chat");
+
+    if (!instant) {
+      showToast({
+        title: "Plan ready",
+        detail: "Review the plan, then hit Build to pour on the desk.",
+      });
+      track("perfumer_lab_bridge", {
+        mapped: bridge.mappingReport?.mappedCount ?? 0,
+        unmapped: bridge.mappingReport?.unmappedCount ?? 0,
+        title: bridge.title,
+        mode: "plan",
+      });
+      return;
+    }
+
     const contents = deskContentsFromBridge(bridge);
     if (!contents.length) {
       showToast({
@@ -144,7 +191,6 @@ export function LabShell() {
       });
       return;
     }
-    // Always autoMix so scent notes / Play more dossier resolve after Open in Lab.
     const vesselId = loadFormula({
       equipmentId: bridge.vessel?.equipmentId || "beaker",
       contents,
@@ -159,32 +205,19 @@ export function LabShell() {
       });
       return;
     }
-    storeLabSession(bridge);
     const mapped = bridge.mappingReport?.mappedCount ?? contents.length;
     const unmapped = bridge.mappingReport?.unmappedCount ?? 0;
-    const total = mapped + unmapped;
     track("perfumer_lab_bridge", {
       mapped,
       unmapped,
       title: bridge.title,
+      mode: "instant",
     });
-    if (unmapped > 0) {
-      const missing = (bridge.mappingReport?.unmappedIds || [])
-        .slice(0, 6)
-        .join(", ");
-      showToast({
-        title: `Placed ${mapped} of ${total} materials`,
-        detail: missing
-          ? `Not in Lab yet: ${missing}${(bridge.mappingReport?.unmappedIds?.length || 0) > 6 ? "…" : ""}`
-          : bridge.title,
-      });
-    } else {
-      showToast({
-        title: "On your desk",
-        detail: bridge.title,
-      });
-    }
-  }, [hydrated, loadFormula, router]);
+    showToast({
+      title: unmapped > 0 ? `Placed ${mapped} materials` : "On your desk",
+      detail: bridge.title,
+    });
+  }, [hydrated, loadFormula, router, setBuilderTab, setPlan]);
 
   const canSendToPerfumer = (() => {
     const vessel =
@@ -233,8 +266,38 @@ export function LabShell() {
       unmapped: built.bridge.mappingReport.unmappedCount,
       title: built.title,
     });
-    router.push("/perfumer?fromLab=1");
+    // Stay in Lab shell — Chat tab ingests the bridge payload.
+    setBuilderTab("chat");
+    showToast({
+      title: "Sent to Chat",
+      detail: "Continue refining in the Chat rail.",
+    });
   }
+
+  function onBuilderTab(tab: BuilderTab) {
+    setBuilderTab(tab);
+    if (tab === "tutor") {
+      setTutorOpen(true);
+      track("tutor_open");
+    } else if (tab === "lab") {
+      setTutorOpen(false);
+    }
+  }
+
+  /** Deep-link: /lab?tab=chat|tutor|lab (also from /perfumer redirect). */
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const tab = params.get("tab");
+    if (tab === "chat" || tab === "tutor" || tab === "lab") {
+      setBuilderTab(tab as BuilderTab);
+      if (tab === "tutor") setTutorOpen(true);
+      const keep = new URLSearchParams();
+      if (params.get("fromLab") === "1") keep.set("fromLab", "1");
+      const qs = keep.toString();
+      router.replace(qs ? `/lab?${qs}` : "/lab", { scroll: false });
+    }
+  }, [router, setBuilderTab]);
 
   useEffect(() => {
     if (process.env.NODE_ENV !== "development") return;
@@ -504,27 +567,44 @@ export function LabShell() {
           </div>
           <div className="flex items-center gap-1.5 md:gap-2">
             <NavChrome onDark />
+            {mode === "desk" ? (
+              <div className="flex rounded-lg bg-white/10 p-0.5">
+                {(
+                  [
+                    ["lab", "Lab"],
+                    ["tutor", "Tutor"],
+                    ["chat", "Chat"],
+                  ] as const
+                ).map(([id, label]) => (
+                  <button
+                    key={id}
+                    type="button"
+                    onClick={() => onBuilderTab(id)}
+                    aria-pressed={builderTab === id}
+                    className={`min-h-9 rounded-md px-2.5 py-1.5 text-[11px] font-semibold transition md:min-h-0 md:py-1 ${
+                      builderTab === id
+                        ? "bg-lab-foam text-lab-ink shadow-sm"
+                        : "text-lab-foam/65 hover:text-lab-foam"
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            ) : null}
             <div className="flex rounded-lg bg-white/10 p-0.5">
-              {(
-                [
-                  ["desk", "Desk"],
-                  ["scan", "Scan"],
-                ] as const
-              ).map(([id, label]) => (
-                <button
-                  key={id}
-                  type="button"
-                  onClick={() => setMode(id)}
-                  aria-pressed={mode === id}
-                  className={`min-h-9 rounded-md px-2.5 py-1.5 text-[11px] font-semibold transition md:min-h-0 md:py-1 ${
-                    mode === id
-                      ? "bg-lab-foam text-lab-ink shadow-sm"
-                      : "text-lab-foam/65 hover:text-lab-foam"
-                  }`}
-                >
-                  {label}
-                </button>
-              ))}
+              <button
+                type="button"
+                onClick={() => setMode(mode === "scan" ? "desk" : "scan")}
+                aria-pressed={mode === "scan"}
+                className={`min-h-9 rounded-md px-2.5 py-1.5 text-[11px] font-semibold transition md:min-h-0 md:py-1 ${
+                  mode === "scan"
+                    ? "bg-lab-foam text-lab-ink shadow-sm"
+                    : "text-lab-foam/65 hover:text-lab-foam"
+                }`}
+              >
+                {mode === "scan" ? "Desk" : "Scan"}
+              </button>
             </div>
           </div>
         </header>
@@ -632,7 +712,14 @@ export function LabShell() {
         ) : (
           <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden md:flex-row">
             <ItemPanel
+              desktopOpen={leftOpen}
+              onToggleDesktop={() => setLeftOpen(!leftOpen)}
+              onOpenChat={() => {
+                setBuilderTab("chat");
+                setTutorOpen(false);
+              }}
               onOpenTutor={() => {
+                setBuilderTab("tutor");
                 setTutorOpen(true);
                 track("tutor_open");
               }}
@@ -655,10 +742,10 @@ export function LabShell() {
                       onClick={sendDeskToPerfumer}
                       className="min-h-11 w-full rounded-lg bg-lab-ink px-4 py-2.5 text-sm font-semibold text-lab-foam shadow-lg transition hover:bg-lab-ink/90 md:min-h-10"
                     >
-                      Continue in Perfumer
+                      Send desk to Chat
                     </button>
                     <p className="mt-1 px-0.5 text-[10px] leading-snug text-white/70 drop-shadow-sm">
-                      Send this desk blend back to chat
+                      Continue refining this blend in Chat
                     </p>
                   </div>
                 ) : null}
@@ -669,7 +756,24 @@ export function LabShell() {
             </div>
             <ExplanationPanel
               mobileOpen={tutorOpen}
-              onMobileOpenChange={setTutorOpen}
+              onMobileOpenChange={(open) => {
+                setTutorOpen(open);
+                if (open) setBuilderTab("tutor");
+              }}
+              desktopOpen={rightSlot === "tutor" && rightOpen}
+              onToggleDesktop={() => {
+                if (rightSlot === "tutor" && rightOpen) {
+                  setRightOpen(false);
+                } else {
+                  setBuilderTab("tutor");
+                }
+              }}
+            />
+            <DesktopBuilderChrome />
+            {/* Phone-only Chat/Plan/Build sheets — desktop uses DesktopBuilderChrome */}
+            <MobileBuilderChrome
+              tutorOpen={tutorOpen}
+              onTutorOpenChange={setTutorOpen}
             />
           </div>
         )}

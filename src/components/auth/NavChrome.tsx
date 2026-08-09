@@ -62,11 +62,11 @@ export function NavChrome({ onDark = false }: { onDark?: boolean } = {}) {
         Market
       </Link>
       <Link
-        href="/perfumer"
+        href="/lab?tab=chat"
         onClick={() => setMenuOpen(false)}
         className={inMenu ? linkInMenu : linkOnBar}
       >
-        Perfumer
+        Chat
       </Link>
       <Link
         href="/profile"

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AlyraMark } from "@/components/brand/AlyraMark";
+import { useAuthStore } from "@/store/authStore";
 import {
   checkPerfumerHealth,
   createServerChat,
@@ -19,12 +20,18 @@ import {
   saveLocalStore,
   uid,
 } from "./storage";
-import { consumeChatBridge } from "./labBridge";
+import {
+  buildLabBridgeFromStructured,
+  consumeChatBridge,
+} from "./labBridge";
 import { Prose } from "./Prose";
 import { ThinkingPanel } from "./ThinkingPanel";
+import { useBuilderStore } from "@/store/builderStore";
+import { track } from "@/lib/analytics/track";
 import type {
   ChatMessage,
   ChatSession,
+  LabBridgeFormula,
   PerfumerApiError,
   ToolTraceItem,
 } from "./types";
@@ -43,7 +50,21 @@ function formatChatTime(iso: string) {
   }
 }
 
-export function PerfumerChat() {
+export function PerfumerChat({
+  variant = "page",
+  onCloseSheet,
+}: {
+  /** page = standalone (redirect target); shell = Lab right rail / phone sheet */
+  variant?: "page" | "shell";
+  onCloseSheet?: () => void;
+} = {}) {
+  const shell = variant === "shell";
+  const user = useAuthStore((s) => s.user);
+  const authReady = useAuthStore((s) => s.authReady);
+  const openAuthGate = useAuthStore((s) => s.openAuthGate);
+  const setPlanFromStructured = useBuilderStore((s) => s.setPlanFromStructured);
+  const setPlan = useBuilderStore((s) => s.setPlan);
+  const narration = useBuilderStore((s) => s.narration);
   const [chats, setChats] = useState<ChatSession[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [input, setInput] = useState("");
@@ -59,6 +80,40 @@ export function PerfumerChat() {
   const persistTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const chatsRef = useRef<ChatSession[]>([]);
   const activeIdRef = useRef<string | null>(null);
+  const planTracked = useRef<string | null>(null);
+
+  const publishPlan = useCallback(
+    (structured: ChatMessage["structured"] | undefined) => {
+      if (!shell || !structured) return;
+      const bridge =
+        structured.lab_bridge || buildLabBridgeFromStructured(structured);
+      if (!bridge?.lines?.length) return;
+      setPlanFromStructured(structured, bridge);
+      const key = `${bridge.title}:${bridge.mappingReport?.mappedCount}:${bridge.lines.length}`;
+      if (planTracked.current !== key) {
+        planTracked.current = key;
+        track("builder_plan_ready", {
+          mapped: bridge.mappingReport?.mappedCount ?? 0,
+          unmapped: bridge.mappingReport?.unmappedCount ?? 0,
+          title: bridge.title,
+        });
+      }
+    },
+    [shell, setPlanFromStructured],
+  );
+
+  const onUseInPlan = useCallback(
+    (bridge: LabBridgeFormula) => {
+      setPlan(bridge);
+      track("builder_plan_ready", {
+        mapped: bridge.mappingReport?.mappedCount ?? 0,
+        unmapped: bridge.mappingReport?.unmappedCount ?? 0,
+        title: bridge.title,
+        from: "formula_card",
+      });
+    },
+    [setPlan],
+  );
 
   useEffect(() => {
     chatsRef.current = chats;
@@ -106,15 +161,19 @@ export function PerfumerChat() {
       nextActive = nextChats[0].id;
     }
 
-    // Lab → Chat: ingest desk blend after Continue in Perfumer
+    // Lab → Chat: ingest desk blend (Continue in Chat / fromLab bridge)
     if (typeof window !== "undefined") {
       const params = new URLSearchParams(window.location.search);
       const fromLab =
-        params.get("fromLab") === "1" || params.get("bridge") === "1";
-      if (fromLab) {
+        params.get("fromLab") === "1" ||
+        params.get("bridge") === "1" ||
+        params.get("tab") === "chat";
+      if (fromLab || shell) {
         const payload = consumeChatBridge();
-        window.history.replaceState({}, "", "/perfumer");
         if (payload?.structured?.formula?.formula?.length) {
+          if (!shell) {
+            window.history.replaceState({}, "", "/perfumer");
+          }
           const now = new Date().toISOString();
           const msg: ChatMessage = {
             id: uid("msg"),
@@ -131,6 +190,13 @@ export function PerfumerChat() {
           chat.updatedAt = now;
           nextChats = [chat, ...nextChats];
           nextActive = chat.id;
+          // Plan artifact for shell
+          if (shell) {
+            const bridge =
+              payload.structured.lab_bridge ||
+              buildLabBridgeFromStructured(payload.structured);
+            if (bridge) setPlanFromStructured(payload.structured, bridge);
+          }
         }
       }
     }
@@ -144,9 +210,19 @@ export function PerfumerChat() {
       if (!h.ok && h.error) setBanner(h.error);
       else setHealth(h.data || null);
     });
+  }, []);
 
+  // Server chat list only when signed in (API is auth-gated).
+  useEffect(() => {
+    if (!authReady || !user || !hydrated) return;
+    const nextActive = activeIdRef.current;
     void listServerChats().then(async (res) => {
-      if (!res.ok) return;
+      if (!res.ok) {
+        if (res.error.code === "auth_required" || res.error.code === "auth_invalid") {
+          setBanner(res.error);
+        }
+        return;
+      }
       setChats((prev) => {
         const byServer = new Map(
           prev.filter((c) => c.serverId).map((c) => [c.serverId!, c]),
@@ -172,7 +248,7 @@ export function PerfumerChat() {
         return merged;
       });
     });
-  }, []);
+  }, [authReady, user, hydrated]);
 
   useEffect(() => {
     if (hydrated) persist(chats, activeId);
@@ -180,7 +256,7 @@ export function PerfumerChat() {
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [active?.messages, busy, active?.id]);
+  }, [active?.messages, busy, active?.id, narration.length]);
 
   async function ensureServerId(chat: ChatSession): Promise<string | null> {
     if (chat.serverId) return chat.serverId;
@@ -281,6 +357,17 @@ export function PerfumerChat() {
     const text = textRaw.trim();
     const current = chatsRef.current.find((c) => c.id === activeIdRef.current);
     if (!text || busy || !current) return;
+
+    if (!user) {
+      openAuthGate();
+      setBanner({
+        code: "auth_required",
+        title: "Sign in required",
+        message: "Sign in to chat with Master Perfumer.",
+        actionable: "Use Sign in in the top bar, then send again.",
+      });
+      return;
+    }
 
     setBanner(null);
     setBusy(true);
@@ -407,17 +494,23 @@ export function PerfumerChat() {
             structured,
             sections: sections || undefined,
           });
+          publishPlan(structured);
         },
         onLabBridge: (payload) => {
-          patchAssistant((m) => ({
-            ...m,
-            structured: {
+          patchAssistant((m) => {
+            const nextStructured = {
               ...(m.structured || {}),
               lab_bridge: payload,
-            },
-          }));
+            };
+            publishPlan(nextStructured);
+            return {
+              ...m,
+              structured: nextStructured,
+            };
+          });
         },
         onDone: (reply, sections, structured, chatId) => {
+          publishPlan(structured);
           updateChats((prev) =>
             prev.map((c) => {
               if (c.id !== chatLocalId) return c;
@@ -487,15 +580,19 @@ export function PerfumerChat() {
   const empty = messages.length === 0 && loadingChatId !== active?.id;
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-2 md:gap-3">
+    <div
+      className={`flex min-h-0 flex-1 flex-col ${
+        shell ? "gap-0" : "gap-2 md:gap-3"
+      }`}
+    >
       {banner ? (
-        <div className="px-3 md:px-0">
+        <div className={shell ? "px-2 pt-2" : "px-3 md:px-0"}>
           <ErrorBanner error={banner} onDismiss={() => setBanner(null)} />
         </div>
       ) : null}
 
       {health && !health.groqConfigured ? (
-        <div className="px-3 md:px-0">
+        <div className={shell ? "px-2 pt-2" : "px-3 md:px-0"}>
           <ErrorBanner
             error={{
               code: "missing_env",
@@ -507,20 +604,34 @@ export function PerfumerChat() {
         </div>
       ) : null}
 
-      <div className="relative flex min-h-0 flex-1 overflow-hidden border-y border-lab-line/70 bg-lab-panel/80 md:rounded-2xl md:border md:border-lab-line/70">
+      <div
+        className={`relative flex min-h-0 flex-1 overflow-hidden bg-lab-panel/80 ${
+          shell
+            ? "border-0"
+            : "border-y border-lab-line/70 md:rounded-2xl md:border md:border-lab-line/70"
+        }`}
+      >
         {sidebarOpen ? (
           <button
             type="button"
             aria-label="Close chats"
-            className="absolute inset-0 z-20 bg-lab-ink/35 backdrop-blur-[1px] md:hidden"
+            className={`absolute inset-0 z-20 bg-lab-ink/35 backdrop-blur-[1px] ${
+              shell ? "" : "md:hidden"
+            }`}
             onClick={() => setSidebarOpen(false)}
           />
         ) : null}
 
-        {/* Phone: slide-over drawer; md+: static rail */}
+        {/* Chat list — drawer always in shell; md+ rail on page */}
         <aside
-          className={`absolute inset-y-0 left-0 z-30 flex w-[min(18.5rem,86vw)] flex-col border-r border-lab-line bg-lab-wash shadow-[8px_0_24px_-16px_rgba(12,12,12,0.35)] transition-transform duration-300 ease-out md:static md:z-0 md:w-[15.5rem] md:translate-x-0 md:shadow-none ${
-            sidebarOpen ? "translate-x-0" : "-translate-x-full"
+          className={`absolute inset-y-0 left-0 z-30 flex w-[min(18.5rem,86vw)] flex-col border-r border-lab-line bg-lab-wash shadow-[8px_0_24px_-16px_rgba(12,12,12,0.35)] transition-transform duration-300 ease-out ${
+            shell
+              ? sidebarOpen
+                ? "translate-x-0"
+                : "-translate-x-full"
+              : `md:static md:z-0 md:w-[15.5rem] md:translate-x-0 md:shadow-none ${
+                  sidebarOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"
+                }`
           }`}
         >
           <div className="flex items-center justify-between gap-2 border-b border-lab-line px-3 py-2.5 pt-[max(0.625rem,env(safe-area-inset-top))] md:pt-2.5">
@@ -671,10 +782,12 @@ export function PerfumerChat() {
         </aside>
 
         <div className="flex min-w-0 flex-1 flex-col">
-          <div className="flex items-center gap-2 border-b border-lab-line px-3 py-2 md:px-4 md:py-2.5">
+          <div className="flex items-center gap-2 border-b border-lab-line px-3 py-2 md:px-3 md:py-2">
             <button
               type="button"
-              className="min-h-11 rounded-md border border-lab-line px-3 text-sm font-medium text-lab-ink md:hidden"
+              className={`min-h-11 rounded-md border border-lab-line px-3 text-sm font-medium text-lab-ink ${
+                shell ? "" : "md:hidden"
+              }`}
               onClick={() => setSidebarOpen(true)}
             >
               Chats
@@ -682,22 +795,61 @@ export function PerfumerChat() {
             <h2 className="min-w-0 flex-1 truncate font-display text-base text-lab-ink md:text-lg">
               {active?.title || "Master Perfumer"}
             </h2>
+            {shell && onCloseSheet ? (
+              <button
+                type="button"
+                onClick={onCloseSheet}
+                className="min-h-11 shrink-0 rounded-lg bg-lab-ink px-3 text-xs font-semibold text-lab-foam md:hidden"
+              >
+                Done
+              </button>
+            ) : null}
           </div>
 
-          <div className="scroll-thin flex-1 space-y-3 overflow-y-auto overscroll-contain px-3 py-3 md:space-y-4 md:px-5 md:py-4">
+          <div
+            className={`scroll-thin flex-1 space-y-3 overflow-y-auto overscroll-contain px-3 py-3 ${
+              shell ? "md:space-y-3 md:px-3 md:py-3" : "md:space-y-4 md:px-5 md:py-4"
+            }`}
+          >
             {loadingChatId === active?.id ? (
               <p className="py-8 text-center text-sm text-lab-muted">
                 Loading conversation…
               </p>
-            ) : empty ? (
-              <EmptyState />
+            ) : empty && !narration.length ? (
+              <EmptyState compact={shell} />
             ) : (
-              messages.map((m) => <MessageBubble key={m.id} message={m} />)
+              <>
+                {messages.map((m) => (
+                  <MessageBubble
+                    key={m.id}
+                    message={m}
+                    onBuild={shell ? onUseInPlan : undefined}
+                    hideLabCta={shell}
+                  />
+                ))}
+                {narration.map((n) => (
+                  <div
+                    key={n.id}
+                    className="rounded-lg border border-lab-line/60 bg-lab-wash/80 px-3 py-2 text-sm leading-relaxed text-lab-ink/90"
+                  >
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-lab-muted">
+                      Build
+                    </p>
+                    <p className="mt-1">{n.text}</p>
+                  </div>
+                ))}
+              </>
             )}
             <div ref={bottomRef} />
           </div>
 
-          <div className="border-t border-lab-line bg-lab-wash/60 px-3 py-2.5 pb-[max(0.625rem,env(safe-area-inset-bottom))] md:px-4 md:py-3 md:pb-3">
+          <div
+            className={`border-t border-lab-line bg-lab-wash/60 px-3 py-2.5 ${
+              shell
+                ? "pb-2.5 md:px-3 md:py-2.5"
+                : "pb-[max(0.625rem,env(safe-area-inset-bottom))] md:px-4 md:py-3 md:pb-3"
+            }`}
+          >
             <div className="flex gap-2">
               <textarea
                 value={input}
@@ -708,18 +860,28 @@ export function PerfumerChat() {
                     void onSend();
                   }
                 }}
-                rows={2}
-                placeholder="Brief me — goal, type, vibe…"
+                rows={shell ? 2 : 2}
+                placeholder={
+                  user
+                    ? "Brief me — goal, type, vibe…"
+                    : "Sign in to brief Master Perfumer…"
+                }
                 className="min-h-[48px] flex-1 resize-none rounded-xl border border-lab-line bg-lab-panel px-3 py-3 text-base text-lab-ink placeholder:text-lab-muted/70 focus:outline-none focus:ring-1 focus:ring-lab-ink/30 md:min-h-[44px] md:rounded-lg md:py-2.5 md:text-sm"
                 disabled={busy}
               />
               <button
                 type="button"
-                onClick={() => void onSend()}
-                disabled={busy || !input.trim()}
+                onClick={() => {
+                  if (!user) {
+                    openAuthGate();
+                    return;
+                  }
+                  void onSend();
+                }}
+                disabled={busy || (!user ? false : !input.trim())}
                 className="h-12 w-16 shrink-0 self-end rounded-xl bg-lab-ink text-sm font-semibold text-lab-foam transition-opacity hover:bg-black disabled:opacity-50 md:h-11 md:w-auto md:rounded-lg md:px-4"
               >
-                Send
+                {user ? "Send" : "Sign in"}
               </button>
             </div>
           </div>
@@ -729,9 +891,13 @@ export function PerfumerChat() {
   );
 }
 
-function EmptyState() {
+function EmptyState({ compact }: { compact?: boolean } = {}) {
   return (
-    <div className="mx-auto flex max-w-md flex-col items-center px-2 py-10 text-center md:py-16">
+    <div
+      className={`mx-auto flex max-w-md flex-col items-center px-2 text-center ${
+        compact ? "py-8" : "py-10 md:py-16"
+      }`}
+    >
       <AlyraMark size="md" href={null} className="justify-center" />
       <p className="mt-6 font-display text-2xl leading-snug tracking-tight text-lab-ink">
         Hey, welcome to Alyra Labs
@@ -739,13 +905,22 @@ function EmptyState() {
       <p className="mt-3 text-sm leading-relaxed text-lab-muted">
         I&apos;m your Master Perfumer for Indian makers. Brief me like a client:
         solid, oil, or EDP, occasion and vibe, and we&apos;ll compose for heat,
-        with materials, IFRA caution, and cost in ₹.
+        with materials, IFRA caution, and cost in ₹. Plan mode first — Build
+        pours on the desk when you&apos;re ready.
       </p>
     </div>
   );
 }
 
-function MessageBubble({ message }: { message: ChatMessage }) {
+function MessageBubble({
+  message,
+  onBuild,
+  hideLabCta,
+}: {
+  message: ChatMessage;
+  onBuild?: (bridge: LabBridgeFormula) => void;
+  hideLabCta?: boolean;
+}) {
   if (message.role === "error") {
     return message.error ? <ErrorBanner error={message.error} /> : null;
   }
@@ -825,6 +1000,8 @@ function MessageBubble({ message }: { message: ChatMessage }) {
             <FormulaCard
               structured={message.structured}
               sections={message.sections}
+              onBuild={onBuild}
+              hideLabCta={hideLabCta}
             />
           </>
         )}

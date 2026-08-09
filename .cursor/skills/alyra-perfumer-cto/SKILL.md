@@ -33,7 +33,8 @@ CTO for the **Perfumer ↔ Lab ↔ Alyra catalog** ecosystem. Own:
 5. Build vs buy (LangChain = **NO** unless proven gap)
 
 Canonical plan: `docs/alyra-perfumer-agentic-plan.md`. Schema stub: `docs/schemas/lab-bridge-formula.schema.json`.  
-Brain readiness (CTO + business): `docs/alyra-perfumer-brain-readiness.md`.
+Brain readiness (CTO + business): `docs/alyra-perfumer-brain-readiness.md`.  
+**Perfume Builder IDE** (Cursor-for-perfume UX: Plan mode → Build, closable panels, Lab|Tutor|Chat): `docs/alyra-perfume-builder-ide-plan.md` — plan only until explicitly implemented.
 
 ---
 

@@ -66,10 +66,15 @@ async function streamExplanation(
 export function ExplanationPanel({
   mobileOpen,
   onMobileOpenChange,
+  /** Desktop only — closable right rail. Never affects `< md` phone sheet. */
+  desktopOpen = true,
+  onToggleDesktop,
 }: {
   /** Phone sheet — controlled from the shared right FAB rail. */
   mobileOpen?: boolean;
   onMobileOpenChange?: (open: boolean) => void;
+  desktopOpen?: boolean;
+  onToggleDesktop?: () => void;
 } = {}) {
   const vessels = useDeskStore((s) => s.vessels);
   const lastId = useDeskStore((s) => s.lastExplanationVesselId);
@@ -248,9 +253,24 @@ export function ExplanationPanel({
 
   return (
     <>
-      {/* Desktop tutor rail — unchanged */}
+      {!desktopOpen && onToggleDesktop ? (
+        <div className="relative hidden h-full w-0 shrink-0 md:block">
+          <button
+            type="button"
+            onClick={onToggleDesktop}
+            aria-label="Show tutor"
+            title="Show tutor"
+            className="absolute right-0 top-1/2 z-20 flex h-16 w-5 -translate-y-1/2 items-center justify-center rounded-l-md border border-r-0 border-lab-line/70 bg-lab-panel/95 text-lab-muted shadow-sm hover:text-lab-ink"
+          >
+            ‹
+          </button>
+        </div>
+      ) : null}
+      {/* Desktop tutor rail — `hidden` baseline; `md:flex` only when open */}
       <aside
-        className={`panel-glass hidden w-full shrink-0 flex-col md:flex md:h-full md:w-[13.5rem] md:border-l md:border-lab-line/60 xl:w-[15rem]`}
+        className={`panel-glass relative hidden w-full shrink-0 flex-col md:h-full md:w-[13.5rem] md:border-l md:border-lab-line/60 xl:w-[15rem] ${
+          desktopOpen ? "md:flex" : "md:hidden"
+        }`}
       >
         <div className="flex w-full items-center justify-between border-b border-lab-line/50 px-2.5 py-2 text-left">
           <div>
@@ -261,6 +281,16 @@ export function ExplanationPanel({
               What happened
             </h2>
           </div>
+          {onToggleDesktop ? (
+            <button
+              type="button"
+              onClick={onToggleDesktop}
+              aria-label="Hide tutor"
+              className="flex h-7 w-7 items-center justify-center rounded-md text-lab-muted hover:bg-lab-wash hover:text-lab-ink"
+            >
+              ›
+            </button>
+          ) : null}
         </div>
         <div className="scroll-thin flex-1 overflow-y-auto px-2.5 py-2 text-xs leading-snug text-lab-ink/90">
           <TutorBody

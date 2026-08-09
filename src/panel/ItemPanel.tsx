@@ -30,8 +30,15 @@ const SIDEBAR_PREVIEW_LIMIT = 8;
 
 export function ItemPanel({
   onOpenTutor,
+  onOpenChat,
+  /** Desktop only — closable left rail. Never affects `< md` (phone stays sheet/FAB). */
+  desktopOpen = true,
+  onToggleDesktop,
 }: {
   onOpenTutor?: () => void;
+  onOpenChat?: () => void;
+  desktopOpen?: boolean;
+  onToggleDesktop?: () => void;
 } = {}) {
   const [browse, setBrowse] = useState<BrowseKind>("equipment");
   const [expanded, setExpanded] = useState(false);
@@ -714,6 +721,16 @@ export function ItemPanel({
       {/* Mobile right rail — one column, equal width, right edge aligned */}
       <div className="pointer-events-none absolute inset-x-0 bottom-[calc(4.5rem+env(safe-area-inset-bottom,0px))] z-40 px-3 md:hidden">
         <div className="ml-auto flex w-12 flex-col items-stretch gap-2">
+          {onOpenChat ? (
+            <button
+              type="button"
+              onClick={onOpenChat}
+              className="pointer-events-auto flex h-11 w-full items-center justify-center rounded-xl border border-lab-line/70 bg-lab-panel/95 text-[10px] font-bold tracking-wide text-lab-ink shadow-lg backdrop-blur-md"
+              aria-label="Open perfume chat"
+            >
+              Chat
+            </button>
+          ) : null}
           {onOpenTutor ? (
             <button
               type="button"
@@ -743,7 +760,38 @@ export function ItemPanel({
         </div>
       </div>
 
-      <aside className="panel-glass hidden w-full shrink-0 flex-col border-b border-lab-line/60 md:flex md:h-full md:max-h-none md:w-[14rem] md:border-b-0 md:border-r xl:w-[15.5rem]">
+      {/* Collapsed grip — desktop only */}
+      {!desktopOpen ? (
+        <div className="relative hidden h-full w-0 shrink-0 md:block">
+          <button
+            type="button"
+            onClick={onToggleDesktop}
+            aria-label="Show inventory"
+            title="Show inventory"
+            className="absolute left-0 top-1/2 z-20 flex h-16 w-5 -translate-y-1/2 items-center justify-center rounded-r-md border border-l-0 border-lab-line/70 bg-lab-panel/95 text-lab-muted shadow-sm hover:text-lab-ink"
+          >
+            ›
+          </button>
+        </div>
+      ) : null}
+
+      {/* `hidden` + conditional `md:flex` — never show as a phone column */}
+      <aside
+        className={`panel-glass relative hidden w-full shrink-0 flex-col border-b border-lab-line/60 md:h-full md:max-h-none md:w-[14rem] md:border-b-0 md:border-r xl:w-[15.5rem] ${
+          desktopOpen ? "md:flex" : "md:hidden"
+        }`}
+      >
+        {onToggleDesktop ? (
+          <button
+            type="button"
+            onClick={onToggleDesktop}
+            aria-label="Hide inventory"
+            title="Hide inventory"
+            className="absolute right-1 top-1 z-10 flex h-7 w-7 items-center justify-center rounded-md text-lab-muted hover:bg-lab-wash hover:text-lab-ink"
+          >
+            ‹
+          </button>
+        ) : null}
         <div className="border-b border-lab-line/50 px-2.5 pb-2 pt-2.5">
           <p className="font-display text-[10px] uppercase tracking-[0.2em] text-lab-teal">
             Inventory

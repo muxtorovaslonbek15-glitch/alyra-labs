@@ -111,4 +111,59 @@ describe("labBridge", () => {
       }),
     ).toMatchObject({ error: expect.stringContaining("not in the fragrance") });
   });
+
+  it("emits schemaVersion 1 bridge shape for Open in Lab", () => {
+    const bridge = buildLabBridgeFromStructured(structured)!;
+    expect(bridge.schemaVersion).toBe(1);
+    expect(["EDP", "Oil", "Solid"]).toContain(bridge.format);
+    expect(bridge.vessel.equipmentId).toBe("beaker");
+    expect(bridge.vessel.autoMix).toBe(true);
+    expect(bridge.mappingReport.mappedCount).toBeGreaterThan(0);
+    expect(bridge.disclaimer).toMatch(/Teaching desk/i);
+    for (const line of bridge.lines) {
+      expect(line.perfumerIngredientId).toBeTruthy();
+      expect(line.name).toBeTruthy();
+      expect(line.percent).toBeGreaterThan(0);
+      expect(line.mapStatus).toMatch(/exact|alias|proxy|unmapped/);
+    }
+  });
+
+  it("adds beeswax chassis for Solid format", () => {
+    const solid: StructuredPayload = {
+      formula: {
+        type: "Solid",
+        vibe: "woody rose solid",
+        formula: [
+          { id: "rose-absolute", name: "Rose", percent: 20, role: "heart" },
+          { id: "sandalwood-oil", name: "Sandalwood", percent: 30, role: "base" },
+        ],
+      },
+    };
+    const bridge = buildLabBridgeFromStructured(solid)!;
+    expect(bridge.format).toBe("Solid");
+    expect(bridge.lines.some((l) => l.labChemicalId === "beeswax")).toBe(true);
+    const desk = deskContentsFromBridge(bridge);
+    expect(desk.some((c) => c.chemicalId === "beeswax")).toBe(true);
+  });
+
+  it("preserves refine formulaDiff on structured payload for FormulaCard", () => {
+    const withDiff: StructuredPayload = {
+      ...structured,
+      formulaDiff: {
+        summary: "Softer opening",
+        changes: [
+          {
+            id: "aldehydes",
+            name: "Aldehydes",
+            before: 4,
+            after: 1.5,
+            delta: -2.5,
+          },
+        ],
+      },
+    };
+    expect(withDiff.formulaDiff?.changes[0].delta).toBe(-2.5);
+    const bridge = buildLabBridgeFromStructured(withDiff);
+    expect(bridge?.lines.length).toBeGreaterThan(0);
+  });
 });
