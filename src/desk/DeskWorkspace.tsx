@@ -348,10 +348,10 @@ export function DeskWorkspace({
                 {(
                   [
                     ["Open Chat", "Header → Chat"],
+                    ["Chat history", "◷ in chat → center"],
                     ["Toggle inventory", "⌘B"],
                     ["Toggle chat", "⌘T"],
                     ["Dock chat", "⋮⋮ drag · double-click"],
-                    ["Inventory", "Left rail"],
                     ["Build", "Plan ready → Build"],
                     ["Guide", "⋯ → How it works"],
                   ] as const

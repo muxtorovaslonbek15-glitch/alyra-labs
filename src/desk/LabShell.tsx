@@ -66,6 +66,7 @@ import {
   LabOverflowMenu,
   type LabOverflowAction,
 } from "@/desk/LabOverflowMenu";
+import { ChatHistoryCanvas } from "@/perfumer/ChatHistoryCanvas";
 import { useBuilderStore, type BuilderTab } from "@/store/builderStore";
 import { useGoalStore } from "@/store/goalStore";
 import type { User } from "firebase/auth";
@@ -120,9 +121,11 @@ export function LabShell() {
   const rightSlot = useBuilderStore((s) => s.rightSlot);
   const setRightOpen = useBuilderStore((s) => s.setRightOpen);
   const chatDock = useBuilderStore((s) => s.chatDock);
+  const centerView = useBuilderStore((s) => s.centerView);
   const setPlan = useBuilderStore((s) => s.setPlan);
   const hydratePanelPrefs = useBuilderStore((s) => s.hydratePanelPrefs);
   const dockDrag = useChatDockDragState();
+  const historyOpen = centerView === "history";
 
   useEffect(() => {
     hydratePanelPrefs();
@@ -829,45 +832,59 @@ export function LabShell() {
               }`}
             >
               <div className="relative min-h-0 min-w-0 flex-1 overflow-hidden">
-                <DeskWorkspace
-                  flushBottom={
-                    chatDock === "bottom" &&
-                    rightSlot === "chat" &&
-                    rightOpen
-                  }
-                  onOpenAtelier={() => {
-                    setShopOpen(false);
-                    setMarketOpen(false);
-                    setFreeformOpen(false);
-                    useInventionStore.getState().setShelfOpen(false);
-                    setAtelierOpen(true);
-                  }}
-                />
                 <div
-                  className={`pointer-events-none absolute left-3 right-3 z-30 flex flex-col items-start gap-2 md:left-3 md:right-auto ${
-                    chatDock === "bottom" && rightSlot === "chat" && rightOpen
-                      ? "bottom-3"
-                      : "bottom-[calc(4.5rem+env(safe-area-inset-bottom,0px))] md:bottom-3"
+                  className={`h-full ${
+                    historyOpen
+                      ? "md:pointer-events-none md:invisible"
+                      : ""
                   }`}
                 >
-                  {canSendToPerfumer ? (
-                    <div className="pointer-events-auto w-[min(100%,17rem)] max-w-sm">
-                      <button
-                        type="button"
-                        onClick={sendDeskToPerfumer}
-                        className="min-h-11 w-full rounded-lg bg-lab-ink px-4 py-2.5 text-sm font-semibold text-lab-foam shadow-lg transition hover:bg-lab-ink/90 md:min-h-10"
-                      >
-                        Send desk to Chat
-                      </button>
-                      <p className="mt-1 px-0.5 text-[10px] leading-snug text-white/70 drop-shadow-sm">
-                        Continue refining this blend in Chat
-                      </p>
+                  <DeskWorkspace
+                    flushBottom={
+                      !historyOpen &&
+                      chatDock === "bottom" &&
+                      rightSlot === "chat" &&
+                      rightOpen
+                    }
+                    onOpenAtelier={() => {
+                      setShopOpen(false);
+                      setMarketOpen(false);
+                      setFreeformOpen(false);
+                      useInventionStore.getState().setShelfOpen(false);
+                      setAtelierOpen(true);
+                    }}
+                  />
+                  {!historyOpen ? (
+                    <div
+                      className={`pointer-events-none absolute left-3 right-3 z-30 flex flex-col items-start gap-2 md:left-3 md:right-auto ${
+                        chatDock === "bottom" &&
+                        rightSlot === "chat" &&
+                        rightOpen
+                          ? "bottom-3"
+                          : "bottom-[calc(4.5rem+env(safe-area-inset-bottom,0px))] md:bottom-3"
+                      }`}
+                    >
+                      {canSendToPerfumer ? (
+                        <div className="pointer-events-auto w-[min(100%,17rem)] max-w-sm">
+                          <button
+                            type="button"
+                            onClick={sendDeskToPerfumer}
+                            className="min-h-11 w-full rounded-lg bg-lab-ink px-4 py-2.5 text-sm font-semibold text-lab-foam shadow-lg transition hover:bg-lab-ink/90 md:min-h-10"
+                          >
+                            Send desk to Chat
+                          </button>
+                          <p className="mt-1 px-0.5 text-[10px] leading-snug text-white/70 drop-shadow-sm">
+                            Continue refining this blend in Chat
+                          </p>
+                        </div>
+                      ) : null}
+                      <div className="pointer-events-auto w-[min(100%,17rem)] max-w-sm">
+                        <GoalGuidePanel />
+                      </div>
                     </div>
                   ) : null}
-                  <div className="pointer-events-auto w-[min(100%,17rem)] max-w-sm">
-                    <GoalGuidePanel />
-                  </div>
                 </div>
+                {historyOpen ? <ChatHistoryCanvas /> : null}
               </div>
               {/* Desktop bottom dock — flush under wood; phone keeps sheets */}
               {chatDock === "bottom" ? (

@@ -17,9 +17,18 @@ Bottom-docked chat is a half-baked strip: messy right-rail header reused under t
 | Region | Behavior |
 |--------|----------|
 | Left | Inventory, collapsible `⌘B`, resizable |
-| Center | Desk hero. Empty = Cursor-style shortcut cheat sheet (calm mono keys, no card stack) |
+| Center | Desk hero. Empty = Cursor-style shortcut cheat sheet. **History** (◷) swaps center to chat list canvas |
 | Right | Tutor **or** Chat (mutually exclusive). Equal-width Tutor\|Chat in header (`grid-cols-2`) |
 | Bottom | When chat docked: **real bottom panel under desk** — flush (no beige gap), top resize grip, tab row, messages, compact composer. Right rail closes for chat |
+
+### Chat history → center canvas
+
+| Action | Result |
+|--------|--------|
+| Click ◷ History | `centerView: history` — list titles/times in center (not a cramped rail drawer) |
+| Select chat | Load thread in Perfumer; restore Plan from last `lab_bridge` if present; return center to desk |
+| Back to desk / Esc | `centerView: desk` |
+| Phone | Full sheet over dimmed desk |
 
 ### Dock (`:::`)
 

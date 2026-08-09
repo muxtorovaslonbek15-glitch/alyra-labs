@@ -32,6 +32,7 @@ import {
 import { Prose } from "./Prose";
 import { ThinkingPanel } from "./ThinkingPanel";
 import { useBuilderStore } from "@/store/builderStore";
+import { useChatSessionsStore } from "@/perfumer/chatSessionsStore";
 import { ChatDockHandle } from "@/desk/ChatDockDrag";
 import { track } from "@/lib/analytics/track";
 import type {
@@ -83,9 +84,13 @@ export function PerfumerChat({
   const chatDock = useBuilderStore((s) => s.chatDock);
   const setChatDock = useBuilderStore((s) => s.setChatDock);
   const setRightOpen = useBuilderStore((s) => s.setRightOpen);
+  const openChatHistory = useBuilderStore((s) => s.openChatHistory);
+  const closeChatHistory = useBuilderStore((s) => s.closeChatHistory);
   const builderMode = useBuilderStore((s) => s.mode);
   const buildStepIndex = useBuilderStore((s) => s.buildStepIndex);
   const buildSteps = useBuilderStore((s) => s.buildSteps);
+  const publishSessions = useChatSessionsStore((s) => s.publish);
+  const registerSessionActions = useChatSessionsStore((s) => s.registerActions);
   const [chats, setChats] = useState<ChatSession[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [input, setInput] = useState("");
@@ -287,6 +292,11 @@ export function PerfumerChat({
   }, [chats, activeId, hydrated, persist]);
 
   useEffect(() => {
+    if (!shell) return;
+    publishSessions({ chats, activeId, loadingChatId });
+  }, [shell, chats, activeId, loadingChatId, publishSessions]);
+
+  useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [active?.messages, busy, active?.id, narration.length]);
 
@@ -324,11 +334,25 @@ export function PerfumerChat({
     return serverId;
   }
 
+  function restorePlanFromChat(chat: ChatSession) {
+    if (!shell) return;
+    for (let i = chat.messages.length - 1; i >= 0; i -= 1) {
+      const structured = chat.messages[i].structured;
+      if (!structured) continue;
+      const bridge =
+        structured.lab_bridge || buildLabBridgeFromStructured(structured);
+      if (bridge?.lines?.length) {
+        setPlanFromStructured(structured, bridge);
+        return;
+      }
+    }
+  }
+
   async function selectChat(id: string) {
     setActiveId(id);
     setSidebarOpen(false);
     setBanner(null);
-    const chat = chatsRef.current.find((c) => c.id === id);
+    let chat = chatsRef.current.find((c) => c.id === id);
     if (!chat) return;
 
     // Always hydrate full history from server when we only have a stub
@@ -338,23 +362,23 @@ export function PerfumerChat({
       try {
         const remote = await fetchServerChat(chat.serverId);
         if (remote.ok && remote.chat.messages.length) {
+          const hydratedChat: ChatSession = {
+            ...chat,
+            title: remote.chat.title || chat.title,
+            messages: remote.chat.messages,
+            updatedAt: remote.chat.updatedAt,
+          };
           updateChats((prev) =>
-            prev.map((c) =>
-              c.id === id
-                ? {
-                    ...c,
-                    title: remote.chat.title || c.title,
-                    messages: remote.chat.messages,
-                    updatedAt: remote.chat.updatedAt,
-                  }
-                : c,
-            ),
+            prev.map((c) => (c.id === id ? hydratedChat : c)),
           );
+          chat = hydratedChat;
         }
       } finally {
         setLoadingChatId(null);
       }
     }
+    restorePlanFromChat(chat);
+    if (shell) closeChatHistory();
   }
 
   function createChat() {
@@ -366,6 +390,22 @@ export function PerfumerChat({
     setSidebarOpen(false);
     setInput("");
     setBanner(null);
+    if (shell) closeChatHistory();
+  }
+
+  function renameChatById(id: string, title: string) {
+    const nextTitle = title.trim().slice(0, 120) || "New chat";
+    const target = chatsRef.current.find((c) => c.id === id);
+    updateChats((prev) =>
+      prev.map((c) =>
+        c.id === id
+          ? { ...c, title: nextTitle, updatedAt: new Date().toISOString() }
+          : c,
+      ),
+    );
+    if (target?.serverId) {
+      void renameServerChat(target.serverId, nextTitle);
+    }
   }
 
   async function removeChat(id: string) {
@@ -393,18 +433,34 @@ export function PerfumerChat({
 
   function commitRename() {
     if (!renamingId) return;
-    const title = renameValue.trim().slice(0, 120) || "New chat";
-    const target = chatsRef.current.find((c) => c.id === renamingId);
-    updateChats((prev) =>
-      prev.map((c) =>
-        c.id === renamingId
-          ? { ...c, title, updatedAt: new Date().toISOString() }
-          : c,
-      ),
-    );
-    if (target?.serverId) void renameServerChat(target.serverId, title);
+    renameChatById(renamingId, renameValue);
     setRenamingId(null);
   }
+
+  const sessionActionsRef = useRef({
+    selectChat,
+    createChat,
+    removeChat,
+    renameChat: renameChatById,
+  });
+  sessionActionsRef.current = {
+    selectChat,
+    createChat,
+    removeChat,
+    renameChat: renameChatById,
+  };
+
+  useEffect(() => {
+    if (!shell) return;
+    registerSessionActions({
+      selectChat: (id) => sessionActionsRef.current.selectChat(id),
+      createChat: () => sessionActionsRef.current.createChat(),
+      removeChat: (id) => sessionActionsRef.current.removeChat(id),
+      renameChat: (id, title) =>
+        sessionActionsRef.current.renameChat(id, title),
+    });
+    return () => registerSessionActions(null);
+  }, [shell, registerSessionActions]);
 
   async function sendText(textRaw: string) {
     const text = textRaw.trim();
@@ -665,27 +721,20 @@ export function PerfumerChat({
             : "border-y border-lab-line/70 bg-lab-panel/80 md:rounded-2xl md:border md:border-lab-line/70"
         }`}
       >
-        {sidebarOpen ? (
+        {/* Shell uses center ChatHistoryCanvas; page keeps side rail / drawer */}
+        {!shell && sidebarOpen ? (
           <button
             type="button"
             aria-label="Close chats"
-            className={`absolute inset-0 z-20 bg-lab-ink/35 backdrop-blur-[1px] ${
-              shell ? "" : "md:hidden"
-            }`}
+            className="absolute inset-0 z-20 bg-lab-ink/35 backdrop-blur-[1px] md:hidden"
             onClick={() => setSidebarOpen(false)}
           />
         ) : null}
 
-        {/* Chat list — drawer in shell; md+ rail on page */}
+        {!shell ? (
         <aside
-          className={`absolute inset-y-0 left-0 z-30 flex w-[min(16rem,86vw)] flex-col border-r border-lab-line bg-lab-panel shadow-[8px_0_24px_-16px_rgba(12,12,12,0.35)] transition-transform duration-300 ease-out ${
-            shell
-              ? sidebarOpen
-                ? "translate-x-0"
-                : "-translate-x-full"
-              : `md:static md:z-0 md:w-[15.5rem] md:translate-x-0 md:shadow-none ${
-                  sidebarOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"
-                }`
+          className={`absolute inset-y-0 left-0 z-30 flex w-[min(16rem,86vw)] flex-col border-r border-lab-line bg-lab-panel shadow-[8px_0_24px_-16px_rgba(12,12,12,0.35)] transition-transform duration-300 ease-out md:static md:z-0 md:w-[15.5rem] md:translate-x-0 md:shadow-none ${
+            sidebarOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"
           }`}
         >
           <div className="flex items-center justify-between gap-2 border-b border-lab-line/60 px-3 py-2">
@@ -788,7 +837,7 @@ export function PerfumerChat({
               );
             })}
           </ul>
-          {!shell && health ? (
+          {health ? (
             <p className="border-t border-lab-line px-3 py-2 font-mono text-[9px] leading-relaxed text-lab-muted">
               {String(health.ingredients || 0)} materials ·{" "}
               {String(health.formulas || 0)} formulas
@@ -796,6 +845,7 @@ export function PerfumerChat({
             </p>
           ) : null}
         </aside>
+        ) : null}
 
         <div className="flex min-w-0 flex-1 flex-col">
           {shell ? (
@@ -871,7 +921,14 @@ export function PerfumerChat({
 
               <button
                 type="button"
-                onClick={() => setSidebarOpen(true)}
+                onClick={() => {
+                  if (shell) {
+                    openChatHistory();
+                    track("builder_history_open", { dock: chatDock });
+                    return;
+                  }
+                  setSidebarOpen(true);
+                }}
                 className="flex h-7 w-7 items-center justify-center rounded-md text-lab-muted hover:bg-lab-wash hover:text-lab-ink"
                 title="Chat history"
                 aria-label="Chat history"

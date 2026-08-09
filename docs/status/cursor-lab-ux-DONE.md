@@ -14,18 +14,18 @@
 - Tutor|Chat and Plan|Agent equal `grid-cols-2` cells
 - Empty desk: calm Cursor-style shortcut list
 - Zero em dashes in Lab chat UI copy
-- Phone sheets unchanged
+- **History (◷) → center canvas** (Cursor-like): list titles/times; select loads thread + Plan; Esc / Back to desk; phone full sheet
+- Shell no longer uses cramped rail history drawer
 
 ## QA evidence
 
-- Browser smoke on `http://localhost:3002/lab` (md layout)
-  - Tutor|Chat cells equal (68×28)
-  - Double-click grip: right → bottom → right
-  - Desk↔bottom gap measured **0px**; desk radius `20px 20px 0 0` when bottom-docked
-  - No em dash in `document.body.innerText`
+- Browser smoke on `http://localhost:3000/lab` (1440×900)
+  - History canvas ~1180×654 in center
+  - Back to desk restores wood
+  - Tutor|Chat cells equal; dock snap works
 - Vitest: `BuildQueue.test.ts` + `labBridge.test.ts` — 13/13 pass
 - `tsc --noEmit` clean
 
 ## Deploy
 
-Pending Release Captain / this session after commit.
+Ship after this commit.

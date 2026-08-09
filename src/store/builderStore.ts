@@ -7,6 +7,8 @@ import type { DeskSnapshot } from "@/perfumer/deskSnapshot";
 
 export type BuilderTab = "tutor" | "chat";
 export type RightSlot = "tutor" | "chat";
+/** Center canvas: wood desk or Cursor-style chat history list. */
+export type CenterView = "desk" | "history";
 /** Cursor-style chat orchestration: Plan = deliberate propose; Agent = normal tools. */
 export type ChatAgentMode = "plan" | "agent";
 /** Desktop chat placement: right rail or under the desk canvas. */
@@ -180,6 +182,8 @@ interface BuilderState {
   bottomChatHeight: number;
   /** Phone chat sheet */
   chatSheetOpen: boolean;
+  /** Center: desk wood or chat history canvas */
+  centerView: CenterView;
   /** Cursor-like Plan | Agent chat mode (default Agent) */
   chatAgentMode: ChatAgentMode;
   mode: BuilderMode;
@@ -200,6 +204,9 @@ interface BuilderState {
   setChatDock: (dock: ChatDock) => void;
   setBottomChatHeight: (height: number) => void;
   setChatSheetOpen: (open: boolean) => void;
+  setCenterView: (view: CenterView) => void;
+  openChatHistory: () => void;
+  closeChatHistory: () => void;
   setChatAgentMode: (mode: ChatAgentMode) => void;
   hydratePanelPrefs: () => void;
   setPlanFromStructured: (
@@ -228,6 +235,7 @@ export const useBuilderStore = create<BuilderState>((set, get) => ({
   chatDock: "right",
   bottomChatHeight: BOTTOM_CHAT.default,
   chatSheetOpen: false,
+  centerView: "desk",
   chatAgentMode: "agent",
   mode: "idle",
   plan: null,
@@ -268,9 +276,28 @@ export const useBuilderStore = create<BuilderState>((set, get) => ({
     saveBottomChatHeight(bottomChatHeight);
   },
 
+  setCenterView: (centerView) => set({ centerView }),
+
+  openChatHistory: () =>
+    set({
+      centerView: "history",
+      tab: "chat",
+      rightSlot: "chat",
+      rightOpen: true,
+      chatSheetOpen: true,
+    }),
+
+  closeChatHistory: () => set({ centerView: "desk" }),
+
   setTab: (tab) => {
     if (tab === "tutor") {
-      set({ tab, rightSlot: "tutor", rightOpen: true, chatSheetOpen: false });
+      set({
+        tab,
+        rightSlot: "tutor",
+        rightOpen: true,
+        chatSheetOpen: false,
+        centerView: "desk",
+      });
     } else {
       set({ tab, rightSlot: "chat", rightOpen: true, chatSheetOpen: true });
     }
