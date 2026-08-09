@@ -14,12 +14,14 @@ export function ChatModeToggle({
   disabled?: boolean;
   size?: "sm" | "md";
 }) {
-  const pad = size === "sm" ? "px-2 py-1 text-[10px]" : "px-2.5 py-1 text-[11px]";
+  const pad =
+    size === "sm" ? "px-1 py-1 text-[10px]" : "px-1.5 py-1 text-[11px]";
+  const width = size === "sm" ? "w-[6.75rem]" : "w-[7.5rem]";
   return (
     <div
       role="group"
       aria-label="Chat mode"
-      className="inline-flex items-center rounded-md border border-lab-line/70 bg-lab-wash/80 p-0.5"
+      className={`grid ${width} grid-cols-2 rounded-md border border-lab-line/70 bg-lab-wash/80 p-0.5`}
     >
       {(
         [
@@ -35,7 +37,7 @@ export function ChatModeToggle({
             disabled={disabled}
             aria-pressed={active}
             onClick={() => onChange(opt.id)}
-            className={`${pad} rounded-[5px] font-semibold tracking-wide transition ${
+            className={`${pad} w-full rounded-[5px] text-center font-semibold tracking-wide transition ${
               active
                 ? "bg-lab-ink text-lab-foam shadow-sm"
                 : "text-lab-muted hover:text-lab-ink"

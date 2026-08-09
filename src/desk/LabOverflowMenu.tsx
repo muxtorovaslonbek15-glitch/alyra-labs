@@ -165,7 +165,11 @@ export function LabModeToggle({
 }) {
   return (
     <div className="flex items-center gap-1.5">
-      <div className="flex rounded-lg bg-white/10 p-0.5">
+      <div
+        role="group"
+        aria-label="Right panel mode"
+        className="grid w-[8.5rem] grid-cols-2 rounded-lg bg-white/10 p-0.5"
+      >
         {(
           [
             ["tutor", "Tutor"],
@@ -177,7 +181,7 @@ export function LabModeToggle({
             type="button"
             onClick={() => onChange(id)}
             aria-pressed={value === id && !scanActive}
-            className={`min-h-9 rounded-md px-2.5 py-1.5 text-[11px] font-semibold transition md:min-h-0 md:py-1 ${
+            className={`min-h-9 w-full rounded-md px-1 py-1.5 text-center text-[11px] font-semibold transition md:min-h-0 md:py-1 ${
               value === id && !scanActive
                 ? "bg-lab-foam text-lab-ink shadow-sm"
                 : "text-lab-foam/65 hover:text-lab-foam"
