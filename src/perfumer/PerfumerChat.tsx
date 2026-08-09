@@ -1,0 +1,816 @@
+"use client";
+
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { AlyraMark } from "@/components/brand/AlyraMark";
+import {
+  checkPerfumerHealth,
+  createServerChat,
+  deleteServerChat,
+  fetchServerChat,
+  getPerfumerBaseUrl,
+  listServerChats,
+  renameServerChat,
+  streamChat,
+} from "./api";
+import { ErrorBanner, WarningBanner } from "./ErrorBanner";
+import { FormulaCard } from "./FormulaCard";
+import {
+  loadLocalStore,
+  newLocalChat,
+  saveLocalStore,
+  uid,
+} from "./storage";
+import { ThinkingPanel } from "./ThinkingPanel";
+import type {
+  ChatMessage,
+  ChatSession,
+  PerfumerApiError,
+  ToolTraceItem,
+} from "./types";
+
+const SUGGESTIONS = [
+  {
+    label: "Solid woody rose",
+    prompt:
+      "Create a luxury niche solid perfume — deep woody rose with oud, sandalwood, and a touch of sweetness. Give top/heart/base, %, solid wax constraints, and cost if possible.",
+  },
+  {
+    label: "Fix harsh opening",
+    prompt:
+      "Improve this weak formula: bergamot 18%, lemon 12%, rose absolute 8%, iso e super 25%, hedione 15%, ambroxan 5%, musks 12%, ethanol qs. Harsh opening, poor longevity. Give precise percent mods.",
+  },
+  {
+    label: "Inspired-by woody rose",
+    prompt:
+      "Give an approximate inspired-by structure for a known woody-rose niche scent (disclaimer + useful accord, not a copy). Prefer materials we can source.",
+  },
+  {
+    label: "IFRA / substitute",
+    prompt:
+      "What is a good IFRA-aware substitute for lyral in a floral heart, and what current IFRA notes should I watch for rose oxide / methyl ionone?",
+  },
+];
+
+function formatChatTime(iso: string) {
+  try {
+    const d = new Date(iso);
+    const now = new Date();
+    const sameDay = d.toDateString() === now.toDateString();
+    if (sameDay) {
+      return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    }
+    return d.toLocaleDateString([], { month: "short", day: "numeric" });
+  } catch {
+    return "";
+  }
+}
+
+export function PerfumerChat() {
+  const [chats, setChats] = useState<ChatSession[]>([]);
+  const [activeId, setActiveId] = useState<string | null>(null);
+  const [input, setInput] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [banner, setBanner] = useState<PerfumerApiError | null>(null);
+  const [health, setHealth] = useState<Record<string, unknown> | null>(null);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [hydrated, setHydrated] = useState(false);
+  const [renamingId, setRenamingId] = useState<string | null>(null);
+  const [renameValue, setRenameValue] = useState("");
+  const [loadingChatId, setLoadingChatId] = useState<string | null>(null);
+  const bottomRef = useRef<HTMLDivElement>(null);
+  const persistTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const chatsRef = useRef<ChatSession[]>([]);
+  const activeIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    chatsRef.current = chats;
+  }, [chats]);
+  useEffect(() => {
+    activeIdRef.current = activeId;
+  }, [activeId]);
+
+  const active = useMemo(
+    () => chats.find((c) => c.id === activeId) || null,
+    [chats, activeId],
+  );
+
+  const persist = useCallback(
+    (nextChats: ChatSession[], nextActive: string | null) => {
+      if (persistTimer.current) clearTimeout(persistTimer.current);
+      persistTimer.current = setTimeout(() => {
+        saveLocalStore({ version: 1, activeId: nextActive, chats: nextChats });
+      }, 80);
+    },
+    [],
+  );
+
+  const updateChats = useCallback(
+    (updater: (prev: ChatSession[]) => ChatSession[]) => {
+      setChats((prev) => {
+        const next = updater(prev);
+        persist(next, activeIdRef.current);
+        return next;
+      });
+    },
+    [persist],
+  );
+
+  useEffect(() => {
+    const local = loadLocalStore();
+    let nextChats = local.chats;
+    let nextActive = local.activeId;
+    if (!nextChats.length) {
+      const fresh = newLocalChat();
+      nextChats = [fresh];
+      nextActive = fresh.id;
+    }
+    if (!nextActive || !nextChats.some((c) => c.id === nextActive)) {
+      nextActive = nextChats[0].id;
+    }
+    setChats(nextChats);
+    setActiveId(nextActive);
+    setHydrated(true);
+    saveLocalStore({ version: 1, activeId: nextActive, chats: nextChats });
+
+    void checkPerfumerHealth().then((h) => {
+      if (!h.ok && h.error) setBanner(h.error);
+      else setHealth(h.data || null);
+    });
+
+    void listServerChats().then(async (res) => {
+      if (!res.ok) return;
+      setChats((prev) => {
+        const byServer = new Map(
+          prev.filter((c) => c.serverId).map((c) => [c.serverId!, c]),
+        );
+        const merged = [...prev];
+        for (const s of res.chats) {
+          if (byServer.has(s.id) || merged.some((c) => c.id === s.id)) continue;
+          merged.push({
+            id: s.id,
+            serverId: s.id,
+            title: s.title,
+            createdAt: s.createdAt,
+            updatedAt: s.updatedAt,
+            messages: [],
+          });
+        }
+        merged.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+        saveLocalStore({
+          version: 1,
+          activeId: nextActive,
+          chats: merged,
+        });
+        return merged;
+      });
+    });
+  }, []);
+
+  useEffect(() => {
+    if (hydrated) persist(chats, activeId);
+  }, [chats, activeId, hydrated, persist]);
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [active?.messages, busy, active?.id]);
+
+  async function ensureServerId(chat: ChatSession): Promise<string | null> {
+    if (chat.serverId) return chat.serverId;
+    const created = await createServerChat(
+      chat.title !== "New chat" ? chat.title : undefined,
+    );
+    if (!created.ok) return null;
+    const serverId = created.chat.id;
+    updateChats((prev) =>
+      prev.map((c) => (c.id === chat.id ? { ...c, serverId } : c)),
+    );
+    return serverId;
+  }
+
+  async function selectChat(id: string) {
+    setActiveId(id);
+    setSidebarOpen(false);
+    setBanner(null);
+    const chat = chatsRef.current.find((c) => c.id === id);
+    if (!chat) return;
+
+    // Always hydrate full history from server when we only have a stub
+    // or when local is empty but a server id exists.
+    if (chat.serverId && chat.messages.length === 0) {
+      setLoadingChatId(id);
+      try {
+        const remote = await fetchServerChat(chat.serverId);
+        if (remote.ok && remote.chat.messages.length) {
+          updateChats((prev) =>
+            prev.map((c) =>
+              c.id === id
+                ? {
+                    ...c,
+                    title: remote.chat.title || c.title,
+                    messages: remote.chat.messages,
+                    updatedAt: remote.chat.updatedAt,
+                  }
+                : c,
+            ),
+          );
+        }
+      } finally {
+        setLoadingChatId(null);
+      }
+    }
+  }
+
+  function createChat() {
+    const fresh = newLocalChat();
+    const next = [fresh, ...chatsRef.current];
+    setChats(next);
+    setActiveId(fresh.id);
+    persist(next, fresh.id);
+    setSidebarOpen(false);
+    setInput("");
+    setBanner(null);
+  }
+
+  async function removeChat(id: string) {
+    const target = chatsRef.current.find((c) => c.id === id);
+    if (target?.serverId) void deleteServerChat(target.serverId);
+    const next = chatsRef.current.filter((c) => c.id !== id);
+    let nextActive = activeIdRef.current;
+    if (activeIdRef.current === id) {
+      nextActive = next[0]?.id || null;
+    }
+    if (!next.length) {
+      const fresh = newLocalChat();
+      next.push(fresh);
+      nextActive = fresh.id;
+    }
+    setChats(next);
+    setActiveId(nextActive);
+    persist(next, nextActive);
+  }
+
+  function startRename(chat: ChatSession) {
+    setRenamingId(chat.id);
+    setRenameValue(chat.title);
+  }
+
+  function commitRename() {
+    if (!renamingId) return;
+    const title = renameValue.trim().slice(0, 120) || "New chat";
+    const target = chatsRef.current.find((c) => c.id === renamingId);
+    updateChats((prev) =>
+      prev.map((c) =>
+        c.id === renamingId
+          ? { ...c, title, updatedAt: new Date().toISOString() }
+          : c,
+      ),
+    );
+    if (target?.serverId) void renameServerChat(target.serverId, title);
+    setRenamingId(null);
+  }
+
+  async function sendText(textRaw: string) {
+    const text = textRaw.trim();
+    const current = chatsRef.current.find((c) => c.id === activeIdRef.current);
+    if (!text || busy || !current) return;
+
+    setBanner(null);
+    setBusy(true);
+    setInput("");
+
+    const clientMessageId = uid("cm");
+    const userMsg: ChatMessage = {
+      id: uid("msg"),
+      role: "user",
+      content: text,
+      clientMessageId,
+      createdAt: new Date().toISOString(),
+    };
+    const assistantId = uid("msg");
+    const now = new Date().toISOString();
+    const chatLocalId = current.id;
+
+    updateChats((prev) =>
+      prev.map((c) => {
+        if (c.id !== chatLocalId) return c;
+        const title =
+          c.title === "New chat"
+            ? text.slice(0, 48) + (text.length > 48 ? "…" : "")
+            : c.title;
+        return {
+          ...c,
+          title,
+          updatedAt: now,
+          messages: [
+            ...c.messages,
+            userMsg,
+            {
+              id: assistantId,
+              role: "assistant",
+              content: "",
+              status: "streaming",
+              thinkingLabel: "Listening to the brief…",
+              toolTrace: [],
+            },
+          ],
+        };
+      }),
+    );
+
+    const patchAssistant = (
+      patch: Partial<ChatMessage> | ((m: ChatMessage) => ChatMessage),
+    ) => {
+      updateChats((prev) =>
+        prev.map((c) => {
+          if (c.id !== chatLocalId) return c;
+          return {
+            ...c,
+            messages: c.messages.map((m) => {
+              if (m.id !== assistantId) return m;
+              return typeof patch === "function" ? patch(m) : { ...m, ...patch };
+            }),
+          };
+        }),
+      );
+    };
+
+    const serverId = await ensureServerId(current);
+    const historyForApi = current.messages
+      .filter((m) => m.role === "user" || m.role === "assistant")
+      .filter((m) => m.content)
+      .map((m) => ({ role: m.role, content: m.content }));
+
+    await streamChat(
+      {
+        chatId: serverId || undefined,
+        message: text,
+        clientMessageId,
+        messages: serverId
+          ? undefined
+          : [...historyForApi, { role: "user", content: text }],
+      },
+      {
+        onMeta: ({ chatId, toolTrace }) => {
+          updateChats((prev) =>
+            prev.map((c) =>
+              c.id === chatLocalId
+                ? {
+                    ...c,
+                    serverId: chatId || c.serverId,
+                  }
+                : c,
+            ),
+          );
+          if (toolTrace?.length) {
+            patchAssistant((m) => ({
+              ...m,
+              toolTrace: toolTrace.map((t) => ({
+                tool: t.tool,
+                ok: t.ok,
+              })),
+            }));
+          }
+        },
+        onStatus: (label) => {
+          patchAssistant({ thinkingLabel: label });
+        },
+        onTool: (tool, ok) => {
+          patchAssistant((m) => {
+            const next: ToolTraceItem[] = [
+              ...(m.toolTrace || []),
+              { tool, ok },
+            ];
+            // dedupe consecutive identical
+            const deduped = next.filter(
+              (t, i, arr) => i === 0 || t.tool !== arr[i - 1].tool,
+            );
+            return { ...m, toolTrace: deduped };
+          });
+        },
+        onToken: (chunk) => {
+          patchAssistant((m) => ({
+            ...m,
+            content: (m.content || "") + chunk,
+            thinkingLabel: undefined,
+          }));
+        },
+        onStructured: (structured, sections) => {
+          patchAssistant({
+            structured,
+            sections: sections || undefined,
+          });
+        },
+        onDone: (reply, sections, structured, chatId) => {
+          updateChats((prev) =>
+            prev.map((c) => {
+              if (c.id !== chatLocalId) return c;
+              return {
+                ...c,
+                serverId: chatId || c.serverId,
+                updatedAt: new Date().toISOString(),
+                messages: c.messages.map((m) =>
+                  m.id === assistantId
+                    ? {
+                        ...m,
+                        content: reply || m.content,
+                        sections,
+                        structured: structured || m.structured,
+                        status: "ok" as const,
+                        thinkingLabel: undefined,
+                      }
+                    : m,
+                ),
+              };
+            }),
+          );
+          setBusy(false);
+        },
+        onError: (error, chatId) => {
+          setBanner(error);
+          updateChats((prev) =>
+            prev.map((c) => {
+              if (c.id !== chatLocalId) return c;
+              return {
+                ...c,
+                serverId: chatId || c.serverId,
+                messages: c.messages.map((m) =>
+                  m.id === assistantId
+                    ? {
+                        ...m,
+                        role: "error" as const,
+                        content: error.message,
+                        error,
+                        status: "error" as const,
+                        thinkingLabel: undefined,
+                      }
+                    : m,
+                ),
+              };
+            }),
+          );
+          setBusy(false);
+        },
+      },
+    );
+  }
+
+  async function onSend() {
+    await sendText(input);
+  }
+
+  if (!hydrated) {
+    return (
+      <div className="flex min-h-[50vh] items-center justify-center text-sm text-lab-muted">
+        Loading atelier…
+      </div>
+    );
+  }
+
+  const messages = active?.messages || [];
+  const empty = messages.length === 0 && loadingChatId !== active?.id;
+
+  return (
+    <div className="flex min-h-0 flex-1 flex-col gap-3">
+      {banner ? (
+        <ErrorBanner error={banner} onDismiss={() => setBanner(null)} />
+      ) : null}
+
+      {health && !health.groqConfigured ? (
+        <ErrorBanner
+          error={{
+            code: "missing_env",
+            title: "Groq key missing",
+            message:
+              "The server has no GROQ_API_KEY — chat will fail until it is set.",
+            actionable: "Add GROQ_API_KEY to ZPL_BACKEND/.env and restart.",
+          }}
+        />
+      ) : null}
+
+      <div className="relative flex min-h-0 flex-1 overflow-hidden rounded-2xl border border-lab-line bg-lab-panel/90 shadow-[0_12px_40px_-24px_rgba(12,12,12,0.35)]">
+        {sidebarOpen ? (
+          <button
+            type="button"
+            aria-label="Close chats"
+            className="absolute inset-0 z-20 bg-lab-ink/30 backdrop-blur-[1px] transition-opacity md:hidden"
+            onClick={() => setSidebarOpen(false)}
+          />
+        ) : null}
+
+        <aside
+          className={`absolute inset-y-0 left-0 z-30 flex w-[16rem] flex-col border-r border-lab-line bg-lab-wash/98 transition-transform duration-300 ease-out md:static md:z-0 md:translate-x-0 ${
+            sidebarOpen ? "translate-x-0" : "-translate-x-full"
+          }`}
+        >
+          <div className="flex items-center justify-between gap-2 border-b border-lab-line px-3 py-2.5">
+            <p className="font-display text-sm tracking-wide text-lab-ink">
+              Chats
+            </p>
+            <button
+              type="button"
+              onClick={createChat}
+              className="min-h-9 rounded-md bg-lab-ink px-2.5 py-1.5 text-[11px] font-semibold text-lab-foam hover:bg-black"
+            >
+              New
+            </button>
+          </div>
+          <ul className="scroll-thin flex-1 space-y-0.5 overflow-y-auto p-2">
+            {chats.map((c) => {
+              const selected = c.id === activeId;
+              const preview =
+                c.messages.find((m) => m.role === "user")?.content ||
+                (c.messages.length ? `${c.messages.length} messages` : "Empty");
+              return (
+                <li key={c.id} className="group relative">
+                  {renamingId === c.id ? (
+                    <form
+                      className="px-1"
+                      onSubmit={(e) => {
+                        e.preventDefault();
+                        commitRename();
+                      }}
+                    >
+                      <input
+                        autoFocus
+                        value={renameValue}
+                        onChange={(e) => setRenameValue(e.target.value)}
+                        onBlur={commitRename}
+                        className="w-full rounded-md border border-lab-line bg-lab-panel px-2 py-1.5 text-xs text-lab-ink"
+                      />
+                    </form>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => void selectChat(c.id)}
+                      onDoubleClick={() => startRename(c)}
+                      className={`flex w-full flex-col gap-0.5 rounded-lg px-2.5 py-2 text-left transition-colors ${
+                        selected
+                          ? "bg-lab-ink text-lab-foam"
+                          : "text-lab-ink hover:bg-white/70"
+                      }`}
+                    >
+                      <span className="flex w-full items-baseline justify-between gap-2">
+                        <span className="line-clamp-1 flex-1 text-xs font-medium leading-snug">
+                          {c.title}
+                        </span>
+                        <span
+                          className={`shrink-0 font-mono text-[9px] ${
+                            selected ? "text-lab-foam/55" : "text-lab-muted"
+                          }`}
+                        >
+                          {formatChatTime(c.updatedAt)}
+                        </span>
+                      </span>
+                      <span
+                        className={`line-clamp-1 text-[10px] leading-snug ${
+                          selected ? "text-lab-foam/60" : "text-lab-muted"
+                        }`}
+                      >
+                        {preview}
+                      </span>
+                    </button>
+                  )}
+                  {renamingId !== c.id ? (
+                    <div className="absolute right-1 top-1 hidden gap-0.5 group-hover:flex">
+                      <button
+                        type="button"
+                        title="Rename"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          startRename(c);
+                        }}
+                        className={`rounded px-1.5 py-0.5 text-[10px] ${
+                          selected
+                            ? "bg-white/15 text-lab-foam"
+                            : "bg-lab-panel text-lab-muted"
+                        }`}
+                      >
+                        ✎
+                      </button>
+                      <button
+                        type="button"
+                        title="Delete"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          void removeChat(c.id);
+                        }}
+                        className={`rounded px-1.5 py-0.5 text-[10px] ${
+                          selected
+                            ? "bg-white/15 text-lab-foam"
+                            : "bg-lab-panel text-lab-muted"
+                        }`}
+                      >
+                        ×
+                      </button>
+                    </div>
+                  ) : null}
+                </li>
+              );
+            })}
+          </ul>
+          {health ? (
+            <p className="border-t border-lab-line px-3 py-2 font-mono text-[9px] leading-relaxed text-lab-muted">
+              {String(health.ingredients || 0)} materials ·{" "}
+              {String(health.formulas || 0)} formulas
+              {health.searchConfigured ? " · research on" : ""}
+            </p>
+          ) : null}
+        </aside>
+
+        <div className="flex min-w-0 flex-1 flex-col">
+          <div className="flex items-center gap-2 border-b border-lab-line px-3 py-2.5 md:px-4">
+            <button
+              type="button"
+              className="min-h-9 rounded-md border border-lab-line px-2.5 py-1.5 text-xs text-lab-ink md:hidden"
+              onClick={() => setSidebarOpen(true)}
+            >
+              Chats
+            </button>
+            <h2 className="min-w-0 flex-1 truncate font-display text-base text-lab-ink md:text-lg">
+              {active?.title || "Master Perfumer"}
+            </h2>
+            <span className="hidden font-mono text-[10px] text-lab-muted sm:inline">
+              {getPerfumerBaseUrl().replace(/^https?:\/\//, "")}
+            </span>
+          </div>
+
+          <div className="scroll-thin flex-1 space-y-4 overflow-y-auto px-3 py-4 md:px-5">
+            {loadingChatId === active?.id ? (
+              <p className="py-8 text-center text-sm text-lab-muted">
+                Loading conversation…
+              </p>
+            ) : empty ? (
+              <EmptyState
+                onSuggestion={(s) => {
+                  void sendText(s);
+                }}
+              />
+            ) : (
+              messages.map((m) => <MessageBubble key={m.id} message={m} />)
+            )}
+            <div ref={bottomRef} />
+          </div>
+
+          <div className="border-t border-lab-line bg-lab-wash/50 px-3 py-3 md:px-4">
+            <div className="flex gap-2">
+              <textarea
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    void onSend();
+                  }
+                }}
+                rows={2}
+                placeholder="Brief me — goal, type, vibe, constraints…"
+                className="min-h-[44px] flex-1 resize-none rounded-lg border border-lab-line bg-lab-panel px-3 py-2.5 text-sm text-lab-ink placeholder:text-lab-muted/70 focus:outline-none focus:ring-1 focus:ring-lab-ink/30"
+                disabled={busy}
+              />
+              <button
+                type="button"
+                onClick={() => void onSend()}
+                disabled={busy || !input.trim()}
+                className="h-11 shrink-0 self-end rounded-lg bg-lab-ink px-4 text-sm font-semibold text-lab-foam transition-opacity hover:bg-black disabled:opacity-50"
+              >
+                Send
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function EmptyState({ onSuggestion }: { onSuggestion: (s: string) => void }) {
+  return (
+    <div className="mx-auto flex max-w-lg flex-col items-center px-2 py-8 text-center md:py-14">
+      <AlyraMark size="lg" href={null} className="justify-center" />
+      <p className="mt-6 font-display text-2xl leading-tight text-lab-ink md:text-3xl">
+        Hey — welcome to Alyra Labs
+      </p>
+      <p className="mt-3 max-w-md text-sm leading-relaxed text-lab-muted">
+        I&apos;m your Master Perfumer. Brief me like a client — solid, oil, or
+        EDP — and we&apos;ll compose with materials, IFRA caution, and cost in
+        view.
+      </p>
+      <ul className="mt-8 grid w-full gap-2 sm:grid-cols-2">
+        {SUGGESTIONS.map((s) => (
+          <li key={s.label}>
+            <button
+              type="button"
+              onClick={() => onSuggestion(s.prompt)}
+              className="w-full rounded-xl border border-lab-line bg-white/35 px-3 py-3 text-left transition-all duration-300 hover:border-lab-ink/25 hover:bg-white/70 hover:shadow-sm"
+            >
+              <span className="block text-sm font-medium text-lab-ink">
+                {s.label}
+              </span>
+              <span className="mt-1 line-clamp-2 block text-[11px] leading-snug text-lab-muted">
+                {s.prompt}
+              </span>
+            </button>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function MessageBubble({ message }: { message: ChatMessage }) {
+  if (message.role === "error") {
+    return message.error ? <ErrorBanner error={message.error} /> : null;
+  }
+
+  const isUser = message.role === "user";
+  const streamingEmpty =
+    !isUser &&
+    message.status === "streaming" &&
+    !(message.content && message.content.length);
+
+  return (
+    <div
+      className={`flex ${isUser ? "justify-end" : "justify-start"}`}
+    >
+      <div
+        className={`max-w-[95%] space-y-2 md:max-w-[88%] ${
+          isUser
+            ? "rounded-2xl rounded-br-md bg-lab-ink px-3.5 py-2.5 text-lab-foam"
+            : "w-full"
+        }`}
+      >
+        {isUser ? (
+          <p className="whitespace-pre-wrap text-sm leading-relaxed">
+            {message.content}
+          </p>
+        ) : (
+          <>
+            {message.warnings?.map((w) => (
+              <WarningBanner
+                key={w.code + w.message}
+                title={w.title}
+                message={w.message}
+              />
+            ))}
+            {(message.structured?.ifraFlags || []).some(
+              (f) => f.severity === "blocked" || f.severity === "warning",
+            ) ? (
+              <WarningBanner
+                title="IFRA caution"
+                message={(message.structured?.ifraFlags || [])
+                  .map((f) => `${f.name}: ${f.ifraNotes || f.severity}`)
+                  .join(" · ")}
+              />
+            ) : null}
+
+            {streamingEmpty ? (
+              <ThinkingPanel
+                label={message.thinkingLabel}
+                tools={message.toolTrace}
+              />
+            ) : null}
+
+            {message.content ? (
+              <div className="rounded-2xl rounded-bl-md border border-lab-line bg-white/55 px-3.5 py-2.5">
+                {message.status === "streaming" && message.thinkingLabel ? (
+                  <p className="mb-2 font-display text-xs text-lab-muted">
+                    {message.thinkingLabel}
+                  </p>
+                ) : null}
+                <p className="whitespace-pre-wrap text-sm leading-relaxed text-lab-ink">
+                  {message.content}
+                  {message.status === "streaming" ? (
+                    <span className="ml-0.5 inline-block h-3 w-[2px] animate-pulse bg-lab-ink/70 align-middle" />
+                  ) : null}
+                </p>
+              </div>
+            ) : null}
+
+            {message.toolTrace?.length && message.status === "ok" ? (
+              <details className="rounded-lg border border-lab-line/70 bg-lab-wash/40 px-3 py-2">
+                <summary className="cursor-pointer text-[10px] font-semibold uppercase tracking-[0.14em] text-lab-muted">
+                  Research & tools
+                </summary>
+                <ul className="mt-2 space-y-1">
+                  {message.toolTrace.map((t, i) => (
+                    <li
+                      key={`${t.tool}-${i}`}
+                      className="font-mono text-[11px] text-lab-ink/80"
+                    >
+                      {t.ok === false ? "✗" : "·"} {t.tool.replace(/_/g, " ")}
+                    </li>
+                  ))}
+                </ul>
+              </details>
+            ) : null}
+
+            <FormulaCard
+              structured={message.structured}
+              sections={message.sections}
+            />
+          </>
+        )}
+      </div>
+    </div>
+  );
+}

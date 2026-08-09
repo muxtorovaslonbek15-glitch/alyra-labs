@@ -40,6 +40,7 @@ Classroom chemistry is usually worksheets and static diagrams. Fragrance design 
 | Perfume mode | Note families, IFRA-aware recipes, invention shelf |
 | Guided goals | Step-by-step experiments for learning paths |
 | AI tutor | Signed-in explain API (Groq) grounded on desk state |
+| Master Perfumer | `/perfumer` chatbot — formulas, solids, cost, RAG, web search via ZPL backend |
 | Teacher CMS | Class codes, progress, soft-launch classroom tools |
 
 <p align="center">
@@ -69,8 +70,20 @@ Open [http://localhost:3000](http://localhost:3000). Marketing site is `/`; the 
 | `GROQ_API_KEY` | `/api/explain`, `/api/ocr` |
 | `FIREBASE_SERVICE_ACCOUNT_JSON` **or** `FIREBASE_ADMIN_*` | Verify ID tokens; write progress |
 | `SENTRY_DSN` / `NEXT_PUBLIC_SENTRY_DSN` | Error tracking (optional) |
+| `NEXT_PUBLIC_PERFUMER_API_URL` | Master Perfumer UI → ZPL `/api/perfumer` (default `http://localhost:3001/api/perfumer`) |
 
 Without Admin credentials, the desk UI still runs; AI and progress sync APIs return 503.
+
+### Master Perfumer (optional)
+
+Backend lives in `ZPL_BACKEND` (`alyra-perfumer/`). Start it, then open `/perfumer`:
+
+```bash
+cd /Users/neil/Desktop/ZPL/ZPL_BACKEND
+npm run perfumer:seed   # once
+PORT=3001 npm run dev
+# requires GROQ_API_KEY; optional TAVILY_API_KEY or SERPER_API_KEY for web search
+```
 
 ### Scripts
 
