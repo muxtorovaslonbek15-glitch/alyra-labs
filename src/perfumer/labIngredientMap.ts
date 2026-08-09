@@ -205,6 +205,66 @@ export function mapIngredientToLab(perfumerIngredientId: string): {
   return { labChemicalId: null, mapStatus: "unmapped" };
 }
 
+const MAP_RANK: Record<MapStatus, number> = {
+  exact: 0,
+  alias: 1,
+  proxy: 2,
+  unmapped: 3,
+};
+
+/** Best Perfumer id for a Lab chemical (honest reverse; never invents Lab ids). */
+const LAB_TO_PERFUMER: Record<
+  string,
+  { perfumerIngredientId: string; mapStatus: Exclude<MapStatus, "unmapped"> }
+> = (() => {
+  const out: Record<
+    string,
+    { perfumerIngredientId: string; mapStatus: Exclude<MapStatus, "unmapped"> }
+  > = {};
+  for (const [perfId, mapped] of Object.entries(ALIAS_MAP)) {
+    if (!LAB_CHEMICAL_IDS.has(mapped.labChemicalId)) continue;
+    const prev = out[mapped.labChemicalId];
+    const identityBoost = perfId === mapped.labChemicalId ? -0.5 : 0;
+    const prevRank = prev
+      ? MAP_RANK[prev.mapStatus] +
+        (prev.perfumerIngredientId === mapped.labChemicalId ? -0.5 : 0)
+      : 99;
+    const nextRank = MAP_RANK[mapped.mapStatus] + identityBoost;
+    if (!prev || nextRank < prevRank) {
+      out[mapped.labChemicalId] = {
+        perfumerIngredientId: perfId,
+        mapStatus: mapped.mapStatus,
+      };
+    }
+  }
+  for (const labId of LAB_CHEMICAL_IDS) {
+    if (!out[labId]) {
+      out[labId] = { perfumerIngredientId: labId, mapStatus: "exact" };
+    }
+  }
+  // Prefer ethanol over raw inventory id for the carrier.
+  out.c2h5oh = { perfumerIngredientId: "ethanol", mapStatus: "alias" };
+  return out;
+})();
+
+/**
+ * Map Lab Chemical.id → Perfumer ingredient id for Send to chat.
+ * Only returns ids for known Lab inventory; never invents chemicals.
+ */
+export function mapLabToPerfumer(labChemicalId: string): {
+  perfumerIngredientId: string;
+  mapStatus: MapStatus;
+} {
+  const id = normalizeIngredientId(labChemicalId);
+  if (!id) return { perfumerIngredientId: "", mapStatus: "unmapped" };
+  if (!LAB_CHEMICAL_IDS.has(id)) {
+    return { perfumerIngredientId: id, mapStatus: "unmapped" };
+  }
+  const mapped = LAB_TO_PERFUMER[id];
+  if (mapped) return { ...mapped };
+  return { perfumerIngredientId: id, mapStatus: "exact" };
+}
+
 export const DEFAULT_TEACHING_BATCH_ML = 20;
 
 export function amountMlFromPercent(

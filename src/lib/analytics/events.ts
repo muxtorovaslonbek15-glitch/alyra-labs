@@ -24,7 +24,8 @@ export type AnalyticsEventName =
   | "formula_published"
   | "study_created"
   | "study_rated"
-  | "perfumer_lab_bridge";
+  | "perfumer_lab_bridge"
+  | "perfumer_chat_bridge";
 
 export const ANALYTICS_EVENT_NAMES = new Set<string>([
   "page_view",
@@ -53,4 +54,5 @@ export const ANALYTICS_EVENT_NAMES = new Set<string>([
   "study_created",
   "study_rated",
   "perfumer_lab_bridge",
+  "perfumer_chat_bridge",
 ]);

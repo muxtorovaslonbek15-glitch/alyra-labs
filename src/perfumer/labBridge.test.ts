@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { mapIngredientToLab } from "@/perfumer/labIngredientMap";
+import { mapIngredientToLab, mapLabToPerfumer } from "@/perfumer/labIngredientMap";
 import {
+  buildChatBridgeFromDesk,
   buildLabBridgeFromStructured,
   deskContentsFromBridge,
 } from "@/perfumer/labBridge";
@@ -26,6 +27,14 @@ describe("labIngredientMap", () => {
     expect(mapIngredientToLab("made-up-aroma-999").mapStatus).toBe("unmapped");
     expect(mapIngredientToLab("made-up-aroma-999").labChemicalId).toBeNull();
   });
+
+  it("reverse maps lab chemicals without inventing", () => {
+    expect(mapLabToPerfumer("c2h5oh").perfumerIngredientId).toBe("ethanol");
+    expect(mapLabToPerfumer("vanilla-extract").perfumerIngredientId).toBe(
+      "vanilla-extract",
+    );
+    expect(mapLabToPerfumer("not-a-real-chem").mapStatus).toBe("unmapped");
+  });
 });
 
 describe("labBridge", () => {
@@ -49,11 +58,57 @@ describe("labBridge", () => {
     const bridge = buildLabBridgeFromStructured(structured);
     expect(bridge).not.toBeNull();
     expect(bridge!.lines.some((l) => l.labChemicalId === "c2h5oh")).toBe(true);
+    expect(bridge!.vessel.autoMix).toBe(true);
     expect(bridge!.mappingReport.unmappedIds).toContain(
       "unknown-luxury-oud-fraction",
     );
     const contents = deskContentsFromBridge(bridge!);
     expect(contents.length).toBeGreaterThanOrEqual(1);
     expect(contents.every((c) => c.chemicalId && c.amountMl > 0)).toBe(true);
+  });
+
+  it("round-trips desk contents back to FormulaCard-ready payload", () => {
+    const outbound = buildLabBridgeFromStructured(structured)!;
+    const desk = deskContentsFromBridge(outbound);
+    // Simulate a pour adjust: boost rose (rose-oil)
+    const adjusted = desk.map((c) =>
+      c.chemicalId === "rose-oil"
+        ? { ...c, amountMl: c.amountMl + 2 }
+        : c,
+    );
+    const inbound = buildChatBridgeFromDesk({
+      contents: adjusted.map((c) => ({
+        chemicalId: c.chemicalId,
+        amountMl: c.amountMl,
+      })),
+      sessionBridge: outbound,
+      title: outbound.title,
+    });
+    expect("error" in inbound).toBe(false);
+    if ("error" in inbound) return;
+    expect(inbound.structured.formula?.formula?.length).toBeGreaterThan(0);
+    expect(inbound.structured.lab_bridge?.lines.some((l) => l.labChemicalId)).toBe(
+      true,
+    );
+    // Preserve Hedione id even though Lab shows jasmine-oil proxy
+    const hedione = inbound.bridge.lines.find(
+      (l) => l.perfumerIngredientId === "hedione",
+    );
+    expect(hedione?.labChemicalId).toBe("jasmine-oil");
+    // Open in Lab still works on returned formula
+    const again = deskContentsFromBridge(inbound.bridge);
+    expect(again.some((c) => c.chemicalId === "jasmine-oil")).toBe(true);
+    expect(again.some((c) => c.chemicalId === "rose-oil")).toBe(true);
+  });
+
+  it("refuses empty or unknown-only desks", () => {
+    expect(
+      buildChatBridgeFromDesk({ contents: [] }),
+    ).toMatchObject({ error: expect.stringContaining("Nothing") });
+    expect(
+      buildChatBridgeFromDesk({
+        contents: [{ chemicalId: "made-up-999", amountMl: 2 }],
+      }),
+    ).toMatchObject({ error: expect.stringContaining("not in the fragrance") });
   });
 });

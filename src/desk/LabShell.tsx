@@ -46,9 +46,16 @@ import { InventionShelf } from "@/invention/InventionShelf";
 import { InventionRemixWatcher } from "@/invention/InventionRemixWatcher";
 import { useInventionStore } from "@/store/inventionStore";
 import {
+  buildChatBridgeFromDesk,
   consumeLabBridge,
   deskContentsFromBridge,
+  peekLabSession,
+  storeChatBridge,
+  storeLabSession,
+  clearLabSession,
 } from "@/perfumer/labBridge";
+import { getVesselContents } from "@/desk/vesselContents";
+import { LAB_CHEMICAL_IDS } from "@/perfumer/labIngredientMap";
 import type { User } from "firebase/auth";
 
 const ScanWorkbench = dynamic(
@@ -137,11 +144,12 @@ export function LabShell() {
       });
       return;
     }
+    // Always autoMix so scent notes / Play more dossier resolve after Open in Lab.
     const vesselId = loadFormula({
       equipmentId: bridge.vessel?.equipmentId || "beaker",
       contents,
       contentIds: contents.map((c) => c.chemicalId),
-      autoMix: Boolean(bridge.vessel?.autoMix),
+      autoMix: true,
       heatAttached: Boolean(bridge.vessel?.heatAttached),
     });
     if (!vesselId) {
@@ -151,6 +159,7 @@ export function LabShell() {
       });
       return;
     }
+    storeLabSession(bridge);
     const mapped = bridge.mappingReport?.mappedCount ?? contents.length;
     const unmapped = bridge.mappingReport?.unmappedCount ?? 0;
     const total = mapped + unmapped;
@@ -176,6 +185,56 @@ export function LabShell() {
       });
     }
   }, [hydrated, loadFormula, router]);
+
+  const canSendToPerfumer = (() => {
+    const vessel =
+      vessels.find((v) => v.instanceId === activeVesselId) || vessels[0];
+    if (!vessel) return false;
+    const contents = getVesselContents(vessel);
+    return contents.some(
+      (c) => LAB_CHEMICAL_IDS.has(c.chemicalId) && c.amountMl > 0,
+    );
+  })();
+
+  function sendDeskToPerfumer() {
+    const vessel =
+      vessels.find((v) => v.instanceId === activeVesselId) || vessels[0];
+    if (!vessel) {
+      showToast({
+        title: "Empty desk",
+        detail: "Pour materials into a beaker first.",
+      });
+      return;
+    }
+    const contents = getVesselContents(vessel).map((c) => ({
+      chemicalId: c.chemicalId,
+      amountMl: c.amountMl,
+      name: getChemical(c.chemicalId)?.name,
+    }));
+    const session = peekLabSession();
+    const built = buildChatBridgeFromDesk({
+      contents,
+      equipmentId:
+        vessel.equipmentId === "flask" || vessel.equipmentId === "test-tube"
+          ? vessel.equipmentId
+          : "beaker",
+      heatAttached: vessel.heatAttached,
+      sessionBridge: session?.bridge || null,
+      title: session?.bridge?.title,
+    });
+    if ("error" in built) {
+      showToast({ title: "Cannot send to chat", detail: built.error });
+      return;
+    }
+    storeChatBridge(built);
+    clearLabSession();
+    track("perfumer_chat_bridge", {
+      mapped: built.bridge.mappingReport.mappedCount,
+      unmapped: built.bridge.mappingReport.unmappedCount,
+      title: built.title,
+    });
+    router.push("/perfumer?fromLab=1");
+  }
 
   useEffect(() => {
     if (process.env.NODE_ENV !== "development") return;
@@ -588,7 +647,21 @@ export function LabShell() {
                   setAtelierOpen(true);
                 }}
               />
-              <div className="pointer-events-none absolute bottom-[calc(4.5rem+env(safe-area-inset-bottom,0px))] left-3 z-30 flex justify-start md:bottom-3 md:left-3 md:right-auto">
+              <div className="pointer-events-none absolute bottom-[calc(4.5rem+env(safe-area-inset-bottom,0px))] left-3 right-3 z-30 flex flex-col items-start gap-2 md:bottom-3 md:left-3 md:right-auto">
+                {canSendToPerfumer ? (
+                  <div className="pointer-events-auto w-[min(100%,17rem)] max-w-sm">
+                    <button
+                      type="button"
+                      onClick={sendDeskToPerfumer}
+                      className="min-h-11 w-full rounded-lg bg-lab-ink px-4 py-2.5 text-sm font-semibold text-lab-foam shadow-lg transition hover:bg-lab-ink/90 md:min-h-10"
+                    >
+                      Continue in Perfumer
+                    </button>
+                    <p className="mt-1 px-0.5 text-[10px] leading-snug text-white/70 drop-shadow-sm">
+                      Send this desk blend back to chat
+                    </p>
+                  </div>
+                ) : null}
                 <div className="pointer-events-auto w-[min(100%,17rem)] max-w-sm">
                   <GoalGuidePanel />
                 </div>

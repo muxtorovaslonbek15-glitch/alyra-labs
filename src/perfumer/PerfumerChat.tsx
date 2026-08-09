@@ -19,6 +19,7 @@ import {
   saveLocalStore,
   uid,
 } from "./storage";
+import { consumeChatBridge } from "./labBridge";
 import { Prose } from "./Prose";
 import { ThinkingPanel } from "./ThinkingPanel";
 import type {
@@ -104,6 +105,36 @@ export function PerfumerChat() {
     if (!nextActive || !nextChats.some((c) => c.id === nextActive)) {
       nextActive = nextChats[0].id;
     }
+
+    // Lab → Chat: ingest desk blend after Continue in Perfumer
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      const fromLab =
+        params.get("fromLab") === "1" || params.get("bridge") === "1";
+      if (fromLab) {
+        const payload = consumeChatBridge();
+        window.history.replaceState({}, "", "/perfumer");
+        if (payload?.structured?.formula?.formula?.length) {
+          const now = new Date().toISOString();
+          const msg: ChatMessage = {
+            id: uid("msg"),
+            role: "assistant",
+            content: payload.assistantMessage,
+            structured: payload.structured,
+            status: "ok",
+            createdAt: now,
+          };
+          const chat = newLocalChat(
+            payload.title?.slice(0, 48) || "Lab blend",
+          );
+          chat.messages = [msg];
+          chat.updatedAt = now;
+          nextChats = [chat, ...nextChats];
+          nextActive = chat.id;
+        }
+      }
+    }
+
     setChats(nextChats);
     setActiveId(nextActive);
     setHydrated(true);

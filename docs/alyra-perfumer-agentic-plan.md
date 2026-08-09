@@ -64,9 +64,10 @@ Brutal honesty: adding LangChain now is resume-driven complexity. Ship the Lab b
        │ sessionStorage / token               │
        ▼                                      ▼
 ┌─────────────┐                      ingredients / catalog /
-│ /lab        │                      cost / solid / validate /
-│ loadFormula │                      open_in_lab (payload)
-└─────────────┘
+│ /lab        │◄── Continue in ──┐   cost / solid / validate /
+│ loadFormula │    Perfumer      │   open_in_lab (payload)
+└──────┬──────┘                  │
+       └──── alyra.chatBridge.v1 ┘
 ```
 
 ### Tools (current + P0)
@@ -152,10 +153,15 @@ Rules:
 3. User clicks **Open in Lab**
 4. Client: take `lab_bridge` or map `structured.formula` → `sessionStorage.setItem("alyra.labBridge.v1", JSON)`
 5. `router.push("/lab?bridge=1")`
-6. Lab shell on mount: read storage, `loadFormula({ equipmentId, contents })`, clear key, toast title
+6. Lab shell on mount: read storage, `loadFormula({ equipmentId, contents, autoMix: true })` so scent notes appear, stash `alyra.labSession.v1` for round-trip, clear one-shot key, toast title
 7. If `unmappedCount > 0`: toast "Placed N of M materials; X not in Lab inventory yet"
+8. User adjusts pours on the desk, clicks **Continue in Perfumer**
+9. Client: serialize desk → `alyra.chatBridge.v1` (preserves original Perfumer ids from session when Lab chemicalIds match; reverse-maps new pours; never invents chemicals) → `/perfumer?fromLab=1`
+10. Perfumer chat: consume payload → new assistant turn with FormulaCard + short line ("Got your Lab blend…"); **Open in Lab** / `refine_formula` still work via refreshed `lab_bridge`
 
 Deep-link alternative (P1): publish ephemeral Firestore formula (reuse `/lab/formula/[id]`) for shareable links. P0 prefers sessionStorage to avoid auth/Firestore dependency for guest flows.
+
+**Bidirectional (shipped):** Chat → Lab and Lab → Chat share schema v1 (`LabBridgeFormula`). Lab is source of truth for pour volumes on the return trip; proxies stay labeled.
 
 ---
 
