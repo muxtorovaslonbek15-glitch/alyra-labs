@@ -99,14 +99,14 @@ export function ChatRail({
   if (dock === "bottom") {
     return (
       <div
-        className="relative hidden w-full shrink-0 flex-col md:flex"
+        className="relative hidden w-full shrink-0 flex-col border-t border-lab-line/70 bg-lab-panel shadow-[0_-8px_24px_-16px_rgba(12,12,12,0.35)] md:flex"
         style={{ height: bottomChatHeight }}
       >
         <PanelResizeHandle
           side="top"
           onResize={(dy) => setBottomChatHeight(bottomChatHeight + dy)}
         />
-        <aside className="panel-glass flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-lab-line/60">
+        <aside className="flex min-h-0 flex-1 flex-col overflow-hidden">
           {body}
         </aside>
         {building ? (

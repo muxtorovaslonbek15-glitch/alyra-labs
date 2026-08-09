@@ -262,11 +262,14 @@ export default function LabGuidePage() {
               </li>
               <li>
                 Drag the{" "}
-                <strong className="font-semibold text-lab-ink">⋮⋮</strong> handle
-                on the chat header to dock chat on the{" "}
+                <strong className="font-semibold text-lab-ink">:::</strong>{" "}
+                handle on the chat header to dock{" "}
                 <strong className="font-semibold text-lab-ink">Right</strong> or{" "}
                 <strong className="font-semibold text-lab-ink">Bottom</strong>{" "}
-                (under the wood desk). Preference persists as{" "}
+                (under the wood desk). Double-click{" "}
+                <strong className="font-semibold text-lab-ink">:::</strong> to
+                snap below the desk (again to restore the right rail). Preference
+                persists as{" "}
                 <code className="rounded bg-lab-panel px-1 font-mono text-[11px] text-lab-ink">
                   alyra.builder.chatDock.v1
                 </code>
