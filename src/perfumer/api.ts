@@ -16,10 +16,6 @@ function baseUrl(): string {
   return raw.replace(/\/$/, "");
 }
 
-export function getPerfumerBaseUrl() {
-  return baseUrl();
-}
-
 const headers = {
   "Content-Type": "application/json",
   "ngrok-skip-browser-warning": "1",
@@ -67,9 +63,8 @@ function normalizeError(data: unknown, status: number): PerfumerApiError {
     return {
       code: "groq_down",
       title: "API unavailable",
-      message: d?.message || "The perfumer API is down or unreachable.",
-      actionable:
-        "Confirm ZPL_BACKEND is running and NEXT_PUBLIC_PERFUMER_API_URL is correct.",
+      message: d?.message || "Perfumer is briefly unavailable.",
+      actionable: "Try again in a moment.",
     };
   }
   return {
@@ -96,10 +91,9 @@ export async function checkPerfumerHealth(): Promise<{
       ok: false,
       error: {
         code: "groq_down",
-        title: "Cannot reach perfumer API",
-        message: `No response from ${baseUrl()}.`,
-        actionable:
-          "Start ZPL_BACKEND (`npm run dev` in ZPL_BACKEND) and set NEXT_PUBLIC_PERFUMER_API_URL.",
+        title: "Cannot reach Perfumer",
+        message: "The studio is offline right now.",
+        actionable: "Try again in a moment. If this keeps happening, the backend may need a restart.",
       },
     };
   }
@@ -340,7 +334,7 @@ export async function sendChat(body: {
       error: {
         code: "groq_down",
         title: "Network error",
-        message: "Could not reach the perfumer API.",
+        message: "Could not reach Perfumer just now.",
         actionable:
           "Check that the backend is running and CORS allows this origin.",
       },

@@ -7,7 +7,6 @@ import {
   createServerChat,
   deleteServerChat,
   fetchServerChat,
-  getPerfumerBaseUrl,
   listServerChats,
   renameServerChat,
   streamChat,
@@ -483,10 +482,9 @@ export function PerfumerChat() {
           <ErrorBanner
             error={{
               code: "missing_env",
-              title: "Groq key missing",
-              message:
-                "The server has no GROQ_API_KEY — chat will fail until it is set.",
-              actionable: "Add GROQ_API_KEY to ZPL_BACKEND/.env and restart.",
+              title: "Model not configured",
+              message: "Chat needs a model key on the server before it can reply.",
+              actionable: "Ask whoever runs the backend to set the Groq key and restart.",
             }}
           />
         </div>
@@ -667,9 +665,6 @@ export function PerfumerChat() {
             <h2 className="min-w-0 flex-1 truncate font-display text-base text-lab-ink md:text-lg">
               {active?.title || "Master Perfumer"}
             </h2>
-            <span className="hidden font-mono text-[10px] text-lab-muted md:inline">
-              {getPerfumerBaseUrl().replace(/^https?:\/\//, "")}
-            </span>
           </div>
 
           <div className="scroll-thin flex-1 space-y-3 overflow-y-auto overscroll-contain px-3 py-3 md:space-y-4 md:px-5 md:py-4">
