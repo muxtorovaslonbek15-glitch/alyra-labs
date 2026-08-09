@@ -44,7 +44,7 @@ Passed (2026-08-10). Local `GET /lab` → 200. Prod `/lab` → 200.
 
 ## Deploy / ntfy
 
-- **Production:** https://alyra-labs.vercel.app  
-- **Deployment:** https://alyra-labs-n23abxz7z-neilcarnacs-projects.vercel.app  
+- **Production:** https://alyra-labs.vercel.app (aliased from dpl_4uaQeShTMpyhnaRfPmNR79Y6BUk7)  
 - **Inspect:** https://vercel.com/neilcarnacs-projects/chemistry/4uaQeShTMpyhnaRfPmNR79Y6BUk7  
+- Follow-up redeploy (ticker dedupe only) hit Vercel `fetch failed` twice — local tree has single `DeskSimTicker`; re-run `npx vercel --prod` when network stabilizes.  
 - ntfy → chemistry (posted 2026-08-10)
