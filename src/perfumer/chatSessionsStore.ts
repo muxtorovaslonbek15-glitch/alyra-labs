@@ -45,7 +45,7 @@ function previewFromChat(chat: ChatSession): string {
       return m.content.trim().slice(0, 120);
     }
   }
-  return "Empty chat";
+  return "";
 }
 
 function chatHasPlan(chat: ChatSession): boolean {

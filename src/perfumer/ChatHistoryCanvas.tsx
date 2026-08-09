@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useBuilderStore } from "@/store/builderStore";
 import { useChatSessionsStore } from "@/perfumer/chatSessionsStore";
 import { track } from "@/lib/analytics/track";
+import { usePresence } from "@/animation/usePresence";
 
 function formatChatTime(iso: string) {
   try {
@@ -73,7 +74,7 @@ function HistoryListBody({
 
       <ul className="scroll-thin min-h-0 flex-1 overflow-y-auto p-2">
         {items.length === 0 ? (
-          <li className="px-3 py-10 text-center text-sm text-lab-muted">
+          <li className="px-3 py-10 text-center text-xs text-lab-muted">
             No chats yet. Start one from the Perfumer panel.
           </li>
         ) : (
@@ -112,25 +113,27 @@ function HistoryListBody({
                       className="min-w-0 flex-1 px-3 py-2.5 text-left"
                     >
                       <div className="flex items-baseline justify-between gap-3">
-                        <span className="truncate text-sm font-medium">
+                        <span className="truncate text-xs font-medium">
                           {c.title}
                         </span>
                         <span
-                          className={`shrink-0 font-mono text-[10px] ${
+                          className={`shrink-0 font-mono text-[9px] ${
                             selected ? "text-lab-foam/55" : "text-lab-muted"
                           }`}
                         >
                           {loading ? "…" : formatChatTime(c.updatedAt)}
                         </span>
                       </div>
-                      <p
-                        className={`mt-0.5 line-clamp-1 text-xs ${
-                          selected ? "text-lab-foam/65" : "text-lab-muted"
-                        }`}
-                      >
-                        {c.preview}
-                        {c.hasPlan ? " · Plan" : ""}
-                      </p>
+                      {(c.preview || c.hasPlan) && (
+                        <p
+                          className={`mt-0.5 line-clamp-1 text-[11px] ${
+                            selected ? "text-lab-foam/65" : "text-lab-muted"
+                          }`}
+                        >
+                          {c.preview}
+                          {c.hasPlan ? `${c.preview ? " · " : ""}Plan` : ""}
+                        </p>
+                      )}
                     </button>
                     <div
                       className={`hidden shrink-0 items-center gap-0.5 pr-1.5 opacity-0 transition-opacity group-hover:opacity-100 md:flex ${
@@ -188,9 +191,11 @@ export function ChatHistoryCanvas() {
   const centerView = useBuilderStore((s) => s.centerView);
   const closeChatHistory = useBuilderStore((s) => s.closeChatHistory);
   const actions = useChatSessionsStore((s) => s.actions);
+  const open = centerView === "history";
+  const { mounted, visible } = usePresence(open);
 
   useEffect(() => {
-    if (centerView !== "history") return;
+    if (!open) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         e.preventDefault();
@@ -199,9 +204,9 @@ export function ChatHistoryCanvas() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [centerView, closeChatHistory]);
+  }, [open, closeChatHistory]);
 
-  if (centerView !== "history") return null;
+  if (!mounted) return null;
 
   async function onSelect(id: string) {
     if (!actions?.selectChat) return;
@@ -220,10 +225,12 @@ export function ChatHistoryCanvas() {
     track("builder_history_close", { via: "back" });
   }
 
+  const fade = visible ? "lab-crossfade-in" : "lab-crossfade-out";
+
   return (
     <>
       <div
-        className="absolute inset-0 z-20 hidden flex-col overflow-hidden rounded-none border border-lab-line/70 bg-lab-panel md:flex md:rounded-[1.25rem]"
+        className={`absolute inset-0 z-20 hidden flex-col overflow-hidden rounded-none border border-lab-line/70 bg-lab-panel lab-crossfade md:flex md:rounded-[1.25rem] ${fade}`}
         data-lab-history-canvas
         role="region"
         aria-label="Chat history"
@@ -232,7 +239,7 @@ export function ChatHistoryCanvas() {
       </div>
 
       <div
-        className="fixed inset-0 z-[280] flex flex-col justify-end md:hidden"
+        className={`fixed inset-0 z-[280] flex flex-col justify-end lab-crossfade md:hidden ${fade}`}
         role="dialog"
         aria-modal="true"
         aria-label="Chat history"

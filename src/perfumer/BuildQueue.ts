@@ -3,6 +3,15 @@ import { deskContentsFromBridge } from "./labBridge";
 import { useDeskStore } from "@/store/deskStore";
 import { assertLabActionAllowed, useAuthStore } from "@/store/authStore";
 import { getChemical } from "@/domains/chemistry/data/chemicals";
+import {
+  buildStepDelayMs,
+  buildUsesTin,
+  isSolidBridge,
+  resolveBuildEquipmentId,
+  sleep,
+  solidMeltDelayMs,
+} from "@/animation/motion";
+import { markSolidSession } from "./solidDetect";
 
 export type BuildEventKind =
   | "propose_accord"
@@ -25,50 +34,37 @@ export interface BuildStep {
   equipmentId?: string;
 }
 
-function prefersReducedMotion(): boolean {
-  if (typeof window === "undefined") return false;
-  return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-}
-
-function stepDelayMs(): number {
-  if (prefersReducedMotion()) return 40;
-  return 400 + Math.floor(Math.random() * 500);
-}
-
-function sleep(ms: number, signal?: AbortSignal): Promise<void> {
-  return new Promise((resolve, reject) => {
-    if (signal?.aborted) {
-      reject(new DOMException("Aborted", "AbortError"));
-      return;
-    }
-    const t = window.setTimeout(resolve, ms);
-    const onAbort = () => {
-      window.clearTimeout(t);
-      reject(new DOMException("Aborted", "AbortError"));
-    };
-    signal?.addEventListener("abort", onAbort, { once: true });
-  });
-}
-
 /**
  * Derive ordered BuildQueue steps from a LabBridgeFormula.
  * Unmapped lines become mapping_gap events — never invent Lab chemicals.
+ * Solid / tin: melt → blend → cast language (vessel FX owned by solid track).
  */
 export function deriveBuildSteps(bridge: LabBridgeFormula): BuildStep[] {
   const steps: BuildStep[] = [];
   const title = bridge.title?.trim() || "your formula";
   const format = bridge.format || "EDP";
+  const solid = isSolidBridge(bridge);
+  const equipmentId = resolveBuildEquipmentId(bridge);
+  const tin = equipmentId === "tin";
+  const vesselLabel = tin
+    ? "tin"
+    : equipmentId.replace(/-/g, " ");
 
   steps.push({
     kind: "propose_accord",
-    narration: `Starting from ${title}: ${format} teaching scale.`,
+    narration: solid
+      ? `Starting from ${title}: solid teaching scale.`
+      : `Starting from ${title}: ${format} teaching scale.`,
   });
 
-  const equipmentId = bridge.vessel?.equipmentId || "beaker";
   steps.push({
     kind: "place_vessel",
     equipmentId,
-    narration: `Placing a ${equipmentId.replace(/-/g, " ")} on the wood.`,
+    narration: tin
+      ? "Placing a tin on the wood."
+      : solid
+        ? `Placing a ${vesselLabel} for the solid cast.`
+        : `Placing a ${vesselLabel} on the wood.`,
   });
 
   const mapped = bridge.lines.filter((l) => l.labChemicalId);
@@ -83,14 +79,34 @@ export function deriveBuildSteps(bridge: LabBridgeFormula): BuildStep[] {
     const role = line.role ? `, ${line.role}` : "";
     const isSolvent =
       line.role === "solvent" || labId === "c2h5oh" || labId === "cct";
+    const isWax = line.role === "wax" || labId === "beeswax";
+    const isCarrier = line.role === "carrier";
 
-    if (isSolvent) {
+    if (solid && (isWax || isCarrier)) {
+      steps.push({
+        kind: isWax ? "add_chemical" : "add_solvent",
+        chemicalId: labId,
+        amountMl,
+        name: line.name,
+        narration: isWax
+          ? `Melting ${line.name} into the chassis.`
+          : `Folding in ${line.name} for slip and softness.`,
+      });
+    } else if (isSolvent && !solid) {
       steps.push({
         kind: "add_solvent",
         chemicalId: labId,
         amountMl,
         name: line.name,
         narration: `Cutting with ${line.name} for the teaching ${format}.`,
+      });
+    } else if (solid) {
+      steps.push({
+        kind: "add_chemical",
+        chemicalId: labId,
+        amountMl,
+        name: line.name,
+        narration: `Blending ${line.name}${role} into the melt, ~${amountMl} ml.`,
       });
     } else {
       steps.push({
@@ -107,7 +123,9 @@ export function deriveBuildSteps(bridge: LabBridgeFormula): BuildStep[] {
       chemicalId: labId,
       amountMl,
       name: line.name,
-      narration: `Setting ${line.name} to ~${amountMl} ml on the teaching scale.`,
+      narration: solid
+        ? `Setting ${line.name} on the teaching scale.`
+        : `Setting ${line.name} to ~${amountMl} ml on the teaching scale.`,
     });
   }
 
@@ -122,23 +140,33 @@ export function deriveBuildSteps(bridge: LabBridgeFormula): BuildStep[] {
   if (mapped.length > 0) {
     steps.push({
       kind: "stir",
-      narration: "Stirring to wet the oils.",
+      narration: solid
+        ? "Stirring the melt until the notes read even."
+        : "Stirring to wet the oils.",
     });
     if (bridge.vessel?.autoMix !== false) {
       steps.push({
         kind: "mix",
-        narration: "Mixing. Watching the scent notes come up.",
+        narration: solid
+          ? tin
+            ? "Casting the puck into the tin."
+            : "Casting the balm — watching it set."
+          : "Mixing. Watching the scent notes come up.",
       });
       steps.push({
         kind: "notes",
-        narration: "Heart and base should read on the tutor when Mix settles.",
+        narration: solid
+          ? "Ready when the puck reads matte. Press, warm, wear."
+          : "Heart and base should read on the tutor when Mix settles.",
       });
     }
   }
 
   steps.push({
     kind: "done",
-    narration: "Build complete. Tweak on the desk or refine in chat.",
+    narration: solid
+      ? "Build complete. Refine in chat or press the puck when it sets."
+      : "Build complete. Tweak on the desk or refine in chat.",
   });
 
   return steps;
@@ -163,9 +191,13 @@ export async function runBuildQueue(
 ): Promise<BuildQueueResult> {
   const { bridge, instant = false, signal, onStep } = opts;
   const steps = deriveBuildSteps(bridge);
+  const solid = isSolidBridge(bridge);
+  const tin = buildUsesTin(bridge);
+  const equipmentId = resolveBuildEquipmentId(bridge);
 
   // Same gate as loadFormula / Open in Lab — Build counts as one guest action.
   if (!assertLabActionAllowed()) return "failed";
+  if (solid) markSolidSession();
 
   if (instant) {
     const contents = deskContentsFromBridge(bridge);
@@ -181,13 +213,30 @@ export async function runBuildQueue(
       return "failed";
     }
     const vesselId = useDeskStore.getState().loadFormula({
-      equipmentId: bridge.vessel?.equipmentId || "beaker",
+      equipmentId,
       contents,
       contentIds: contents.map((c) => c.chemicalId),
       autoMix: bridge.vessel?.autoMix !== false,
-      heatAttached: Boolean(bridge.vessel?.heatAttached),
+      heatAttached:
+        Boolean(bridge.vessel?.heatAttached) || solid,
     });
     if (!vesselId) return "failed";
+    if (tin && bridge.vessel?.autoMix !== false) {
+      useDeskStore.setState((s) => ({
+        vessels: s.vessels.map((v) =>
+          v.instanceId === vesselId
+            ? {
+                ...v,
+                fx: {
+                  ...v.fx,
+                  castRevealAt: Date.now(),
+                  mixAt: v.fx.mixAt ?? Date.now(),
+                },
+              }
+            : v,
+        ),
+      }));
+    }
     const done = steps[steps.length - 1];
     onStep?.(done, steps.length - 1, steps.length);
     return "done";
@@ -217,10 +266,15 @@ export async function runBuildQueue(
           break;
         case "place_vessel": {
           vesselId = useDeskStore.getState().placeEquipment(
-            step.equipmentId || "beaker",
+            step.equipmentId || equipmentId,
             { x: 140, y: 100 },
           );
           if (!vesselId) return "failed";
+          // Solid: warm the chassis before oils — heat FX lives on the vessel.
+          if (solid) {
+            useDeskStore.getState().attachHeat(vesselId);
+            await sleep(solidMeltDelayMs(), signal);
+          }
           break;
         }
         case "add_chemical":
@@ -247,15 +301,45 @@ export async function runBuildQueue(
           break;
         }
         case "mix": {
-          if (vesselId) useDeskStore.getState().mixVessel(vesselId);
+          if (vesselId) {
+            // Solid cast: cool/set beat before Mix when heat was on.
+            if (solid) {
+              const v = useDeskStore
+                .getState()
+                .vessels.find((x) => x.instanceId === vesselId);
+              if (v?.heatAttached) {
+                useDeskStore.getState().toggleHeat(vesselId);
+                useDeskStore.getState().attachCool(vesselId);
+                await sleep(buildStepDelayMs("notes", { solid, tin }), signal);
+              }
+            }
+            useDeskStore.getState().mixVessel(vesselId);
+          }
           break;
         }
         default:
           break;
       }
 
-      if (step.kind !== "done") {
-        await sleep(stepDelayMs(), signal);
+      if (step.kind === "done") continue;
+
+      // Skip long wait after set_amount when it immediately follows its pour.
+      const prev = i > 0 ? steps[i - 1] : null;
+      const settleOnly =
+        step.kind === "set_amount" &&
+        prev &&
+        (prev.kind === "add_chemical" || prev.kind === "add_solvent") &&
+        prev.chemicalId === step.chemicalId;
+
+      const delay = settleOnly
+        ? buildStepDelayMs("set_amount", { solid, tin })
+        : buildStepDelayMs(step.kind, { solid, tin });
+
+      // place_vessel already slept for solid melt — don't double-wait the full place delay.
+      if (step.kind === "place_vessel" && solid) {
+        await sleep(buildStepDelayMs("set_amount", { solid, tin }), signal);
+      } else {
+        await sleep(delay, signal);
       }
     }
 

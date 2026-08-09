@@ -135,6 +135,15 @@ export type FluidVesselInput = Pick<
   /** Shared FX intensities (preferred); computed from fx+now when omitted */
   intensities?: FxIntensities;
   now?: number;
+  simTemperature?: number;
+  simFrost?: number;
+  simViscosity?: number;
+  stirActive?: boolean;
+  shakeActive?: boolean;
+  mixActive?: boolean;
+  agitation?: number;
+  meltFraction?: number;
+  mixBlend?: number;
 };
 
 /**
@@ -179,34 +188,49 @@ export function livePreviewToFluidState(
       heatAttached: Boolean(vessel.heatAttached),
       coolAttached: Boolean(vessel.coolAttached),
       boiling: boilFx,
+      simTemperature: vessel.simTemperature,
+      simFrost: vessel.simFrost,
+      simViscosity: vessel.simViscosity,
+      stirActive: vessel.stirActive,
+      shakeActive: vessel.shakeActive,
+      mixActive: vessel.mixActive,
+      agitation: vessel.agitation,
+      meltFraction: vessel.meltFraction,
     });
 
-  // Ease viscosity / freeze from shared solidify / melt intensities
+  // Ease viscosity / freeze from shared solidify / melt intensities + live sim
   const solidAmt = Math.max(
     intensities.solidify,
     solidFx ? intensityStrength(solidFx.intensity) : 0,
+    vessel.simFrost ?? 0,
   );
   const meltAmt = Math.max(
     intensities.melt,
     meltFx ? intensityStrength(meltFx.intensity) : 0,
+    vessel.meltFraction ?? 0,
   );
   const freeze = Math.max(0, solidAmt - meltAmt * 0.9);
-  const viscosityBase = freeze > 0.05
-    ? 0.45 + freeze * 0.5
-    : meltAmt > 0.05
-      ? Math.max(0.05, 0.32 - meltAmt * 0.22)
-      : 0.18;
+  const viscosityBase =
+    typeof vessel.simViscosity === "number"
+      ? vessel.simViscosity
+      : freeze > 0.05
+        ? 0.45 + freeze * 0.5
+        : meltAmt > 0.05
+          ? Math.max(0.05, 0.32 - meltAmt * 0.22)
+          : 0.18;
 
   const temperature = Math.min(
     1,
     Math.max(
       0,
-      (vessel.heatAttached ? 0.55 : 0) +
-        (heatFx ? intensityStrength(heatFx.intensity) * 0.45 : 0) +
-        (boilFx || intensities.boil > 0.3 ? 0.35 : 0) +
-        intensities.heat * 0.2 -
-        (vessel.coolAttached ? 0.45 : 0) -
-        intensities.cool * 0.15,
+      typeof vessel.simTemperature === "number"
+        ? vessel.simTemperature
+        : (vessel.heatAttached ? 0.55 : 0) +
+            (heatFx ? intensityStrength(heatFx.intensity) * 0.45 : 0) +
+            (boilFx || intensities.boil > 0.3 ? 0.35 : 0) +
+            intensities.heat * 0.2 -
+            (vessel.coolAttached ? 0.45 : 0) -
+            intensities.cool * 0.15,
     ),
   );
 
@@ -225,13 +249,36 @@ export function livePreviewToFluidState(
   }
 
   const overflowFx = effectActive(effects, "overflow");
-  const foamFromOverflow = overflowFx
-    ? Math.max(0.55, intensityStrength(overflowFx.intensity) * 0.85)
-    : 0;
+  const fillClamped = Math.max(0, Math.min(112, fill));
+  // Desk overfill (fillPct > ~95) should spill even without an engine effect
+  const overfillAmt =
+    fillClamped > 95 ? Math.min(1, (fillClamped - 95) / 17) : 0;
+  const foamFromOverflow = Math.max(
+    overflowFx
+      ? Math.max(0.55, intensityStrength(overflowFx.intensity) * 0.85)
+      : 0,
+    overfillAmt * 0.85,
+  );
+  const overflow = Math.max(
+    overflowFx ? intensityStrength(overflowFx.intensity) : 0,
+    overfillAmt,
+  );
+
+  // Continuous swirl from live stir + mix / shake envelope
+  const agitation = Math.min(
+    1,
+    Math.max(
+      intensities.mix,
+      vessel.stirActive ? 0.7 : 0,
+      Math.min(1, (vessel.stirLevel ?? 0) / 3) * 0.55,
+      vessel.mixBlend ?? 0,
+      vessel.fx?.shakeAt && intensities.mix > 0.05 ? intensities.mix : 0,
+    ),
+  );
 
   return {
     // Allow slight over-lip fill so spill / foam band reads at the rim
-    fill: Math.max(0, Math.min(112, fill)),
+    fill: fillClamped,
     layers: buildLayers(preview?.layerColors, fillColor),
     viscosity: Math.max(0, Math.min(1, viscosityBase)),
     turbidity: turbid ? intensityStrength(turbid.intensity) : 0,
@@ -243,8 +290,16 @@ export function livePreviewToFluidState(
     impulses,
     fillColor: fillColor === "transparent" ? "#8fc0b5" : fillColor,
     boil: boilFx || intensities.boil > 0.35,
-    bubble: bubbleFx || boilFx || intensities.boil > 0.35,
+    // Reaction gas independent of boil — still emit when bubble/gas effects fire
+    bubble:
+      bubbleFx ||
+      Boolean(effectActive(effects, "gas")) ||
+      boilFx ||
+      intensities.boil > 0.35 ||
+      agitation > 0.55,
     melt: meltAmt,
     solidify: freeze,
+    agitation,
+    overflow,
   };
 }

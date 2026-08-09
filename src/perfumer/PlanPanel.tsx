@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import type { LabBridgeFormula, StructuredPayload } from "./types";
+import { chassisFromLines } from "./solidDetect";
 
 export function PlanPanel({
   bridge,
@@ -28,6 +29,7 @@ export function PlanPanel({
   compact?: boolean;
 }) {
   const [expanded, setExpanded] = useState(false);
+  const [pressed, setPressed] = useState(false);
 
   // Empty plan: stay invisible — don't dominate the chat rail.
   if (!bridge?.lines?.length) {
@@ -52,13 +54,30 @@ export function PlanPanel({
     building && buildTotal != null && buildStepIndex != null
       ? `${Math.min(buildStepIndex + 1, buildTotal)}/${buildTotal}`
       : null;
+  const progress =
+    building && buildTotal && buildTotal > 0
+      ? Math.min(1, Math.max(0, ((buildStepIndex ?? 0) + 1) / buildTotal))
+      : 0;
+  const solid = bridge.format === "Solid";
+  const chassis = chassisFromLines(bridge.lines, bridge.solidChassis);
 
   return (
     <div
-      className={`shrink-0 border-t border-lab-line/50 bg-lab-panel ${
+      className={`relative shrink-0 border-t border-lab-line/50 bg-lab-panel ${
         compact ? "px-3 py-2.5" : "px-3 py-2.5"
       }`}
     >
+      {building ? (
+        <div
+          className="absolute inset-x-0 top-0 h-0.5 overflow-hidden bg-lab-line/40"
+          aria-hidden
+        >
+          <div
+            className="lab-build-progress h-full bg-lab-ink/80"
+            style={{ width: `${Math.round(progress * 100)}%` }}
+          />
+        </div>
+      ) : null}
       <div className="flex items-center gap-2">
         <button
           type="button"
@@ -73,8 +92,12 @@ export function PlanPanel({
             {bridge.title}
           </p>
           <p className="mt-0.5 truncate text-[11px] text-lab-muted">
+            {solid ? "Solid · " : ""}
             {bridge.lines.length} lines · {mapped} mapped
             {unmapped > 0 ? ` · ${unmapped} missing` : ""}
+            {chassis
+              ? ` · wax ${chassis.waxPercent}:oil ${chassis.oilPercent}:FO ${chassis.fragranceLoadPercent}`
+              : ""}
             {costInr != null
               ? ` · ₹${Math.round(costInr).toLocaleString("en-IN")}`
               : ""}
@@ -85,16 +108,22 @@ export function PlanPanel({
             <button
               type="button"
               onClick={onStop}
-              className="min-h-9 rounded-md border border-lab-hazard/40 bg-lab-hazard/10 px-3 text-xs font-semibold text-lab-hazard hover:bg-lab-hazard/15"
+              className="min-h-9 rounded-md border border-lab-hazard/40 bg-lab-hazard/10 px-3 text-xs font-semibold text-lab-hazard transition hover:bg-lab-hazard/15 active:scale-[0.98]"
             >
               Stop
             </button>
           ) : (
             <button
               type="button"
-              onClick={onBuild}
+              onClick={() => {
+                setPressed(true);
+                window.setTimeout(() => setPressed(false), 180);
+                onBuild();
+              }}
               disabled={!canBuild || mapped === 0}
-              className="min-h-9 rounded-md bg-lab-ink px-3.5 text-xs font-semibold text-lab-foam transition hover:bg-black disabled:cursor-not-allowed disabled:opacity-40"
+              className={`lab-build-cta min-h-9 rounded-md bg-lab-ink px-3.5 text-xs font-semibold text-lab-foam transition hover:bg-black disabled:cursor-not-allowed disabled:opacity-40 ${
+                canBuild && mapped > 0 ? "lab-build-cta-ready" : ""
+              } ${pressed ? "lab-build-cta-pressed" : ""}`}
             >
               Build
             </button>
@@ -172,13 +201,24 @@ export function PlanPanel({
             ) : null}
           </div>
 
+          {chassis && solid ? (
+            <p className="font-mono text-[11px] leading-relaxed text-lab-ink/85">
+              Chassis wax {chassis.waxPercent} · oil {chassis.oilPercent} · FO{" "}
+              {chassis.fragranceLoadPercent}
+            </p>
+          ) : null}
+
           {mode === "building" ? (
             <p className="text-xs leading-relaxed text-lab-muted">
-              Pouring on the desk. Watch the beaker fill step by step.
+              {solid
+                ? "Casting on the desk. Watch the tin melt, blend, then set."
+                : "Pouring on the desk. Watch the beaker fill step by step."}
             </p>
           ) : mode === "built" ? (
             <p className="text-xs leading-relaxed text-lab-muted">
-              Build complete. Refine in chat or open Tutor for notes.
+              {solid
+                ? "Build complete. Press the puck, or refine in chat."
+                : "Build complete. Refine in chat or open Tutor for notes."}
             </p>
           ) : mode === "stopped" ? (
             <p className="text-xs leading-relaxed text-lab-muted">

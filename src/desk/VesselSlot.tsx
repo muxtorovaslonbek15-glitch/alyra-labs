@@ -7,6 +7,7 @@ import { EQUIPMENT_BY_ID } from "@/domains/chemistry/data/equipment";
 import { getChemical } from "@/domains/chemistry/data/chemicals";
 import { vesselDropId } from "@/drag/types";
 import { GlassVessel } from "@/animation/glassware/GlassVessel";
+import { SolidTinVessel } from "@/animation/glassware/SolidTinVessel";
 import {
   computeFxIntensities,
   pourPoseTiltDeg,
@@ -26,6 +27,8 @@ import {
   softCapacityMl,
   totalMl,
 } from "@/desk/vesselContents";
+import { ensureSim } from "@/desk/vesselSim";
+import { VesselSimHud } from "@/desk/VesselSimHud";
 
 interface Props {
   vessel: DeskVessel;
@@ -42,7 +45,7 @@ export function VesselSlot({ vessel, deskRef }: Props) {
   const setActiveVessel = useDeskStore((s) => s.setActiveVessel);
   const clearVessel = useDeskStore((s) => s.clearVessel);
   const removeVessel = useDeskStore((s) => s.removeVessel);
-  const stirVessel = useDeskStore((s) => s.stirVessel);
+  const toggleStirActive = useDeskStore((s) => s.toggleStirActive);
   const toggleHeat = useDeskStore((s) => s.toggleHeat);
   const toggleCool = useDeskStore((s) => s.toggleCool);
   const removeLastChemical = useDeskStore((s) => s.removeLastChemical);
@@ -57,13 +60,29 @@ export function VesselSlot({ vessel, deskRef }: Props) {
   const deskRectRef = useRef<DOMRect | null>(null);
   const [dragging, setDragging] = useState(false);
 
+  const sim = ensureSim(vessel);
+  const simAlive =
+    vessel.heatAttached ||
+    vessel.coolAttached ||
+    sim.stirActive ||
+    sim.shakeActive ||
+    sim.mixActive ||
+    sim.agitation > 0.02;
   const now = useFxClock(
-    [vessel.fx.shakeAt, vessel.fx.mixAt, vessel.fx.pourAt, vessel.fx.transferAt],
+    [
+      vessel.fx.shakeAt,
+      vessel.fx.mixAt,
+      vessel.fx.pourAt,
+      vessel.fx.transferAt,
+      vessel.fx.stirAt,
+    ],
     Math.max(2200, POUR_WINDOW_MS + 200),
+    simAlive,
   );
   const reducedMotion = usePrefersReducedMotion();
 
   const eq = EQUIPMENT_BY_ID[vessel.equipmentId];
+  const isTin = vessel.equipmentId === "tin";
   const isActive = activeVesselId === vessel.instanceId;
   const result = vessel.lastResult;
   const contents = getVesselContents(vessel);
@@ -89,7 +108,7 @@ export function VesselSlot({ vessel, deskRef }: Props) {
     );
   });
   const boiling =
-    Boolean(vessel.heatAttached && hasBoilable) ||
+    Boolean(vessel.heatAttached && hasBoilable && sim.temperature >= 0.68) ||
     Boolean(preview?.effects.some((e) => e.kind === "boil"));
 
   const fillColor =
@@ -106,35 +125,57 @@ export function VesselSlot({ vessel, deskRef }: Props) {
   const fillPct =
     preview?.fillPct ?? fillPctFromContents(contents, vessel.equipmentId);
 
-  // Merge live FX into a synthetic result for VesselEffects when not yet mixed
-  const fxResult =
-    result ??
-    (preview?.effects.length
-      ? {
-          ok: true,
-          products: [],
-          effects: preview.effects,
-          discoveryId: "live-preview",
-        }
-      : undefined);
-
   const fxEffects = [
     ...(result?.effects ?? []),
     ...(preview?.effects ?? []),
   ];
+  // Desk overfill should always spill visually (not only engine "overflow" effects)
+  const overflowIntensity =
+    overflowing && usedMl / capacityMl > 1.35
+      ? ("high" as const)
+      : ("medium" as const);
+  const withOverflow =
+    overflowing && !fxEffects.some((e) => e.kind === "overflow")
+      ? [
+          ...fxEffects,
+          { kind: "overflow" as const, intensity: overflowIntensity },
+        ]
+      : fxEffects;
+
+  // Merge live FX into a synthetic result for VesselEffects when not yet mixed
+  const fxResult =
+    result != null
+      ? { ...result, effects: withOverflow }
+      : withOverflow.length
+        ? {
+            ok: true,
+            products: [],
+            effects: withOverflow,
+            discoveryId: "live-preview",
+          }
+        : undefined;
   const intensities = computeFxIntensities({
     fx: vessel.fx,
-    effects: fxEffects,
+    effects: withOverflow,
     now,
     heatAttached: vessel.heatAttached,
     coolAttached: vessel.coolAttached,
     boiling,
+    simTemperature: sim.temperature,
+    simFrost: sim.frost,
+    simViscosity: sim.viscosity,
+    stirActive: sim.stirActive,
+    shakeActive: sim.shakeActive,
+    mixActive: sim.mixActive,
+    agitation: sim.agitation,
+    meltFraction: sim.meltFraction,
   });
 
   const shaking =
-    Boolean(vessel.fx.shakeAt) &&
-    now > 0 &&
-    now - (vessel.fx.shakeAt ?? 0) < 700;
+    sim.shakeActive ||
+    (Boolean(vessel.fx.shakeAt) &&
+      now > 0 &&
+      now - (vessel.fx.shakeAt ?? 0) < 700);
   const mixing = intensities.mix > 0.35;
   const isSource =
     vessel.fx.transferRole === "source" && intensities.pourPhase !== "idle";
@@ -276,7 +317,7 @@ export function VesselSlot({ vessel, deskRef }: Props) {
       onDoubleClick={(e) => {
         e.stopPropagation();
         if (canMix) tryMixVessel(vessel.instanceId);
-        else stirVessel(vessel.instanceId);
+        else toggleStirActive(vessel.instanceId);
       }}
       onClick={() => setActiveVessel(vessel.instanceId)}
       onKeyDown={(e) => {
@@ -287,7 +328,7 @@ export function VesselSlot({ vessel, deskRef }: Props) {
           if (canMix) tryMixVessel(vessel.instanceId);
         }
         if (e.key === "s" || e.key === "S") {
-          stirVessel(vessel.instanceId);
+          toggleStirActive(vessel.instanceId);
         }
         if (e.key === "h" || e.key === "H") {
           toggleHeat(vessel.instanceId);
@@ -320,7 +361,9 @@ export function VesselSlot({ vessel, deskRef }: Props) {
             {eq?.name ?? "Vessel"}
           </p>
           <p className="text-[9px] uppercase tracking-wider text-lab-muted">
-            Drag onto another to pour
+            {isTin
+              ? "Melt · blend · cast"
+              : "Drag onto another to pour"}
           </p>
         </div>
         <div
@@ -352,7 +395,7 @@ export function VesselSlot({ vessel, deskRef }: Props) {
       </div>
 
       {/* Bunsen stand under glass — physical heat, not button paint */}
-      {vessel.heatAttached ? (
+      {vessel.heatAttached && !isTin ? (
         <div className="lab-burner pointer-events-none absolute -bottom-1 left-1/2 z-0 h-7 w-[5rem] -translate-x-1/2 rounded-b-lg bg-gradient-to-b from-[#2a1a12] to-[#1a100c] shadow-[0_4px_12px_rgba(0,0,0,0.4)]">
           <div className="absolute inset-x-2 top-0 h-px bg-lab-amber/40" />
           <div className="absolute -top-7 left-1/2 flex -translate-x-1/2 items-end gap-[3px]">
@@ -364,8 +407,8 @@ export function VesselSlot({ vessel, deskRef }: Props) {
         </div>
       ) : null}
 
-      {/* Ice bath under glass */}
-      {vessel.coolAttached ? (
+      {/* Ice bath under glass — tin uses cool rim on the puck instead */}
+      {vessel.coolAttached && !isTin ? (
         <div className="lab-ice-bath pointer-events-none absolute -bottom-1 left-1/2 z-0 h-7 w-[5rem] -translate-x-1/2 rounded-b-lg bg-gradient-to-b from-[#0c4a6e] to-[#082f49] shadow-[0_4px_12px_rgba(8,47,73,0.45)]">
           <div className="absolute inset-x-2 top-0 h-px bg-[#7dd3fc]/45" />
           <div className="absolute -top-3 left-1/2 flex -translate-x-1/2 items-end gap-[3px]">
@@ -378,49 +421,70 @@ export function VesselSlot({ vessel, deskRef }: Props) {
       ) : null}
 
       <div data-no-drag className="relative mt-1">
-        <GlassVessel
-          equipmentId={vessel.equipmentId}
-          fillPct={fillPct}
-          fillColor={fillColor}
-          motion={{
-            pourIntensity,
-            stirLevel: vessel.stirLevel,
-            shaking: shaking || intensities.blast > 0.35,
-            boiling,
-            transferringOut: Boolean(isSource),
-            boilIntensity: intensities.boil,
-            solidify: intensities.solidify,
-            melt: intensities.melt,
-          }}
-          result={fxResult}
-          fx={vessel.fx}
-          livePreview={preview}
-          layerColors={preview?.layerColors}
-          stirLevel={vessel.stirLevel}
-          heatAttached={vessel.heatAttached}
-          coolAttached={vessel.coolAttached}
-          pouringCue={isOver}
-          tiltDeg={tiltDeg}
-          onGlassClick={(e) => {
-            e.stopPropagation();
-            stirVessel(vessel.instanceId);
-          }}
-        />
-        {vessel.stirLevel > 0 ? (
+        {isTin ? (
+          <SolidTinVessel
+            fillPct={fillPct}
+            fillColor={fillColor}
+            heatAttached={vessel.heatAttached}
+            coolAttached={vessel.coolAttached}
+            meltFraction={sim.meltFraction}
+            castRevealAt={vessel.fx.castRevealAt}
+            pressEnabled={Boolean(vessel.fx.castRevealAt || result)}
+            onPress={() => {
+              showToast({ title: "Press · Warm · Wear" });
+            }}
+          />
+        ) : (
+          <GlassVessel
+            equipmentId={vessel.equipmentId}
+            fillPct={fillPct}
+            fillColor={fillColor}
+            motion={{
+              pourIntensity,
+              stirLevel: vessel.stirLevel,
+              shaking: shaking || intensities.blast > 0.35,
+              boiling,
+              transferringOut: Boolean(isSource),
+              boilIntensity: intensities.boil,
+              solidify: intensities.solidify,
+              melt: intensities.melt,
+            }}
+            result={fxResult}
+            fx={vessel.fx}
+            livePreview={preview}
+            layerColors={preview?.layerColors}
+            stirLevel={vessel.stirLevel}
+            heatAttached={vessel.heatAttached}
+            coolAttached={vessel.coolAttached}
+            sim={sim}
+            pouringCue={isOver}
+            tiltDeg={tiltDeg}
+            onGlassClick={(e) => {
+              e.stopPropagation();
+              toggleStirActive(vessel.instanceId);
+            }}
+          />
+        )}
+        <div className="absolute left-1 right-1 top-1 z-10 flex flex-col items-start gap-0.5">
+          {usedMl > 0 ? (
+            <div
+              className={`rounded-full px-1.5 py-0.5 font-mono text-[9px] ${
+                overflowing
+                  ? "bg-lab-hazard/80 text-lab-foam"
+                  : "bg-black/35 text-lab-foam"
+              }`}
+            >
+              {isTin
+                ? `${usedMl.toFixed(1)} g*`
+                : `${usedMl.toFixed(1)}/${capacityMl} ml`}
+              {overflowing ? " ⚠" : ""}
+            </div>
+          ) : null}
+          <VesselSimHud vessel={vessel} compact now={now} />
+        </div>
+        {vessel.stirLevel > 0 || sim.stirActive ? (
           <div className="absolute right-1 top-1 rounded-full bg-black/35 px-1.5 py-0.5 text-[9px] text-lab-foam">
-            Stir ×{vessel.stirLevel}
-          </div>
-        ) : null}
-        {usedMl > 0 ? (
-          <div
-            className={`absolute left-1 top-1 rounded-full px-1.5 py-0.5 font-mono text-[9px] ${
-              overflowing
-                ? "bg-lab-hazard/80 text-lab-foam"
-                : "bg-black/35 text-lab-foam"
-            }`}
-          >
-            {usedMl.toFixed(1)}/{capacityMl} ml
-            {overflowing ? " ⚠" : ""}
+            {sim.stirActive ? "Stir · on" : `Stir ×${vessel.stirLevel}`}
           </div>
         ) : null}
       </div>

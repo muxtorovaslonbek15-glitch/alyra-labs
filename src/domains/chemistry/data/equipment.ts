@@ -21,6 +21,16 @@ export const EQUIPMENT: Equipment[] = [
     function: "container",
   }),
   eq({
+    id: "tin",
+    name: "Perfume Tin",
+    category: "equipment",
+    subcategory: "solid",
+    icon: "🫙",
+    capacity: 4,
+    function: "container",
+    tags: ["equipment", "solid", "perfume", "balm"],
+  }),
+  eq({
     id: "test-tube",
     name: "Test Tube",
     category: "equipment",

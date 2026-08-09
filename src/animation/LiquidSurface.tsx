@@ -243,22 +243,38 @@ export function LiquidSurface({
         (1 - freeze * 0.9);
 
       const bubbleN =
-        boil > 0.2 ? Math.min(14, Math.round(6 + boil * 8)) : 0;
+        boil > 0.2
+          ? Math.min(16, Math.round(7 + boil * 10))
+          : stir > 1.5
+            ? 4
+            : 0;
       const bubbles: Bubble[] =
         bubbleN > 0
           ? Array.from({ length: bubbleN }, (_, i) => {
-              // Nucleation from bottom; coalesce toward surface on intensity peaks
-              const phase = (t * (1.1 + boil * 0.5) + i * 0.28) % 1.35;
-              const coalesce = boil > 0.75 && i % 3 === 0 ? 1.45 : 1;
+              // Nucleation from bottom; wobble + grow; pop near surface
+              const speed = 1.05 + boil * 0.55 + (i % 3) * 0.08;
+              const phase = (t * speed + i * 0.31) % 1.4;
+              const life = Math.min(1, phase / 1.4);
+              const coalesce = boil > 0.75 && i % 3 === 0 ? 1.5 : 1;
+              const wobble =
+                Math.sin(t * 3.2 + i * 1.7) * (2 + life * 5) * (1 - freeze);
+              const pop = life > 0.88 ? Math.max(0.2, 1 - (life - 0.88) / 0.12) : 1;
               return {
-                x: wb.x + wb.width * (0.12 + ((i * 0.13) % 0.76)),
+                x:
+                  wb.x +
+                  wb.width * (0.14 + ((i * 0.17 + i * 0.03) % 0.72)) +
+                  wobble,
                 y:
                   wb.y +
                   wb.height -
-                  (wb.height * (currentPct / 100)) * (phase / 1.35) -
-                  3,
-                r: (1.8 + (i % 4) * 0.85) * coalesce,
-                opacity: (0.95 - phase * 0.45) * (0.55 + boil * 0.45),
+                  (wb.height * (currentPct / 100)) * life -
+                  2,
+                r: (1.6 + (i % 5) * 0.9) * coalesce * (0.7 + life * 0.55) * pop,
+                opacity:
+                  (0.95 - life * 0.4) *
+                  (0.5 + boil * 0.5) *
+                  pop *
+                  (1 - freeze * 0.7),
               };
             })
           : [];

@@ -10,6 +10,10 @@ import type {
   StructuredPayload,
 } from "./types";
 import { buildLabBridgeFromStructured, storeLabBridge } from "./labBridge";
+import {
+  chassisFromStructured,
+  isSolidIntent,
+} from "./solidDetect";
 
 function AccordionRow({
   label,
@@ -65,6 +69,21 @@ export function FormulaCard({
   const bridge =
     structured?.lab_bridge || buildLabBridgeFromStructured(structured);
   const canOpenLab = Boolean(bridge?.lines?.some((l) => l.labChemicalId));
+  const solid = isSolidIntent({ bridge, structured });
+  const chassis =
+    chassisFromStructured(structured) ||
+    (bridge
+      ? {
+          waxPercent: bridge.solidChassis?.waxPercent ?? 0,
+          oilPercent: bridge.solidChassis?.oilPercent ?? 0,
+          fragranceLoadPercent:
+            bridge.solidChassis?.fragranceLoadPercent ?? 0,
+        }
+      : null);
+  const showChassis =
+    solid &&
+    chassis &&
+    chassis.waxPercent + chassis.oilPercent + chassis.fragranceLoadPercent > 0;
 
   if (!lines.length && !sections?.formula && !sections?.accord) {
     return null;
@@ -154,6 +173,24 @@ export function FormulaCard({
 
       {diff?.changes?.length ? <DiffView diff={diff} /> : null}
 
+      {showChassis && chassis ? (
+        <div>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-lab-muted">
+            Chassis
+          </p>
+          <p className="mt-1.5 font-mono text-[12px] leading-relaxed text-lab-ink/90">
+            wax {Math.round(chassis.waxPercent)} · oil{" "}
+            {Math.round(chassis.oilPercent)} · FO{" "}
+            {Math.round(chassis.fragranceLoadPercent)}
+          </p>
+          <p className="mt-1 font-mono text-[11px] text-lab-muted">
+            State set · matte · alcohol-free
+            <span className="mx-1.5 text-lab-line">·</span>
+            Wear close · reapply from tin
+          </p>
+        </div>
+      ) : null}
+
       {lines.length ? (
         <div>
           <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-lab-muted">
@@ -235,7 +272,9 @@ export function FormulaCard({
               ? "Preparing…"
               : onBuild
                 ? "Use in Plan"
-                : "Open in Lab"}
+                : solid
+                  ? "Open tin on desk"
+                  : "Open in Lab"}
           </button>
           {bridge?.mappingReport ? (
             <p className="text-[11px] leading-relaxed text-lab-muted">

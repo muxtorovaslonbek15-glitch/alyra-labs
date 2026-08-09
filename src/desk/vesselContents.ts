@@ -8,6 +8,8 @@ const CAPACITY_ML: Record<string, number> = {
   flask: 50,
   "test-tube": 10,
   "graduated-cylinder": 25,
+  /** Teaching pan volume for solid perfume tin */
+  tin: 30,
 };
 
 /**

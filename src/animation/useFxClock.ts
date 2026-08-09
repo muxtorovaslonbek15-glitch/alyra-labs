@@ -1,12 +1,14 @@
 import { useEffect, useState, useSyncExternalStore } from "react";
 
 /**
- * Re-renders on rAF while any one-shot FX window is still open.
+ * Re-renders on rAF while any one-shot FX window is still open,
+ * or while `forceAlive` (live heat/cool/stir sim).
  * Returns a monotonic "now" timestamp from the animation loop (0 before first frame).
  */
 export function useFxClock(
   timestamps: Array<number | undefined>,
   windowMs = 2200,
+  forceAlive = false,
 ) {
   const [now, setNow] = useState(0);
 
@@ -16,8 +18,8 @@ export function useFxClock(
   }, 0);
 
   useEffect(() => {
-    if (!latest) return;
-    const endsAt = latest + windowMs;
+    if (!latest && !forceAlive) return;
+    const endsAt = latest ? latest + windowMs : 0;
     let id = 0;
     let cancelled = false;
 
@@ -25,17 +27,19 @@ export function useFxClock(
       if (cancelled) return;
       const wall = Date.now();
       setNow(wall);
-      if (wall < endsAt) id = requestAnimationFrame(loop);
+      if (forceAlive || (endsAt > 0 && wall < endsAt)) {
+        id = requestAnimationFrame(loop);
+      }
     };
     id = requestAnimationFrame(loop);
     return () => {
       cancelled = true;
       cancelAnimationFrame(id);
     };
-  }, [latest, windowMs]);
+  }, [latest, windowMs, forceAlive]);
 
   // Before first rAF, treat a fresh timestamp as "now" so one-shots paint immediately
-  return now || (latest ? latest + 1 : 0);
+  return now || (latest ? latest + 1 : forceAlive ? Date.now() : 0);
 }
 
 export function fxAlive(

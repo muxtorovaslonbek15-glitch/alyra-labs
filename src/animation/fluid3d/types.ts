@@ -39,4 +39,8 @@ export interface FluidState {
   melt: number;
   /** 0–1 solidify toward matte / slow */
   solidify: number;
+  /** 0–1 continuous stir / mix swirl (rod + mix window) */
+  agitation: number;
+  /** 0–1 overflow / spill energy (overfill past lip) */
+  overflow: number;
 }

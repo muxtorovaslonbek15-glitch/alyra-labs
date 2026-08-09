@@ -14,7 +14,12 @@ import {
   FluidVesselCanvas,
   livePreviewToFluidState,
 } from "../fluid3d";
-import type { EngineResult, LiveVesselPreview, VesselFx } from "@/types";
+import type {
+  EngineResult,
+  LiveVesselPreview,
+  VesselFx,
+  VesselSim,
+} from "@/types";
 
 interface Props {
   equipmentId: string;
@@ -29,6 +34,8 @@ interface Props {
   stirLevel?: number;
   heatAttached?: boolean;
   coolAttached?: boolean;
+  /** Live heat/cool/stir sim (optional). */
+  sim?: VesselSim;
   className?: string;
   pouringCue?: boolean;
   /** Small glass tip only — card owns the pour pose. */
@@ -50,6 +57,7 @@ export function GlassVessel({
   stirLevel = 0,
   heatAttached,
   coolAttached,
+  sim,
   className = "",
   pouringCue,
   tiltDeg = 0,
@@ -61,9 +69,25 @@ export function GlassVessel({
   const clipId = `well-${uid}`;
   const glassGrad = `glass-${uid}`;
   const shineGrad = `shine-${uid}`;
+  const simAlive =
+    Boolean(heatAttached) ||
+    Boolean(coolAttached) ||
+    Boolean(sim?.stirActive) ||
+    Boolean(sim?.shakeActive) ||
+    Boolean(sim?.mixActive) ||
+    (sim?.agitation ?? 0) > 0.02;
   const now = useFxClock(
-    [fx?.pourAt, fx?.transferAt, fx?.mixAt, fx?.heatFlashAt, fx?.coolFlashAt],
+    [
+      fx?.pourAt,
+      fx?.transferAt,
+      fx?.mixAt,
+      fx?.heatFlashAt,
+      fx?.coolFlashAt,
+      fx?.stirAt,
+      fx?.shakeAt,
+    ],
     2200,
+    simAlive,
   );
   const prefersReduced = usePrefersReducedMotion();
   const [webglFailed, setWebglFailed] = useState(false);
@@ -80,6 +104,14 @@ export function GlassVessel({
     heatAttached: Boolean(heatAttached),
     coolAttached: Boolean(coolAttached),
     boiling: motion.boiling,
+    simTemperature: sim?.temperature,
+    simFrost: sim?.frost,
+    simViscosity: sim?.viscosity,
+    stirActive: sim?.stirActive,
+    shakeActive: sim?.shakeActive,
+    mixActive: sim?.mixActive,
+    agitation: sim?.agitation,
+    meltFraction: sim?.meltFraction,
   });
 
   const isTransferTarget =
@@ -129,9 +161,18 @@ export function GlassVessel({
     lastResult: result,
     fillColorOverride: fillColor,
     fillPctOverride: displayFillPct,
-    boiling: motion.boiling,
+    boiling: motion.boiling || (Boolean(heatAttached) && (sim?.temperature ?? 0) >= 0.72),
     intensities,
     now,
+    simTemperature: sim?.temperature,
+    simFrost: sim?.frost,
+    simViscosity: sim?.viscosity,
+    stirActive: sim?.stirActive,
+    shakeActive: sim?.shakeActive,
+    mixActive: sim?.mixActive,
+    agitation: sim?.agitation,
+    meltFraction: sim?.meltFraction,
+    mixBlend: sim?.mixBlend,
   });
 
   const liquidMotion: LiquidMotion = {

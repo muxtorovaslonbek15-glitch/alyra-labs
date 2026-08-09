@@ -78,4 +78,39 @@ describe("deriveBuildSteps", () => {
     const amounts = steps.filter((s) => s.kind === "set_amount");
     expect(amounts.length).toBe(3);
   });
+
+  it("solid format places tin when equipment exists", () => {
+    const solid: LabBridgeFormula = {
+      ...bridge,
+      format: "Solid",
+      vessel: { equipmentId: "beaker", autoMix: true },
+      lines: [
+        {
+          perfumerIngredientId: "beeswax",
+          labChemicalId: "beeswax",
+          name: "Beeswax",
+          percent: 40,
+          role: "wax",
+          amountMl: 2,
+          mapStatus: "exact",
+        },
+        {
+          perfumerIngredientId: "rose-absolute",
+          labChemicalId: "rose-oil",
+          name: "Rose",
+          percent: 12,
+          role: "heart",
+          amountMl: 1,
+          mapStatus: "alias",
+        },
+      ],
+      mappingReport: { mappedCount: 2, unmappedCount: 0 },
+    };
+    const steps = deriveBuildSteps(solid);
+    const place = steps.find((s) => s.kind === "place_vessel");
+    expect(place?.equipmentId).toBe("tin");
+    expect(place?.narration.toLowerCase()).toContain("tin");
+    const mix = steps.find((s) => s.kind === "mix");
+    expect(mix?.narration.toLowerCase()).toMatch(/cast/);
+  });
 });

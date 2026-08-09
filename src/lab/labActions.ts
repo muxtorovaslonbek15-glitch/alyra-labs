@@ -37,6 +37,33 @@ export function tryShakeVessel(vesselId: string): EngineResult | null {
   return withLabAccess(() => useDeskStore.getState().shakeVessel(vesselId));
 }
 
+export function tryToggleStirActive(vesselId: string): boolean {
+  return (
+    withLabAccess(() => {
+      useDeskStore.getState().toggleStirActive(vesselId);
+      return true;
+    }) ?? false
+  );
+}
+
+export function tryToggleShakeActive(vesselId: string): boolean {
+  return (
+    withLabAccess(() => {
+      useDeskStore.getState().toggleShakeActive(vesselId);
+      return true;
+    }) ?? false
+  );
+}
+
+export function tryToggleMixActive(vesselId: string): boolean {
+  return (
+    withLabAccess(() => {
+      useDeskStore.getState().toggleMixActive(vesselId);
+      return true;
+    }) ?? false
+  );
+}
+
 export function trySeedDemoReaction(): EngineResult | null {
   return withLabAccess(() => useDeskStore.getState().seedDemoReaction());
 }

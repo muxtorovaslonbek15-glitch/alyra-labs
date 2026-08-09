@@ -28,6 +28,7 @@ import {
 import {
   buildLabBridgeFromStructured,
   consumeChatBridge,
+  consumeGuidePrompt,
 } from "./labBridge";
 import { Prose } from "./Prose";
 import { ThinkingPanel } from "./ThinkingPanel";
@@ -107,12 +108,42 @@ export function PerfumerChat({
   const [nudgeDismissed, setNudgeDismissed] = useState(false);
   const [nudgeShownForDraft, setNudgeShownForDraft] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const composerRef = useRef<HTMLTextAreaElement>(null);
   const persistTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const chatsRef = useRef<ChatSession[]>([]);
   const activeIdRef = useRef<string | null>(null);
   const planTracked = useRef<string | null>(null);
   const building = builderMode === "building";
   const inputWords = wordCount(input);
+
+  /** Auto-grow composer up to ~6–8 lines, then scroll (JS fallback if no field-sizing). */
+  const syncComposerHeight = useCallback(() => {
+    const el = composerRef.current;
+    if (!el) return;
+    // Native grow: Chrome/Safari/Firefox modern — clear any stale inline height.
+    if (
+      typeof CSS !== "undefined" &&
+      typeof CSS.supports === "function" &&
+      CSS.supports("field-sizing", "content")
+    ) {
+      el.style.height = "";
+      el.style.overflowY = "";
+      return;
+    }
+    const maxPx = shell ? (bottomDock ? 112 : 128) : 160;
+    const minPx = shell ? (bottomDock ? 28 : 32) : 44;
+    el.style.overflowY = "hidden";
+    el.style.maxHeight = "none";
+    el.style.height = "0px";
+    const full = el.scrollHeight;
+    el.style.maxHeight = "";
+    el.style.height = `${Math.min(Math.max(full, minPx), maxPx)}px`;
+    el.style.overflowY = full > maxPx ? "auto" : "hidden";
+  }, [shell, bottomDock]);
+
+  useEffect(() => {
+    syncComposerHeight();
+  }, [input, syncComposerHeight]);
   const showPlanNudge =
     shell &&
     chatAgentMode === "agent" &&
@@ -243,6 +274,10 @@ export function PerfumerChat({
     setActiveId(nextActive);
     setHydrated(true);
     saveLocalStore({ version: 1, activeId: nextActive, chats: nextChats });
+
+    // /lab/guide → Try in chat: autofill composer once
+    const guidePrompt = consumeGuidePrompt();
+    if (guidePrompt) setInput(guidePrompt);
 
     void checkPerfumerHealth().then((h) => {
       if (!h.ok && h.error) setBanner(h.error);
@@ -1120,8 +1155,13 @@ export function PerfumerChat({
               }`}
             >
               <textarea
+                ref={composerRef}
                 value={input}
-                onChange={(e) => setInput(e.target.value)}
+                onChange={(e) => {
+                  setInput(e.target.value);
+                  requestAnimationFrame(syncComposerHeight);
+                }}
+                onInput={syncComposerHeight}
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && !e.shiftKey) {
                     e.preventDefault();
@@ -1140,12 +1180,12 @@ export function PerfumerChat({
                 }
                 className={
                   shell
-                    ? `max-h-24 flex-1 resize-none border-0 bg-transparent px-1 focus:outline-none ${
+                    ? `[field-sizing:content] min-w-0 flex-1 resize-none overflow-y-auto border-0 bg-transparent px-1 focus:outline-none ${
                         bottomDock
-                          ? "min-h-[28px] py-1 text-xs leading-snug text-lab-ink placeholder:text-lab-muted/65"
-                          : "min-h-[32px] py-1.5 text-[12px] leading-snug text-lab-ink placeholder:text-lab-muted/70"
+                          ? "max-h-28 min-h-7 py-1 text-[13px] leading-snug text-lab-ink placeholder:text-lab-muted/65"
+                          : "max-h-32 min-h-8 py-1.5 text-[13px] leading-snug text-lab-ink placeholder:text-lab-muted/70"
                       }`
-                    : "min-h-[48px] flex-1 resize-none rounded-xl border border-lab-line bg-lab-panel px-3 py-3 text-[15px] leading-snug text-lab-ink placeholder:text-lab-muted/70 focus:outline-none focus:ring-1 focus:ring-lab-ink/30 md:min-h-[44px] md:rounded-lg md:py-2.5 md:text-[13px]"
+                    : "[field-sizing:content] max-h-40 min-h-12 min-w-0 flex-1 resize-none overflow-y-auto rounded-xl border border-lab-line bg-lab-panel px-3 py-3 text-[15px] leading-snug text-lab-ink placeholder:text-lab-muted/70 focus:outline-none focus:ring-1 focus:ring-lab-ink/30 md:min-h-11 md:rounded-lg md:py-2.5 md:text-[13px]"
                 }
                 disabled={busy || building}
               />

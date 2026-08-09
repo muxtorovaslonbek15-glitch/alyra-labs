@@ -110,23 +110,15 @@ describe("computeFxIntensities", () => {
     expect(melt.melt).toBeGreaterThan(0.5);
   });
 
-  it("picks desk shake vs pour settle", () => {
-    expect(
-      deskMotionClass([
-        computeFxIntensities({
-          fx: { mixAt: now - 40 },
-          effects: [{ kind: "blast", intensity: "high" }],
-          now,
-        }),
-      ]),
-    ).toBe("lab-desk-blast-shake");
-    expect(
-      deskMotionClass([
-        computeFxIntensities({
-          fx: { transferAt: now - 1400, transferRole: "target" },
-          now,
-        }),
-      ]),
-    ).toBe("lab-desk-pour-settle");
+  it("chills from cool bath without full freeze", () => {
+    const coolOnly = computeFxIntensities({
+      fx: {},
+      effects: [],
+      now,
+      coolAttached: true,
+    });
+    expect(coolOnly.cool).toBeGreaterThan(0.6);
+    expect(coolOnly.solidify).toBeLessThan(0.35);
+    expect(coolOnly.solidify).toBeGreaterThan(0.1);
   });
 });

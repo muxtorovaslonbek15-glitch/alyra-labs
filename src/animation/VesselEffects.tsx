@@ -117,26 +117,34 @@ export function VesselEffects({
   const crystal = result?.effects.some((e) => e.kind === "crystal");
   const overflow = result?.effects.some((e) => e.kind === "overflow");
   const forceBoil = intensities.boil > 0.25;
+  const gasVisible = Boolean(
+    gas && (mixing || intensities.mix > 0.05 || forceBoil || stirLevel > 0),
+  );
 
   // Cap DOM nodes: fewer when energetic or when WebGL owns particles
   const energetic = intensities.blast > 0.3 || intensities.boil > 0.6;
+  // WebGL owns bulk bubbles; keep a few CSS surface-pops so the meniscus reads
   const bubbleCount = fluid3dActive
-    ? 0
+    ? gasVisible
+      ? gasIntensity === "high"
+        ? 4
+        : 2
+      : 0
     : gasIntensity === "high"
       ? energetic
-        ? 10
-        : 14
+        ? 12
+        : 16
       : gasIntensity === "low"
-        ? 5
+        ? 6
         : energetic
-          ? 7
-          : 10;
+          ? 8
+          : 12;
   const boilCount = forceBoil
     ? fluid3dActive
-      ? 2
+      ? 3
       : energetic
-        ? 8
-        : 12
+        ? 10
+        : 14
     : 0;
   const burning = intensities.burn > 0.25;
 
@@ -184,9 +192,6 @@ export function VesselEffects({
     return () => clearInterval(id);
   }, [gas, mixing, forceBoil, ppt, intensities.boil, now]);
 
-  const gasVisible = Boolean(
-    gas && (mixing || intensities.mix > 0.05 || forceBoil),
-  );
   const smokeCount = smoke
     ? result?.effects.find((e) => e.kind === "smoke")?.intensity === "high"
       ? fluid3dActive
@@ -302,13 +307,27 @@ export function VesselEffects({
         </div>
       ) : null}
 
-      {/* Stir vortex */}
+      {/* Stir vortex — stronger ring when actively stirring */}
       {stirring && (stirActive || stirLevel >= 2) ? (
         <div
           className={`lab-swirl absolute inset-4 rounded-full border-2 border-white/40 ${
             stirActive && !reduced ? "lab-swirl-active" : "lab-swirl-idle"
           }`}
-          style={{ opacity: 0.3 + stirLevel * 0.15 }}
+          style={{
+            opacity: 0.28 + stirLevel * 0.18 + intensities.mix * 0.25,
+            borderWidth: stirActive ? 2.5 : 2,
+          }}
+        />
+      ) : null}
+      {/* Secondary counter-swirl for mix / shake energy */}
+      {stirring && intensities.mix > 0.35 && !reduced ? (
+        <div
+          className="lab-swirl lab-swirl-active absolute inset-6 rounded-full border border-white/25"
+          style={{
+            opacity: 0.2 + intensities.mix * 0.3,
+            animationDirection: "reverse",
+            animationDuration: "0.9s",
+          }}
         />
       ) : null}
 
@@ -329,18 +348,19 @@ export function VesselEffects({
         </>
       ) : null}
 
-      {/* Reaction gas bubbles */}
+      {/* Reaction gas bubbles — nucleation from bottom, wobble via CSS */}
       {gasVisible
         ? Array.from({ length: bubbleCount }).map((_, i) => (
             <span
               key={`b-${i}`}
-              className="bubble absolute bottom-3 rounded-full bg-white/85 shadow-[0_0_4px_rgba(255,255,255,0.7)]"
+              className="bubble lab-gas-bubble absolute rounded-full"
               style={{
-                left: `${6 + ((i * 11) % 82)}%`,
-                width: 5 + (i % 4) * 2.5,
-                height: 5 + (i % 4) * 2.5,
-                animationDelay: `${(i * 0.12) % 1.4}s`,
-                animationDuration: `${1.05 + (i % 3) * 0.22}s`,
+                left: `${8 + ((i * 17 + (i % 3) * 5) % 78)}%`,
+                bottom: `${6 + (i % 4) * 3}%`,
+                width: 4 + (i % 5) * 2.2,
+                height: 4 + (i % 5) * 2.2,
+                animationDelay: `${(i * 0.14) % 1.6}s`,
+                animationDuration: `${1.15 + (i % 4) * 0.28}s`,
                 opacity: reduced ? 0.5 : undefined,
               }}
             />
@@ -352,16 +372,15 @@ export function VesselEffects({
         ? Array.from({ length: boilCount }).map((_, i) => (
             <span
               key={`boil-${i}`}
-              className="bubble lab-boil-bubble absolute bottom-3 rounded-full border border-white/50 bg-white/75"
+              className="bubble lab-boil-bubble absolute rounded-full"
               style={{
-                left: `${8 + ((i * 11) % 78)}%`,
-                width: 4 + (i % 4) * 2.5,
-                height: 4 + (i % 4) * 2.5,
-                animationDelay: `${(i * 0.09) % 1.1}s`,
-                animationDuration: `${0.7 + (i % 4) * 0.15}s`,
-                // Nucleation bias: lower bubbles larger / earlier
-                bottom: `${10 + (i % 3) * 4}%`,
-                opacity: 0.55 + intensities.boil * 0.4,
+                left: `${10 + ((i * 13 + 7) % 72)}%`,
+                width: 3.5 + (i % 4) * 2.8,
+                height: 3.5 + (i % 4) * 2.8,
+                animationDelay: `${(i * 0.08) % 1.05}s`,
+                animationDuration: `${0.65 + (i % 5) * 0.14}s`,
+                bottom: `${8 + (i % 3) * 5}%`,
+                opacity: 0.5 + intensities.boil * 0.45,
               }}
             />
           ))
@@ -540,41 +559,63 @@ export function VesselEffects({
         />
       ) : null}
 
-      {/* Solidify — growing ice front + frost rim + shards */}
+      {/* Solidify — ice front; cool bath alone is chill frost without full freeze */}
       {solidify || coolAttached ? (
         <>
           <div
-            className={`lab-solidify-frost absolute inset-x-[12%] bottom-[10%] rounded-sm bg-gradient-to-t from-sky-200/80 via-sky-100/55 to-transparent shadow-[inset_0_2px_8px_rgba(255,255,255,0.55)] ${
+            className={`lab-solidify-frost absolute inset-x-[12%] bottom-[10%] rounded-sm bg-gradient-to-t from-sky-200/85 via-sky-100/50 to-transparent shadow-[inset_0_2px_10px_rgba(255,255,255,0.6)] ${
               reduced ? "lab-fx-static-visible" : ""
             }`}
             style={{
-              height: `${28 + intensities.solidify * 36}%`,
-              opacity: frostOpacity,
+              height: `${18 + intensities.solidify * 52}%`,
+              opacity:
+                frostOpacity ??
+                0.35 + intensities.solidify * 0.55 + (coolAttached ? 0.15 : 0),
               transformOrigin: "bottom center",
             }}
           />
+          {/* Dendrite veins — only when actually freezing hard */}
+          {!reduced && intensities.solidify > 0.45
+            ? Array.from({ length: 4 }).map((_, i) => (
+                <span
+                  key={`vein-${i}`}
+                  className="lab-ice-vein absolute bg-gradient-to-t from-white/70 to-transparent"
+                  style={{
+                    left: `${18 + i * 18}%`,
+                    bottom: "10%",
+                    width: 1.5,
+                    height: `${18 + intensities.solidify * 28 + (i % 2) * 8}%`,
+                    opacity: 0.35 + intensities.solidify * 0.4,
+                    transform: `rotate(${(i - 1.5) * 6}deg)`,
+                    animationDelay: `${i * 0.15}s`,
+                  }}
+                />
+              ))
+            : null}
           <div
             className={`lab-frost-rim absolute inset-x-[10%] top-[28%] h-2 rounded-full bg-sky-100/70 ${
               reduced ? "lab-fx-static-visible" : ""
             }`}
-            style={{ opacity: reduced ? 0.75 : undefined }}
+            style={{ opacity: reduced ? 0.75 : 0.4 + intensities.cool * 0.4 }}
           />
-          {Array.from({ length: reduced ? 3 : 6 }).map((_, i) => (
-            <span
-              key={`ice-${i}`}
-              className={`lab-ice-shard absolute bg-gradient-to-br from-white to-sky-200/90 ${
-                reduced ? "lab-fx-static-visible" : ""
-              }`}
-              style={{
-                left: `${14 + i * 13}%`,
-                bottom: `${12 + (i % 3) * 5}%`,
-                width: 5 + (i % 3) * 2,
-                height: 7 + (i % 2) * 4,
-                animationDelay: `${i * 0.12}s`,
-                opacity: reduced ? 0.85 : undefined,
-              }}
-            />
-          ))}
+          {intensities.solidify > 0.4
+            ? Array.from({ length: reduced ? 3 : 7 }).map((_, i) => (
+                <span
+                  key={`ice-${i}`}
+                  className={`lab-ice-shard absolute bg-gradient-to-br from-white to-sky-200/90 ${
+                    reduced ? "lab-fx-static-visible" : ""
+                  }`}
+                  style={{
+                    left: `${12 + i * 11}%`,
+                    bottom: `${10 + (i % 3) * 6}%`,
+                    width: 4 + (i % 3) * 2,
+                    height: 6 + (i % 2) * 5,
+                    animationDelay: `${i * 0.1}s`,
+                    opacity: reduced ? 0.85 : undefined,
+                  }}
+                />
+              ))
+            : null}
         </>
       ) : null}
 
@@ -600,24 +641,39 @@ export function VesselEffects({
       {overflow ? (
         <div className="pointer-events-none absolute inset-0">
           <div
-            className="lab-overflow absolute inset-x-[14%] top-[14%] h-4 rounded-full"
+            className="lab-overflow absolute inset-x-[12%] top-[10%] h-5 rounded-full"
             style={{
-              background: `linear-gradient(to bottom, ${fillColor ?? "rgba(143,192,181,0.85)"}cc, transparent)`,
-              opacity: 0.9,
+              background: `linear-gradient(to bottom, ${fillColor ?? "rgba(143,192,181,0.9)"}ee, ${fillColor ?? "rgba(143,192,181,0.4)"}66 55%, transparent)`,
+              opacity: 0.95,
+              boxShadow: `0 2px 8px ${fillColor ?? "rgba(143,192,181,0.35)"}`,
             }}
           />
-          {[0, 1, 2].map((i) => (
+          {/* Foam beads riding the lip */}
+          {Array.from({ length: 5 }).map((_, i) => (
+            <span
+              key={`lip-foam-${i}`}
+              className="lab-foam-bubble absolute rounded-full bg-white/85"
+              style={{
+                left: `${18 + i * 14}%`,
+                top: `${9 + (i % 2)}%`,
+                width: 5 + (i % 3),
+                height: 5 + (i % 3),
+                animationDelay: `${i * 0.08}s`,
+              }}
+            />
+          ))}
+          {[0, 1, 2, 3].map((i) => (
             <span
               key={`spill-${i}`}
               className="lab-overflow-drip absolute rounded-full"
               style={{
-                left: `${28 + i * 18}%`,
-                top: "16%",
-                width: 4 + (i % 2),
-                height: 10 + i * 3,
-                background: fillColor ?? "rgba(143,192,181,0.75)",
-                opacity: 0.7,
-                animationDelay: `${i * 0.12}s`,
+                left: `${22 + i * 16}%`,
+                top: "14%",
+                width: 3.5 + (i % 2),
+                height: 11 + i * 2.5,
+                background: fillColor ?? "rgba(143,192,181,0.8)",
+                opacity: 0.75,
+                animationDelay: `${i * 0.11}s`,
               }}
             />
           ))}
@@ -674,7 +730,24 @@ export function VesselEffects({
         />
       ) : null}
       {heat?.intensity === "exo" || heatAttached ? (
-        <div className="lab-heat-haze pointer-events-none absolute inset-x-3 top-1 h-8" />
+        <>
+          <div className="lab-heat-haze pointer-events-none absolute inset-x-3 top-1 h-8" />
+          {/* Convection shimmer bands */}
+          {!reduced
+            ? [0, 1, 2].map((i) => (
+                <div
+                  key={`convect-${i}`}
+                  className="lab-heat-convection pointer-events-none absolute inset-x-[18%] rounded-full bg-gradient-to-t from-amber-200/0 via-amber-100/25 to-transparent"
+                  style={{
+                    bottom: `${22 + i * 14}%`,
+                    height: 10,
+                    animationDelay: `${i * 0.35}s`,
+                    opacity: 0.35 + intensities.heat * 0.45,
+                  }}
+                />
+              ))
+            : null}
+        </>
       ) : null}
       {heat?.intensity === "endo" || coolAttached ? (
         <div className="lab-heat-endo pointer-events-none absolute inset-0 rounded-[inherit]">

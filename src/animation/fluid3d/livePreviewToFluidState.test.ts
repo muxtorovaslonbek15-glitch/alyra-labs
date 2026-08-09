@@ -84,6 +84,31 @@ describe("livePreviewToFluidState", () => {
     expect(melt.melt).toBe(1);
   });
 
+  it("maps stir level and overfill into agitation / overflow", () => {
+    const stirred = livePreviewToFluidState(preview({ fillPct: 40 }), {
+      fx: {},
+      heatAttached: false,
+      stirLevel: 3,
+    });
+    expect(stirred.agitation).toBeGreaterThan(0.4);
+
+    const over = livePreviewToFluidState(preview({ fillPct: 108 }), {
+      fx: {},
+      heatAttached: false,
+      stirLevel: 0,
+    });
+    expect(over.overflow).toBeGreaterThan(0.5);
+    expect(over.foam).toBeGreaterThan(0.4);
+  });
+
+  it("treats gas effects as bubble emitters", () => {
+    const state = livePreviewToFluidState(
+      preview({ effects: [{ kind: "gas", intensity: "high" }] }),
+      { fx: {}, heatAttached: false, stirLevel: 0 },
+    );
+    expect(state.bubble).toBe(true);
+  });
+
   it("respects fill overrides when preview is missing", () => {
     const state = livePreviewToFluidState(undefined, {
       fx: {},

@@ -15,6 +15,7 @@ import {
 } from "@dnd-kit/core";
 import { ItemPanel } from "@/panel/ItemPanel";
 import { DeskWorkspace } from "@/desk/DeskWorkspace";
+import { DeskSimTicker } from "@/desk/DeskSimTicker";
 import { ExplanationPanel } from "@/explanation/ExplanationPanel";
 import {
   GamificationBar,
@@ -69,6 +70,8 @@ import {
 import { ChatHistoryCanvas } from "@/perfumer/ChatHistoryCanvas";
 import { useBuilderStore, type BuilderTab } from "@/store/builderStore";
 import { useGoalStore } from "@/store/goalStore";
+import { useDeferredSwap } from "@/animation/usePresence";
+import { VesselSimTicker } from "@/desk/VesselSimTicker";
 import type { User } from "firebase/auth";
 
 const ScanWorkbench = dynamic(
@@ -126,6 +129,14 @@ export function LabShell() {
   const hydratePanelPrefs = useBuilderStore((s) => s.hydratePanelPrefs);
   const dockDrag = useChatDockDragState();
   const historyOpen = centerView === "history";
+  const { displayed: dockDisplayed, phase: dockPhase } =
+    useDeferredSwap(chatDock);
+  const dockMotionClass =
+    dockPhase === "out"
+      ? "lab-dock-fade-out"
+      : dockPhase === "in"
+        ? "lab-dock-fade-in"
+        : "";
 
   useEffect(() => {
     hydratePanelPrefs();
@@ -826,23 +837,24 @@ export function LabShell() {
             />
             <div
               className={`relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden ${
-                chatDock === "bottom" && rightSlot === "chat" && rightOpen
+                dockDisplayed === "bottom" && rightSlot === "chat" && rightOpen
                   ? "gap-0 p-0 md:pt-2 md:px-2 md:pb-0"
                   : "gap-0 p-0 md:gap-0 md:p-2"
               }`}
             >
               <div className="relative min-h-0 min-w-0 flex-1 overflow-hidden">
                 <div
-                  className={`h-full ${
+                  className={`h-full lab-crossfade ${
                     historyOpen
-                      ? "md:pointer-events-none md:invisible"
-                      : ""
+                      ? "lab-crossfade-out md:pointer-events-none"
+                      : "lab-crossfade-in"
                   }`}
                 >
+                  <DeskSimTicker />
                   <DeskWorkspace
                     flushBottom={
                       !historyOpen &&
-                      chatDock === "bottom" &&
+                      dockDisplayed === "bottom" &&
                       rightSlot === "chat" &&
                       rightOpen
                     }
@@ -857,7 +869,7 @@ export function LabShell() {
                   {!historyOpen ? (
                     <div
                       className={`pointer-events-none absolute left-3 right-3 z-30 flex flex-col items-start gap-2 md:left-3 md:right-auto ${
-                        chatDock === "bottom" &&
+                        dockDisplayed === "bottom" &&
                         rightSlot === "chat" &&
                         rightOpen
                           ? "bottom-3"
@@ -884,11 +896,13 @@ export function LabShell() {
                     </div>
                   ) : null}
                 </div>
-                {historyOpen ? <ChatHistoryCanvas /> : null}
+                <ChatHistoryCanvas />
               </div>
               {/* Desktop bottom dock — flush under wood; phone keeps sheets */}
-              {chatDock === "bottom" ? (
-                <DesktopBuilderChrome dock="bottom" />
+              {dockDisplayed === "bottom" ? (
+                <div className={dockMotionClass}>
+                  <DesktopBuilderChrome dock="bottom" />
+                </div>
               ) : null}
             </div>
             <ExplanationPanel
@@ -906,8 +920,10 @@ export function LabShell() {
                 }
               }}
             />
-            {chatDock === "right" ? (
-              <DesktopBuilderChrome dock="right" />
+            {dockDisplayed === "right" ? (
+              <div className={dockMotionClass}>
+                <DesktopBuilderChrome dock="right" />
+              </div>
             ) : null}
             {/* Phone-only Chat/Plan/Build sheets — desktop uses DesktopBuilderChrome */}
             <MobileBuilderChrome
@@ -926,6 +942,7 @@ export function LabShell() {
           <RecipeJournal />
         </div>
         <ToastHost />
+        <VesselSimTicker />
         <GoalPicker
           onOpenAtelier={() => {
             setShopOpen(false);

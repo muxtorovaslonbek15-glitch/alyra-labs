@@ -178,6 +178,22 @@ export interface ComputeFxIntensitiesInput {
   heatAttached?: boolean;
   coolAttached?: boolean;
   boiling?: boolean;
+  /** Live sim temperature 0–1 (ambient 0.5). */
+  simTemperature?: number;
+  /** Live frost 0–1. */
+  simFrost?: number;
+  /** Live viscosity 0–1. */
+  simViscosity?: number;
+  /** Continuous stir engaged. */
+  stirActive?: boolean;
+  /** Continuous shake engaged. */
+  shakeActive?: boolean;
+  /** Continuous mix/cast engaged. */
+  mixActive?: boolean;
+  /** 0–1 ease-out agitation from live sim. */
+  agitation?: number;
+  /** Solid melt fraction 0–1. */
+  meltFraction?: number;
 }
 
 /**
@@ -194,7 +210,17 @@ export function computeFxIntensities(
     heatAttached = false,
     coolAttached = false,
     boiling = false,
+    simTemperature,
+    simFrost = 0,
+    simViscosity,
+    stirActive = false,
+    shakeActive = false,
+    mixActive = false,
+    agitation = 0,
+    meltFraction = 0,
   } = input;
+  const temp =
+    typeof simTemperature === "number" ? simTemperature : heatAttached ? 0.62 : 0.5;
 
   const pourAt = fx?.pourAt ?? fx?.transferAt;
   const pourElapsed =
@@ -209,9 +235,20 @@ export function computeFxIntensities(
   const pour = clamp01(pourEnv * Math.max(streamGate, pourPhase === "hold" ? 0.25 : 0));
 
   const mixAt = fx?.mixAt;
+  const continuousMix = clamp01(
+    Math.max(
+      agitation,
+      stirActive ? 0.55 : 0,
+      shakeActive ? 0.8 : 0,
+      mixActive ? 0.9 : 0,
+    ),
+  );
   const mix = Math.max(
     fxEnvelope(mixAt, MIX_WINDOW_MS, now, 0.05, 0.45),
     fxEnvelope(fx?.shakeAt, 1600, now, 0.05, 0.4),
+    continuousMix > 0.05
+      ? continuousMix * (0.85 + 0.15 * Math.sin(now / 220))
+      : 0,
   );
 
   const blastKind =
@@ -227,9 +264,10 @@ export function computeFxIntensities(
   const boilFx = effectStrength(effects, "boil");
   const bubbleFx = effectStrength(effects, "bubble");
   const gasFx = effectStrength(effects, "gas");
+  const simBoil = heatAttached && temp >= 0.72 ? clamp01((temp - 0.72) / 0.28) : 0;
   const boilSustained =
-    boiling || boilFx > 0
-      ? Math.max(0.55, boilFx, boiling ? 0.85 : 0)
+    boiling || boilFx > 0 || simBoil > 0.15
+      ? Math.max(0.55, boilFx, boiling ? 0.85 : 0, simBoil * 0.95)
       : 0;
   // Nucleation pulse rides the clock so CSS / SVG / particles share peaks
   const boilPulse =
@@ -242,12 +280,18 @@ export function computeFxIntensities(
 
   const solidFx = effectStrength(effects, "solidify");
   const crystalFx = effectStrength(effects, "crystal");
+  // Cool bath chills / thickens; frost + viscosity drive gradual ice
   const solidify = clamp01(
     Math.max(
       solidFx,
       crystalFx * 0.7,
-      coolAttached ? 0.55 : 0,
-      fxEnvelope(fx?.coolFlashAt, COOL_FLASH_MS, now) * 0.85,
+      simFrost * 0.95,
+      typeof simViscosity === "number" && simViscosity > 0.45
+        ? (simViscosity - 0.45) * 1.2
+        : 0,
+      coolAttached && solidFx === 0 ? 0.18 + simFrost * 0.35 : coolAttached ? 0.35 : 0,
+      fxEnvelope(fx?.coolFlashAt, COOL_FLASH_MS, now) *
+        (solidFx > 0 || crystalFx > 0 || simFrost > 0.3 ? 0.85 : 0.35),
     ),
   );
 
@@ -255,12 +299,10 @@ export function computeFxIntensities(
   const melt = clamp01(
     Math.max(
       meltFx,
-      // Heat unlocking a prior solidify/cool crust
-      heatAttached && solidFx === 0 && coolAttached === false
-        ? meltFx
-        : 0,
+      meltFraction,
+      heatAttached && temp > 0.55 ? (temp - 0.55) * 0.8 : 0,
       fxEnvelope(fx?.heatFlashAt, HEAT_FLASH_MS, now) *
-        (meltFx > 0 || hasKind(effects, "melt") ? 1 : 0),
+        (meltFx > 0 || hasKind(effects, "melt") || meltFraction > 0.2 ? 1 : 0.35),
     ),
   );
 
@@ -281,7 +323,7 @@ export function computeFxIntensities(
   const heatFx = effects?.find((e) => e.kind === "heat");
   const heat = clamp01(
     Math.max(
-      heatAttached ? 0.5 : 0,
+      heatAttached ? 0.35 + Math.max(0, temp - 0.5) * 1.1 : Math.max(0, temp - 0.55) * 0.6,
       heatFx?.intensity === "exo" ? 0.85 : 0,
       heatFx?.intensity === "endo" ? 0 : effectStrength(effects, "heat") * 0.5,
       fxEnvelope(fx?.heatFlashAt, HEAT_FLASH_MS, now),
@@ -291,9 +333,10 @@ export function computeFxIntensities(
 
   const cool = clamp01(
     Math.max(
-      coolAttached ? 0.55 : 0,
+      coolAttached ? 0.62 + simFrost * 0.35 : simFrost * 0.75,
       heatFx?.intensity === "endo" ? 0.75 : 0,
-      solidify * 0.5,
+      solidify * 0.35,
+      temp < 0.45 ? (0.45 - temp) * 1.4 : 0,
       fxEnvelope(fx?.coolFlashAt, COOL_FLASH_MS, now),
     ),
   );

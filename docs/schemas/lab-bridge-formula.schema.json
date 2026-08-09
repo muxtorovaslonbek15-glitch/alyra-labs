@@ -32,8 +32,8 @@
       "properties": {
         "equipmentId": {
           "type": "string",
-          "enum": ["beaker", "flask", "test-tube"],
-          "description": "Maps to desk placeEquipment ids; default beaker."
+          "enum": ["beaker", "flask", "test-tube", "tin"],
+          "description": "Maps to desk placeEquipment ids; tin when format is Solid; default beaker."
         },
         "autoMix": { "type": "boolean", "default": false },
         "heatAttached": { "type": "boolean", "default": false }

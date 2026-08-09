@@ -135,7 +135,7 @@ export interface LabBridgeFormula {
   format: "EDP" | "Oil" | "Solid";
   batchGrams?: number;
   vessel: {
-    equipmentId: "beaker" | "flask" | "test-tube";
+    equipmentId: "beaker" | "flask" | "test-tube" | "tin";
     autoMix?: boolean;
     heatAttached?: boolean;
   };

@@ -25,6 +25,12 @@ import { VESSEL_CARD } from "@/desk/vesselLayout";
 import { useInventoryStockStore, defaultStockMl } from "@/store/inventoryStockStore";
 import { showToast } from "@/gamification/ToastHost";
 import { labCopy } from "@/lab/labCopy";
+import {
+  defaultVesselSim,
+  ensureSim,
+  simNeedsTick,
+  tickVesselSim,
+} from "@/desk/vesselSim";
 
 if (typeof window !== "undefined") {
   try {
@@ -36,12 +42,16 @@ if (typeof window !== "undefined") {
   }
 }
 
+const SIM_FALLBACK_DT = 500;
+
 interface DeskState {
   vessels: DeskVessel[];
   activeVesselId: string | null;
   lastExplanationVesselId: string | null;
   /** Preferred pour volume when adding chemicals (ml). */
   pourAmountMl: number;
+  /** Wall clock of last tickSims (for dt). */
+  lastSimTickAt: number | null;
   setPourAmountMl: (ml: number) => void;
   placeEquipment: (
     equipmentId: string,
@@ -68,6 +78,12 @@ interface DeskState {
   detachCool: (vesselId: string) => void;
   toggleCool: (vesselId: string) => void;
   stirVessel: (vesselId: string, autoMix?: boolean) => EngineResult | null;
+  /** Toggle continuous stir (alive swirl + level climb). */
+  toggleStirActive: (vesselId: string) => void;
+  /** Toggle continuous shake. */
+  toggleShakeActive: (vesselId: string) => void;
+  /** Toggle continuous mix/cast (auto-resolves chemistry after timer). */
+  toggleMixActive: (vesselId: string) => void;
   removeLastChemical: (vesselId: string) => void;
   removeVessel: (vesselId: string) => void;
   clearVessel: (vesselId: string) => void;
@@ -76,6 +92,8 @@ interface DeskState {
   setActiveVessel: (id: string | null) => void;
   mixVessel: (vesselId: string) => EngineResult | null;
   shakeVessel: (vesselId: string) => EngineResult | null;
+  /** Advance live heat/cool/stir/evaporation sim (call ~500ms). */
+  tickSims: (now?: number) => void;
   seedDemoReaction: () => EngineResult | null;
   runPair: (
     equipmentId: string,
@@ -147,6 +165,7 @@ export const useDeskStore = create<DeskState>()(
       activeVesselId: null,
       lastExplanationVesselId: null,
       pourAmountMl: 2,
+      lastSimTickAt: null,
 
       setPourAmountMl: (ml) => {
         const clamped = Math.round(Math.max(0.1, Math.min(50, ml)) * 10) / 10;
@@ -199,6 +218,9 @@ export const useDeskStore = create<DeskState>()(
           coolAttached: false,
           stirLevel: 0,
           fx: {},
+          sim: defaultVesselSim(
+            equipmentId === "tin" ? { meltFraction: 0, viscosity: 0.7 } : undefined,
+          ),
           position: position ?? {
             x: 48 + (n % 4) * 200,
             y: 56 + Math.floor(n / 4) * 220,
@@ -425,28 +447,41 @@ export const useDeskStore = create<DeskState>()(
 
       attachHeat: (vesselId) => {
         labSound.heat();
+        const now = Date.now();
         set((s) => ({
-          vessels: s.vessels.map((v) =>
-            v.instanceId === vesselId
-              ? withLivePreview({
-                  ...v,
-                  heatAttached: true,
-                  coolAttached: false,
-                  fx: patchFx(v.fx, { heatFlashAt: Date.now() }),
-                })
-              : v,
-          ),
+          vessels: s.vessels.map((v) => {
+            if (v.instanceId !== vesselId) return v;
+            const sim = ensureSim(v);
+            return withLivePreview({
+              ...v,
+              heatAttached: true,
+              coolAttached: false,
+              fx: patchFx(v.fx, { heatFlashAt: now }),
+              sim: {
+                ...sim,
+                processStartedAt: now,
+                coolElapsedMs: 0,
+              },
+            });
+          }),
           activeVesselId: vesselId,
         }));
       },
 
       detachHeat: (vesselId) => {
         set((s) => ({
-          vessels: s.vessels.map((v) =>
-            v.instanceId === vesselId
-              ? withLivePreview({ ...v, heatAttached: false })
-              : v,
-          ),
+          vessels: s.vessels.map((v) => {
+            if (v.instanceId !== vesselId) return v;
+            const sim = ensureSim(v);
+            return withLivePreview({
+              ...v,
+              heatAttached: false,
+              sim: {
+                ...sim,
+                processStartedAt: v.coolAttached ? sim.processStartedAt : undefined,
+              },
+            });
+          }),
         }));
       },
 
@@ -459,28 +494,42 @@ export const useDeskStore = create<DeskState>()(
 
       attachCool: (vesselId) => {
         labSound.cool();
+        const now = Date.now();
         set((s) => ({
-          vessels: s.vessels.map((v) =>
-            v.instanceId === vesselId
-              ? withLivePreview({
-                  ...v,
-                  coolAttached: true,
-                  heatAttached: false,
-                  fx: patchFx(v.fx, { coolFlashAt: Date.now() }),
-                })
-              : v,
-          ),
+          vessels: s.vessels.map((v) => {
+            if (v.instanceId !== vesselId) return v;
+            const sim = ensureSim(v);
+            return withLivePreview({
+              ...v,
+              coolAttached: true,
+              heatAttached: false,
+              fx: patchFx(v.fx, { coolFlashAt: now }),
+              sim: {
+                ...sim,
+                processStartedAt: now,
+                heatElapsedMs: 0,
+              },
+            });
+          }),
           activeVesselId: vesselId,
         }));
       },
 
       detachCool: (vesselId) => {
         set((s) => ({
-          vessels: s.vessels.map((v) =>
-            v.instanceId === vesselId
-              ? withLivePreview({ ...v, coolAttached: false })
-              : v,
-          ),
+          vessels: s.vessels.map((v) => {
+            if (v.instanceId !== vesselId) return v;
+            const sim = ensureSim(v);
+            return withLivePreview({
+              ...v,
+              coolAttached: false,
+              sim: {
+                ...sim,
+                // Keep frost / coolElapsed so mid-abort leaves partial ice state
+                processStartedAt: v.heatAttached ? sim.processStartedAt : undefined,
+              },
+            });
+          }),
         }));
       },
 
@@ -499,13 +548,21 @@ export const useDeskStore = create<DeskState>()(
 
         const contents = getVesselContents(vessel);
         const nextLevel = Math.min(3, vessel.stirLevel + 1);
+        const now = Date.now();
+        const sim = ensureSim(vessel);
         set((s) => ({
           vessels: s.vessels.map((v) =>
             v.instanceId === vesselId
               ? {
                   ...v,
                   stirLevel: nextLevel,
-                  fx: patchFx(v.fx, { stirAt: Date.now() }),
+                  fx: patchFx(v.fx, { stirAt: now }),
+                  sim: {
+                    ...sim,
+                    stirActive: true,
+                    stirStartedAt: sim.stirStartedAt ?? now,
+                    processStartedAt: sim.processStartedAt ?? now,
+                  },
                 }
               : v,
           ),
@@ -520,6 +577,158 @@ export const useDeskStore = create<DeskState>()(
           return get().mixVessel(vesselId);
         }
         return null;
+      },
+
+      toggleStirActive: (vesselId) => {
+        if (!assertLabActionAllowed()) return;
+        const vessel = get().vessels.find((v) => v.instanceId === vesselId);
+        if (!vessel) return;
+        const sim = ensureSim(vessel);
+        const now = Date.now();
+        if (sim.stirActive) {
+          set((s) => ({
+            vessels: s.vessels.map((v) =>
+              v.instanceId === vesselId
+                ? {
+                    ...v,
+                    sim: {
+                      ...ensureSim(v),
+                      stirActive: false,
+                      stirStartedAt: undefined,
+                    },
+                  }
+                : v,
+            ),
+          }));
+          return;
+        }
+        labSound.stir();
+        set((s) => ({
+          vessels: s.vessels.map((v) =>
+            v.instanceId === vesselId
+              ? {
+                  ...v,
+                  stirLevel: Math.min(3, Math.max(1, v.stirLevel)),
+                  fx: patchFx(v.fx, { stirAt: now }),
+                  sim: {
+                    ...sim,
+                    stirActive: true,
+                    stirStartedAt: now,
+                    shakeActive: false,
+                    shakeStartedAt: undefined,
+                    shakeUntil: undefined,
+                    mixActive: false,
+                    mixStartedAt: undefined,
+                    mixResolved: false,
+                    processStartedAt: sim.processStartedAt ?? now,
+                  },
+                }
+              : v,
+          ),
+          activeVesselId: vesselId,
+        }));
+      },
+
+      toggleShakeActive: (vesselId) => {
+        if (!assertLabActionAllowed()) return;
+        const vessel = get().vessels.find((v) => v.instanceId === vesselId);
+        if (!vessel) return;
+        if (vessel.equipmentId === "tin") return;
+        const sim = ensureSim(vessel);
+        const now = Date.now();
+        if (sim.shakeActive) {
+          set((s) => ({
+            vessels: s.vessels.map((v) =>
+              v.instanceId === vesselId
+                ? {
+                    ...v,
+                    sim: {
+                      ...ensureSim(v),
+                      shakeActive: false,
+                      shakeStartedAt: undefined,
+                      shakeUntil: undefined,
+                    },
+                  }
+                : v,
+            ),
+          }));
+          return;
+        }
+        labSound.shake();
+        set((s) => ({
+          vessels: s.vessels.map((v) =>
+            v.instanceId === vesselId
+              ? {
+                  ...v,
+                  stirLevel: Math.min(3, v.stirLevel + 1),
+                  fx: patchFx(v.fx, { shakeAt: now }),
+                  sim: {
+                    ...sim,
+                    shakeActive: true,
+                    shakeStartedAt: now,
+                    shakeUntil: undefined,
+                    stirActive: false,
+                    stirStartedAt: undefined,
+                    mixActive: false,
+                    mixStartedAt: undefined,
+                    mixResolved: false,
+                    processStartedAt: sim.processStartedAt ?? now,
+                  },
+                }
+              : v,
+          ),
+          activeVesselId: vesselId,
+        }));
+      },
+
+      toggleMixActive: (vesselId) => {
+        if (!assertLabActionAllowed()) return;
+        const vessel = get().vessels.find((v) => v.instanceId === vesselId);
+        if (!vessel) return;
+        const sim = ensureSim(vessel);
+        const now = Date.now();
+        if (sim.mixActive) {
+          set((s) => ({
+            vessels: s.vessels.map((v) =>
+              v.instanceId === vesselId
+                ? {
+                    ...v,
+                    sim: {
+                      ...ensureSim(v),
+                      mixActive: false,
+                      mixStartedAt: undefined,
+                      mixResolved: false,
+                    },
+                  }
+                : v,
+            ),
+          }));
+          return;
+        }
+        labSound.mix();
+        set((s) => ({
+          vessels: s.vessels.map((v) =>
+            v.instanceId === vesselId
+              ? {
+                  ...v,
+                  fx: patchFx(v.fx, { mixAt: now, stirAt: now }),
+                  sim: {
+                    ...sim,
+                    mixActive: true,
+                    mixStartedAt: now,
+                    mixResolved: false,
+                    stirActive: false,
+                    stirStartedAt: undefined,
+                    shakeActive: false,
+                    shakeStartedAt: undefined,
+                    shakeUntil: undefined,
+                    processStartedAt: now,
+                  },
+                }
+              : v,
+          ),
+          activeVesselId: vesselId,
+        }));
       },
 
       removeLastChemical: (vesselId) => {
@@ -563,6 +772,11 @@ export const useDeskStore = create<DeskState>()(
                   coolAttached: false,
                   stirLevel: 0,
                   fx: {},
+                  sim: defaultVesselSim(
+                    v.equipmentId === "tin"
+                      ? { meltFraction: 0, viscosity: 0.7 }
+                      : undefined,
+                  ),
                 }
               : v,
           ),
@@ -575,6 +789,7 @@ export const useDeskStore = create<DeskState>()(
           vessels: [],
           activeVesselId: null,
           lastExplanationVesselId: null,
+          lastSimTickAt: null,
         });
       },
 
@@ -613,7 +828,22 @@ export const useDeskStore = create<DeskState>()(
                     mixAt: Date.now(),
                     shakeAt: Date.now(),
                     stirAt: Date.now(),
+                    ...(v.equipmentId === "tin"
+                      ? { castRevealAt: Date.now() }
+                      : {}),
                   }),
+                  sim: {
+                    ...ensureSim(v),
+                    mixBlend: Math.max(ensureSim(v).mixBlend, 0.35),
+                    stirActive: false,
+                    // Continuous mix stays engaged until toggled off
+                    ...(ensureSim(v).mixActive
+                      ? { mixResolved: true }
+                      : { mixActive: false, mixStartedAt: undefined }),
+                    ...(v.equipmentId === "tin"
+                      ? { meltFraction: Math.min(1, ensureSim(v).meltFraction + 0.15) }
+                      : {}),
+                  },
                 })
               : v,
           ),
@@ -625,23 +855,61 @@ export const useDeskStore = create<DeskState>()(
       },
 
       shakeVessel: (vesselId) => {
-        if (!assertLabActionAllowed()) return null;
-        const vessel = get().vessels.find((v) => v.instanceId === vesselId);
-        if (!vessel) return null;
-        labSound.shake();
-        set((s) => ({
-          vessels: s.vessels.map((v) =>
-            v.instanceId === vesselId
-              ? {
-                  ...v,
-                  fx: patchFx(v.fx, { shakeAt: Date.now() }),
-                  stirLevel: Math.min(3, v.stirLevel + 1),
-                }
-              : v,
-          ),
-          activeVesselId: vesselId,
-        }));
+        // Continuous toggle — keeps shaking until toggled off
+        get().toggleShakeActive(vesselId);
         return null;
+      },
+
+      tickSims: (now = Date.now()) => {
+        const vessels = get().vessels;
+        if (!vessels.some(simNeedsTick)) {
+          set({ lastSimTickAt: now });
+          return;
+        }
+        const last = get().lastSimTickAt;
+        const dt = last ? Math.min(2000, now - last) : SIM_FALLBACK_DT;
+        const reducedMotion =
+          typeof window !== "undefined" &&
+          window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+        const resolveIds: string[] = [];
+        const next = vessels.map((v) => {
+          if (!simNeedsTick(v)) return v;
+          const result = tickVesselSim(v, dt, now, { reducedMotion });
+          if (result.shouldResolveMix) resolveIds.push(v.instanceId);
+          let nextV: DeskVessel = {
+            ...v,
+            sim: result.sim,
+            stirLevel: result.stirLevel ?? v.stirLevel,
+            fx: result.fxPatch ? patchFx(v.fx, result.fxPatch) : v.fx,
+          };
+          if (result.contents) {
+            nextV = withLivePreview({
+              ...nextV,
+              ...syncVesselContents(result.contents),
+            });
+          }
+          return nextV;
+        });
+        set({ vessels: next, lastSimTickAt: now });
+        for (const id of resolveIds) {
+          get().mixVessel(id);
+          // Keep mixActive visuals after resolve until user toggles off
+          set((s) => ({
+            vessels: s.vessels.map((v) =>
+              v.instanceId === id
+                ? {
+                    ...v,
+                    sim: {
+                      ...ensureSim(v),
+                      mixResolved: true,
+                      mixActive: true,
+                      mixStartedAt: ensureSim(v).mixStartedAt ?? now,
+                    },
+                  }
+                : v,
+            ),
+          }));
+        }
       },
 
       seedDemoReaction: () => {
@@ -713,7 +981,7 @@ export const useDeskStore = create<DeskState>()(
     }),
     {
       name: "chemlab-desk",
-      version: 2,
+      version: 3,
       migrate: (persisted) => {
         const state = persisted as {
           vessels?: Array<Partial<DeskVessel> & { contentIds?: string[] }>;
@@ -729,9 +997,10 @@ export const useDeskStore = create<DeskState>()(
                   amountMl: defaultPourMl(chemicalId),
                 }));
           const synced = syncVesselContents(contents);
+          const equipmentId = v.equipmentId ?? "beaker";
           const base: DeskVessel = {
             instanceId: v.instanceId ?? uid(),
-            equipmentId: v.equipmentId ?? "beaker",
+            equipmentId,
             ...synced,
             heatAttached: Boolean(v.heatAttached),
             coolAttached: Boolean(v.coolAttached),
@@ -739,6 +1008,12 @@ export const useDeskStore = create<DeskState>()(
             lastResult: v.lastResult,
             position: v.position ?? { x: 48, y: 56 },
             fx: {},
+            sim: defaultVesselSim(
+              v.sim ??
+                (equipmentId === "tin"
+                  ? { meltFraction: 0, viscosity: 0.7 }
+                  : undefined),
+            ),
           };
           return withLivePreview(base);
         });
@@ -751,6 +1026,7 @@ export const useDeskStore = create<DeskState>()(
             "number"
               ? (state as { pourAmountMl: number }).pourAmountMl
               : 2,
+          lastSimTickAt: null,
         } as never;
       },
       partialize: (s) => ({
@@ -759,6 +1035,18 @@ export const useDeskStore = create<DeskState>()(
           fx: {},
           // drop ephemeral preview size from storage
           livePreview: undefined,
+          // persist thermal residue; drop active process flags
+          sim: v.sim
+            ? {
+                ...ensureSim(v),
+                stirActive: false,
+                shakeActive: false,
+                shakeUntil: undefined,
+                processStartedAt: undefined,
+                stirStartedAt: undefined,
+                shakeStartedAt: undefined,
+              }
+            : defaultVesselSim(),
         })),
         activeVesselId: s.activeVesselId,
         lastExplanationVesselId: s.lastExplanationVesselId,

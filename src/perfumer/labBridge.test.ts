@@ -128,7 +128,7 @@ describe("labBridge", () => {
     }
   });
 
-  it("adds beeswax chassis for Solid format", () => {
+  it("adds beeswax chassis for Solid format and places a tin", () => {
     const solid: StructuredPayload = {
       formula: {
         type: "Solid",
@@ -141,6 +141,8 @@ describe("labBridge", () => {
     };
     const bridge = buildLabBridgeFromStructured(solid)!;
     expect(bridge.format).toBe("Solid");
+    expect(bridge.vessel.equipmentId).toBe("tin");
+    expect(bridge.solidChassis?.waxPercent).toBeGreaterThan(0);
     expect(bridge.lines.some((l) => l.labChemicalId === "beeswax")).toBe(true);
     const desk = deskContentsFromBridge(bridge);
     expect(desk.some((c) => c.chemicalId === "beeswax")).toBe(true);

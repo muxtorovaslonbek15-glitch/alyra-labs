@@ -17,12 +17,16 @@ import {
 import { useFxClock } from "@/animation/useFxClock";
 import { getChemical } from "@/domains/chemistry/data/chemicals";
 import {
-  tryMixVessel,
   trySeedDemoReaction,
-  tryShakeVessel,
+  tryToggleMixActive,
+  tryToggleShakeActive,
+  tryToggleStirActive,
 } from "@/lab/labActions";
 import { labCopy } from "@/lab/labCopy";
 import { LAB_GLASS_FALLBACK, VESSEL_CARD } from "@/desk/vesselLayout";
+import { hadSolidSession } from "@/perfumer/solidDetect";
+import { ensureSim } from "@/desk/vesselSim";
+import { VesselSimHud } from "@/desk/VesselSimHud";
 
 export function DeskWorkspace({
   onOpenAtelier,
@@ -35,12 +39,12 @@ export function DeskWorkspace({
   const vessels = useDeskStore((s) => s.vessels);
   const activeVesselId = useDeskStore((s) => s.activeVesselId);
   const placeEquipment = useDeskStore((s) => s.placeEquipment);
-  const stirVessel = useDeskStore((s) => s.stirVessel);
   const toggleHeat = useDeskStore((s) => s.toggleHeat);
   const toggleCool = useDeskStore((s) => s.toggleCool);
   const clearDesk = useDeskStore((s) => s.clearDesk);
   const deskRef = useRef<HTMLElement | null>(null);
   const [confirmClear, setConfirmClear] = useState(false);
+  const tinBiasEmpty = hadSolidSession();
 
   const { setNodeRef, isOver } = useDroppable({
     id: DESK_SURFACE,
@@ -53,19 +57,32 @@ export function DeskWorkspace({
   }
 
   const active = vessels.find((v) => v.instanceId === activeVesselId) ?? vessels[0];
+  const solidActive = active?.equipmentId === "tin";
 
+  const simAlive = vessels.some(
+    (v) =>
+      v.heatAttached ||
+      v.coolAttached ||
+      v.sim?.stirActive ||
+      v.sim?.shakeActive ||
+      v.sim?.mixActive ||
+      (v.sim?.agitation ?? 0) > 0.02,
+  );
   const now = useFxClock(
     vessels.flatMap((v) => [
       v.fx.transferAt,
       v.fx.pourAt,
       v.fx.mixAt,
       v.fx.shakeAt,
+      v.fx.stirAt,
     ]),
     Math.max(2400, POUR_WINDOW_MS + 400),
+    simAlive,
   );
 
-  const vesselIntensities = vessels.map((v) =>
-    computeFxIntensities({
+  const vesselIntensities = vessels.map((v) => {
+    const sim = ensureSim(v);
+    return computeFxIntensities({
       fx: v.fx,
       effects: [
         ...(v.lastResult?.effects ?? []),
@@ -75,12 +92,20 @@ export function DeskWorkspace({
       heatAttached: v.heatAttached,
       coolAttached: v.coolAttached,
       boiling: Boolean(
-        v.heatAttached ||
+        (v.heatAttached && sim.temperature >= 0.72) ||
           v.livePreview?.effects.some((e) => e.kind === "boil") ||
           v.lastResult?.effects.some((e) => e.kind === "boil"),
       ),
-    }),
-  );
+      simTemperature: sim.temperature,
+      simFrost: sim.frost,
+      simViscosity: sim.viscosity,
+      stirActive: sim.stirActive,
+      shakeActive: sim.shakeActive,
+      mixActive: sim.mixActive,
+      agitation: sim.agitation,
+      meltFraction: sim.meltFraction,
+    });
+  });
   const deskMotion = deskMotionClass(vesselIntensities);
 
   const transferSource = vessels.find((v, i) => {
@@ -206,7 +231,20 @@ export function DeskWorkspace({
         className={`lab-desk-surface absolute inset-0 ${deskMotion}`}
       />
       <div className="pointer-events-none absolute inset-x-0 top-0 h-24 bg-gradient-to-b from-black/15 to-transparent" />
-      <div className="pointer-events-none absolute inset-0 lab-desk-sheen" />
+          <div className="pointer-events-none absolute inset-0 lab-desk-sheen" />
+
+      {active &&
+      (active.heatAttached ||
+        active.coolAttached ||
+        ensureSim(active).stirActive ||
+        ensureSim(active).shakeActive ||
+        ensureSim(active).mixActive ||
+        ensureSim(active).agitation > 0.05 ||
+        ensureSim(active).frost > 0.08) ? (
+        <div className="pointer-events-none absolute left-3 top-3 z-30 md:left-4 md:top-4">
+          <VesselSimHud vessel={active} now={now} />
+        </div>
+      ) : null}
 
       {streamProps ? (
         <div className="pointer-events-none absolute inset-0 z-20">
@@ -244,6 +282,19 @@ export function DeskWorkspace({
             >
               + Beaker
             </button>
+            <button
+              type="button"
+              onClick={() => {
+                const n = vessels.length;
+                placeEquipment("tin", {
+                  x: 60 + (n % 3) * (VESSEL_CARD.width + 6),
+                  y: 50 + Math.floor(n / 3) * 200,
+                });
+              }}
+              className="min-h-9 rounded-lg bg-white/10 px-2.5 py-2 text-[10px] font-semibold text-lab-foam transition hover:bg-white/20 md:min-h-7 md:py-1.5"
+            >
+              + Tin
+            </button>
           </div>
           <span className="mx-1 h-5 w-px bg-white/15" aria-hidden />
           <div className="flex items-center gap-1.5">
@@ -251,10 +302,14 @@ export function DeskWorkspace({
               type="button"
               onClick={() => {
                 if (!active) return;
-                stirVessel(active.instanceId);
-                showToast(labCopy.stirring);
+                tryToggleStirActive(active.instanceId);
               }}
-              className="min-h-9 rounded-lg bg-white/10 px-2.5 py-2 text-[10px] font-semibold text-lab-foam transition hover:bg-white/20 md:min-h-7 md:py-1.5"
+              aria-pressed={Boolean(active && ensureSim(active).stirActive)}
+              className={`min-h-9 rounded-lg px-2.5 py-2 text-[10px] font-semibold transition md:min-h-7 md:py-1.5 ${
+                active && ensureSim(active).stirActive
+                  ? "bg-white/25 text-lab-foam shadow-[0_0_0_1px_rgba(255,255,255,0.25)]"
+                  : "bg-white/10 text-lab-foam hover:bg-white/20"
+              }`}
             >
               Stir
             </button>
@@ -271,7 +326,7 @@ export function DeskWorkspace({
                   : "bg-white/10 text-lab-foam hover:bg-white/20"
               }`}
             >
-              Heat
+              {solidActive ? "Melt" : "Heat"}
             </button>
             <button
               type="button"
@@ -286,18 +341,25 @@ export function DeskWorkspace({
                   : "bg-white/10 text-lab-foam hover:bg-white/20"
               }`}
             >
-              Cool
+              {solidActive ? "Set" : "Cool"}
             </button>
-            <button
-              type="button"
-              onClick={() => {
-                if (!active) return;
-                tryShakeVessel(active.instanceId);
-              }}
-              className="min-h-9 rounded-lg bg-white/10 px-2.5 py-2 text-[10px] font-semibold text-lab-foam transition hover:bg-white/20 md:min-h-7 md:py-1.5"
-            >
-              Shake
-            </button>
+            {!solidActive ? (
+              <button
+                type="button"
+                onClick={() => {
+                  if (!active) return;
+                  tryToggleShakeActive(active.instanceId);
+                }}
+                aria-pressed={Boolean(active && ensureSim(active).shakeActive)}
+                className={`min-h-9 rounded-lg px-2.5 py-2 text-[10px] font-semibold transition md:min-h-7 md:py-1.5 ${
+                  active && ensureSim(active).shakeActive
+                    ? "bg-white/25 text-lab-foam shadow-[0_0_0_1px_rgba(255,255,255,0.25)]"
+                    : "bg-white/10 text-lab-foam hover:bg-white/20"
+                }`}
+              >
+                Shake
+              </button>
+            ) : null}
           </div>
           <span className="mx-1 h-5 w-px bg-white/15" aria-hidden />
           <div className="flex items-center gap-1.5">
@@ -305,11 +367,16 @@ export function DeskWorkspace({
               type="button"
               onClick={() => {
                 if (!active) return;
-                tryMixVessel(active.instanceId);
+                tryToggleMixActive(active.instanceId);
               }}
-              className="min-h-9 rounded-lg bg-lab-teal px-2.5 py-2 text-[10px] font-semibold text-white transition hover:bg-lab-teal/90 md:min-h-7 md:py-1.5"
+              aria-pressed={Boolean(active && ensureSim(active).mixActive)}
+              className={`min-h-9 rounded-lg px-2.5 py-2 text-[10px] font-semibold transition md:min-h-7 md:py-1.5 ${
+                active && ensureSim(active).mixActive
+                  ? "bg-lab-teal text-white shadow-[0_0_0_1px_rgba(255,255,255,0.35)]"
+                  : "bg-lab-teal px-2.5 text-white hover:bg-lab-teal/90"
+              }`}
             >
-              Mix
+              {solidActive ? "Cast" : "Mix"}
             </button>
             <button
               type="button"
@@ -333,18 +400,22 @@ export function DeskWorkspace({
 
       <div className="relative z-10 h-full min-h-0 w-full md:min-h-[22rem]">
         {vessels.length === 0 ? (
-          <div className="absolute inset-0 flex items-center justify-center p-3">
-            <div className="max-w-md px-3 text-center">
-              <p className="font-display text-2xl tracking-tight text-lab-foam">
+          <div className="lab-empty-desk absolute inset-0 flex items-center justify-center p-3">
+            <div className="lab-empty-desk-inner max-w-md px-3 text-center">
+              <p className="lab-empty-desk-item font-display text-2xl tracking-tight text-lab-foam">
                 Compose a signature
               </p>
-              <p className="mt-1.5 text-xs leading-snug text-lab-foam/75 md:hidden">
-                Place a beaker. Pour notes. Mix. Nothing else in the way.
+              <p className="lab-empty-desk-item mt-1.5 text-xs leading-snug text-lab-foam/75 md:hidden">
+                {tinBiasEmpty
+                  ? "Place a tin. Melt the chassis. Blend notes. Cast the balm."
+                  : "Place a beaker or tin. Pour notes. Mix — or cast a balm."}
               </p>
-              <p className="mt-1.5 hidden text-xs leading-snug text-lab-foam/70 md:block">
-                Desk is the canvas. Chat plans; Build pours here.
+              <p className="lab-empty-desk-item mt-1.5 hidden text-xs leading-snug text-lab-foam/70 md:block">
+                {tinBiasEmpty
+                  ? "Fine perfume, in solid form — press, warm, wear. Chat plans; Build casts here."
+                  : "Desk is the canvas. Chat plans; Build pours or casts here."}
               </p>
-              <dl className="mt-6 hidden space-y-2.5 text-left md:block">
+              <dl className="lab-empty-cheat mt-6 hidden space-y-2.5 text-left md:block">
                 {(
                   [
                     ["Open Chat", "Header → Chat"],
@@ -355,10 +426,11 @@ export function DeskWorkspace({
                     ["Build", "Plan ready → Build"],
                     ["Guide", "⋯ → How it works"],
                   ] as const
-                ).map(([label, hint]) => (
+                ).map(([label, hint], i) => (
                   <div
                     key={label}
-                    className="flex items-baseline justify-between gap-6"
+                    className="lab-empty-desk-item flex items-baseline justify-between gap-6"
+                    style={{ ["--lab-empty-i" as string]: String(i) }}
                   >
                     <dt className="text-[13px] font-medium text-lab-foam/90">
                       {label}
@@ -369,7 +441,7 @@ export function DeskWorkspace({
                   </div>
                 ))}
               </dl>
-              <div className="mt-5 flex flex-col items-stretch gap-2">
+              <div className="lab-empty-desk-item mt-5 flex flex-col items-stretch gap-2">
                 <button
                   type="button"
                   onClick={() => trySeedDemoReaction()}

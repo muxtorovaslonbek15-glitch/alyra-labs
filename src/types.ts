@@ -80,6 +80,55 @@ export interface DomainModule {
   resolve: (input: EngineInput) => EngineResult;
 }
 
+/** Teaching phase for live heat/cool sim (not full CFD). */
+export type VesselPhaseHint =
+  | "ambient"
+  | "warming"
+  | "hot"
+  | "simmer"
+  | "vapor"
+  | "cooling"
+  | "cold"
+  | "slush"
+  | "ice"
+  | "melting"
+  | "molten"
+  | "setting"
+  | "set";
+
+/**
+ * Always-alive process state on a vessel.
+ * Temperature is a 0–1 proxy (0 = ice, 0.5 = room, 1 = hard boil / full melt).
+ */
+export interface VesselSim {
+  temperature: number;
+  phaseHint: VesselPhaseHint;
+  /** Wall ms when current heat/cool/stir engagement began (for HUD elapsed). */
+  processStartedAt?: number;
+  heatElapsedMs: number;
+  coolElapsedMs: number;
+  stirActive: boolean;
+  stirStartedAt?: number;
+  shakeActive: boolean;
+  shakeStartedAt?: number;
+  /** @deprecated Prefer continuous shakeActive toggle; kept for migrate. */
+  shakeUntil?: number;
+  mixActive: boolean;
+  mixStartedAt?: number;
+  /** Chemistry already resolved for this mix engagement. */
+  mixResolved?: boolean;
+  /** 0–1 continuous agitation (eases out when stir/shake/mix shut off). */
+  agitation: number;
+  /** 0–1 blend toward mixed appearance after Mix/Cast. */
+  mixBlend: number;
+  /** 0–1 frost rim / ice bath residue (persists partially when cool off). */
+  frost: number;
+  /** 0–1 viscosity proxy (higher = thicker / frozen). */
+  viscosity: number;
+  /** 0–1 solid chassis melt (tin); wax does not evaporate. */
+  meltFraction: number;
+}
+
 /** Ephemeral bench FX timestamps (ms) — drive CSS one-shots */
 export interface VesselFx {
   pourAt?: number;
@@ -100,6 +149,8 @@ export interface VesselFx {
   transferToId?: string;
   /** Role during an active transfer */
   transferRole?: "source" | "target";
+  /** Solid cast reveal storyboard start (ms) — tin only */
+  castRevealAt?: number;
 }
 
 /** Compact IFRA teaching screen attached to live preview. */
@@ -159,4 +210,6 @@ export interface DeskVessel {
   livePreview?: LiveVesselPreview;
   position: { x: number; y: number };
   fx: VesselFx;
+  /** Live heat/cool/stir process sim (optional on legacy persist). */
+  sim?: VesselSim;
 }

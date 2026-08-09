@@ -11,10 +11,62 @@ import {
   mapLabToPerfumer,
   normalizeIngredientId,
 } from "./labIngredientMap";
+import {
+  chassisFromLines,
+  markSolidSession,
+  vesselEquipmentForFormat,
+} from "./solidDetect";
 
 export const LAB_BRIDGE_STORAGE_KEY = "alyra.labBridge.v1";
 export const LAB_SESSION_STORAGE_KEY = "alyra.labSession.v1";
 export const CHAT_BRIDGE_STORAGE_KEY = "alyra.chatBridge.v1";
+/** Guide → Chat composer handoff (session + local for new-tab open). */
+export const GUIDE_PROMPT_STORAGE_KEY = "alyra.guidePrompt.v1";
+
+/** Stash a guide prompt for Lab Chat to autofill (works across window.open). */
+export function storeGuidePrompt(prompt: string): void {
+  const text = prompt.trim();
+  if (!text) return;
+  try {
+    sessionStorage.setItem(GUIDE_PROMPT_STORAGE_KEY, text);
+  } catch {
+    /* private mode */
+  }
+  try {
+    // New tabs do not share sessionStorage; localStorage carries the handoff.
+    localStorage.setItem(GUIDE_PROMPT_STORAGE_KEY, text);
+  } catch {
+    /* quota / private mode */
+  }
+}
+
+/** Consume a one-shot guide prompt for the composer. Prefers session, then local. */
+export function consumeGuidePrompt(): string | null {
+  try {
+    const fromSession = sessionStorage.getItem(GUIDE_PROMPT_STORAGE_KEY);
+    if (fromSession?.trim()) {
+      sessionStorage.removeItem(GUIDE_PROMPT_STORAGE_KEY);
+      try {
+        localStorage.removeItem(GUIDE_PROMPT_STORAGE_KEY);
+      } catch {
+        /* ignore */
+      }
+      return fromSession.trim();
+    }
+  } catch {
+    /* ignore */
+  }
+  try {
+    const fromLocal = localStorage.getItem(GUIDE_PROMPT_STORAGE_KEY);
+    if (fromLocal?.trim()) {
+      localStorage.removeItem(GUIDE_PROMPT_STORAGE_KEY);
+      return fromLocal.trim();
+    }
+  } catch {
+    /* ignore */
+  }
+  return null;
+}
 
 const DISCLAIMER =
   "Teaching desk demo: IFRA flags are indicative only. Proxy materials are Lab stand-ins, not identical aroma chemicals.";
@@ -147,7 +199,30 @@ export function buildLabBridgeFromStructured(
   opts?: { title?: string; teachingBatchMl?: number },
 ): LabBridgeFormula | null {
   if (structured?.lab_bridge?.lines?.length) {
-    return structured.lab_bridge;
+    const existing = structured.lab_bridge;
+    if (existing.format === "Solid") {
+      markSolidSession();
+      const chassis =
+        existing.solidChassis ||
+        chassisFromLines(existing.lines) ||
+        undefined;
+      return {
+        ...existing,
+        vessel: {
+          ...existing.vessel,
+          equipmentId: "tin",
+          heatAttached: existing.vessel?.heatAttached ?? true,
+        },
+        solidChassis: chassis
+          ? {
+              waxPercent: chassis.waxPercent,
+              oilPercent: chassis.oilPercent,
+              fragranceLoadPercent: chassis.fragranceLoadPercent,
+            }
+          : existing.solidChassis,
+      };
+    }
+    return existing;
   }
 
   const gen = structured?.formula;
@@ -206,9 +281,24 @@ export function buildLabBridgeFromStructured(
       perfumerIngredientId: "beeswax",
       labChemicalId: "beeswax",
       name: "Beeswax",
-      percent: 50,
+      percent: 42,
       role: "wax",
-      amountMl: amountMlFromPercent(50, teachingBatchMl),
+      amountMl: amountMlFromPercent(42, teachingBatchMl),
+      mapStatus: "exact",
+    });
+  }
+  if (
+    format === "Solid" &&
+    !seenLab.has("cct") &&
+    !seenLab.has("jojoba-oil")
+  ) {
+    lines.push({
+      perfumerIngredientId: "cct",
+      labChemicalId: "cct",
+      name: "Carrier oil (CCT)",
+      percent: 38,
+      role: "carrier",
+      amountMl: amountMlFromPercent(38, teachingBatchMl),
       mapStatus: "exact",
     });
   }
@@ -219,14 +309,30 @@ export function buildLabBridgeFromStructured(
     .map((l) => l.perfumerIngredientId);
 
   const cost = structured?.cost || gen?.cost;
+  const solidChassis =
+    format === "Solid" ? chassisFromLines(lines) || undefined : undefined;
+  if (format === "Solid") markSolidSession();
   const payload: LabBridgeFormula = {
     schemaVersion: 1,
     title,
     format,
     batchGrams: cost?.batchGrams || 100,
-    // autoMix so Lab scent notes / tutor dossier appear after Open in Lab
-    vessel: { equipmentId: "beaker", autoMix: true, heatAttached: false },
+    // Solid → tin vessel; liquid formats stay on glass
+    vessel: {
+      equipmentId: vesselEquipmentForFormat(format),
+      autoMix: true,
+      heatAttached: format === "Solid",
+    },
     lines,
+    ...(solidChassis
+      ? {
+          solidChassis: {
+            waxPercent: solidChassis.waxPercent,
+            oilPercent: solidChassis.oilPercent,
+            fragranceLoadPercent: solidChassis.fragranceLoadPercent,
+          },
+        }
+      : {}),
     mappingReport: {
       mappedCount,
       unmappedCount: unmappedIds.length,
@@ -235,7 +341,9 @@ export function buildLabBridgeFromStructured(
     disclaimer: DISCLAIMER,
     indiaContext: {
       climateNote:
-        "Built for Indian heat and humidity: expect softer projection on solids; boosters help EDP wear through sweat and fabric.",
+        format === "Solid"
+          ? "Alcohol-free balm for Indian heat: softens in the case, sits close to skin. Press, warm, wear."
+          : "Built for Indian heat and humidity: expect softer projection on solids; boosters help EDP wear through sweat and fabric.",
       preferenceTags: ["india-heat", "humid-wear"],
     },
   };
@@ -332,7 +440,7 @@ export function clearLabSession(): void {
  */
 export function buildChatBridgeFromDesk(input: {
   contents: DeskContentLine[];
-  equipmentId?: "beaker" | "flask" | "test-tube";
+  equipmentId?: "beaker" | "flask" | "test-tube" | "tin";
   heatAttached?: boolean;
   sessionBridge?: LabBridgeFormula | null;
   title?: string;
@@ -446,7 +554,12 @@ export function buildChatBridgeFromDesk(input: {
     format,
     batchGrams: input.sessionBridge?.batchGrams || 100,
     vessel: {
-      equipmentId: input.equipmentId || "beaker",
+      equipmentId:
+        format === "Solid"
+          ? "tin"
+          : input.equipmentId === "tin"
+            ? "beaker"
+            : input.equipmentId || "beaker",
       autoMix: true,
       heatAttached: Boolean(input.heatAttached),
     },
@@ -463,7 +576,11 @@ export function buildChatBridgeFromDesk(input: {
       preferenceTags: ["india-heat", "humid-wear"],
     },
     costInr: input.sessionBridge?.costInr,
-    solidChassis: input.sessionBridge?.solidChassis,
+    solidChassis:
+      format === "Solid"
+        ? chassisFromLines(lines, input.sessionBridge?.solidChassis) ||
+          input.sessionBridge?.solidChassis
+        : input.sessionBridge?.solidChassis,
   };
 
   const formulaLines: FormulaLine[] = lines
