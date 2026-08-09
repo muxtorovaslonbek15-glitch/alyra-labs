@@ -821,9 +821,20 @@ export function LabShell() {
                 track("tutor_open");
               }}
             />
-            <div className="relative flex min-h-0 min-w-0 flex-1 flex-col gap-0 overflow-hidden p-0 md:gap-1 md:p-2">
+            <div
+              className={`relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden ${
+                chatDock === "bottom" && rightSlot === "chat" && rightOpen
+                  ? "gap-0 p-0 md:pt-2 md:px-2 md:pb-0"
+                  : "gap-0 p-0 md:gap-0 md:p-2"
+              }`}
+            >
               <div className="relative min-h-0 min-w-0 flex-1 overflow-hidden">
                 <DeskWorkspace
+                  flushBottom={
+                    chatDock === "bottom" &&
+                    rightSlot === "chat" &&
+                    rightOpen
+                  }
                   onOpenAtelier={() => {
                     setShopOpen(false);
                     setMarketOpen(false);
@@ -858,7 +869,7 @@ export function LabShell() {
                   </div>
                 </div>
               </div>
-              {/* Desktop bottom dock — under wood canvas; phone keeps sheets */}
+              {/* Desktop bottom dock — flush under wood; phone keeps sheets */}
               {chatDock === "bottom" ? (
                 <DesktopBuilderChrome dock="bottom" />
               ) : null}

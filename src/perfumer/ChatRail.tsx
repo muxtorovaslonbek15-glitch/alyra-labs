@@ -40,8 +40,9 @@ export function ChatRail({
       <div className="min-h-0 flex-1 overflow-hidden">
         <PerfumerChat
           variant="shell"
+          dock={mobileSheet ? "sheet" : dock}
           onCloseSheet={onCloseSheet}
-          showDockControls
+          showDockControls={!mobileSheet}
         />
       </div>
       <PlanPanel
@@ -99,8 +100,9 @@ export function ChatRail({
   if (dock === "bottom") {
     return (
       <div
-        className="relative hidden w-full shrink-0 flex-col border-t border-lab-line/70 bg-lab-panel shadow-[0_-8px_24px_-16px_rgba(12,12,12,0.35)] md:flex"
+        className="relative hidden w-full shrink-0 flex-col border-t border-lab-line/80 bg-lab-panel md:flex"
         style={{ height: bottomChatHeight }}
+        data-lab-bottom-panel
       >
         <PanelResizeHandle
           side="top"
@@ -125,8 +127,9 @@ export function ChatRail({
         onResize={(dx) => setRightWidth(rightWidth + dx)}
       />
       <aside
-        className="panel-glass flex h-full shrink-0 flex-col border-l border-lab-line/60"
+        className="flex h-full shrink-0 flex-col border-l border-lab-line/70 bg-lab-panel"
         style={{ width: rightWidth }}
+        data-lab-right-chat
       >
         {body}
       </aside>

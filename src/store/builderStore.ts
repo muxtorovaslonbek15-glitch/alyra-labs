@@ -48,9 +48,9 @@ export const PANEL_WIDTH = {
 } as const;
 
 export const BOTTOM_CHAT = {
-  min: 180,
+  min: 160,
   max: 480,
-  default: 280,
+  default: 240,
 } as const;
 
 function clamp(n: number, min: number, max: number) {
@@ -257,7 +257,8 @@ export const useBuilderStore = create<BuilderState>((set, get) => ({
   },
 
   setChatDock: (chatDock) => {
-    set({ chatDock, rightOpen: true });
+    // Bottom dock always opens chat under the desk; right restores the rail.
+    set({ chatDock, rightOpen: true, rightSlot: "chat", tab: "chat" });
     saveChatDock(chatDock);
   },
 

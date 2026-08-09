@@ -168,7 +168,7 @@ export function LabModeToggle({
       <div
         role="group"
         aria-label="Right panel mode"
-        className="grid w-[8.5rem] grid-cols-2 rounded-lg bg-white/10 p-0.5"
+        className="grid h-9 w-[8.75rem] grid-cols-2 items-stretch rounded-lg bg-white/10 p-0.5 md:h-8"
       >
         {(
           [
@@ -181,9 +181,9 @@ export function LabModeToggle({
             type="button"
             onClick={() => onChange(id)}
             aria-pressed={value === id && !scanActive}
-            className={`min-h-9 w-full rounded-md px-1 py-1.5 text-center text-[11px] font-semibold transition md:min-h-0 md:py-1 ${
+            className={`flex h-full w-full items-center justify-center rounded-md px-1 text-center text-[11px] font-semibold leading-none transition ${
               value === id && !scanActive
-                ? "bg-lab-foam text-lab-ink shadow-sm"
+                ? "bg-lab-foam text-lab-ink"
                 : "text-lab-foam/65 hover:text-lab-foam"
             }`}
           >

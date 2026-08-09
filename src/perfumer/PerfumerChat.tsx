@@ -60,14 +60,18 @@ export function PerfumerChat({
   variant = "page",
   onCloseSheet,
   showDockControls = false,
+  dock = "right",
 }: {
   /** page = standalone (redirect target); shell = Lab right rail / phone sheet */
   variant?: "page" | "shell";
   onCloseSheet?: () => void;
-  /** Desktop Lab: dock drag handle + Right/Bottom switch */
+  /** Desktop Lab: dock drag handle */
   showDockControls?: boolean;
+  /** Desktop placement when embedded in Lab shell */
+  dock?: "right" | "bottom" | "sheet";
 } = {}) {
   const shell = variant === "shell";
+  const bottomDock = shell && dock === "bottom";
   const user = useAuthStore((s) => s.user);
   const authReady = useAuthStore((s) => s.authReady);
   const openAuthGate = useAuthStore((s) => s.openAuthGate);
@@ -794,114 +798,144 @@ export function PerfumerChat({
         </aside>
 
         <div className="flex min-w-0 flex-1 flex-col">
-          <div
-            className={`flex h-10 shrink-0 items-center gap-1.5 border-b border-lab-line/50 px-2.5 ${
-              shell ? "" : "md:px-3"
-            }`}
-          >
-            {shell ? (
-              <>
-                {showDockControls ? (
-                  <ChatDockHandle dock={chatDock} onDock={setChatDock} />
-                ) : null}
-                <p className="text-xs font-semibold tracking-wide text-lab-ink">
-                  Perfumer
-                </p>
-                <span
-                  className={`rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-[0.12em] ${
-                    building
-                      ? "bg-lab-amber/15 text-lab-amber"
-                      : chatAgentMode === "plan"
-                        ? "bg-lab-wash text-lab-muted"
-                        : "bg-lab-ink/5 text-lab-muted"
-                  }`}
-                  title={
-                    building
-                      ? "Build queue running on the desk"
-                      : chatAgentMode === "plan"
-                        ? "Plan mode: propose only, no desk pours"
-                        : "Agent mode: chat + tools; Build still explicit"
-                  }
-                >
-                  {building
-                    ? buildSteps.length
-                      ? `Building ${Math.min(buildStepIndex + 1, buildSteps.length)}/${buildSteps.length}`
-                      : "Building"
-                    : chatAgentMode === "plan"
-                      ? "Plan"
-                      : "Agent"}
-                </span>
-                <div className="flex-1" />
-                {showDockControls ? (
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setChatDock(chatDock === "right" ? "bottom" : "right")
-                    }
-                    className="hidden min-h-8 rounded-md px-2 text-[11px] font-medium text-lab-muted hover:bg-lab-wash hover:text-lab-ink md:inline"
+          {shell ? (
+            <div
+              className={`flex shrink-0 items-center gap-1 border-b border-lab-line/60 ${
+                bottomDock
+                  ? "h-8 bg-lab-wash/40 px-1.5"
+                  : "h-9 px-2"
+              }`}
+            >
+              {showDockControls ? (
+                <ChatDockHandle
+                  dock={chatDock}
+                  onDock={setChatDock}
+                  variant={bottomDock ? "bar" : "dots"}
+                />
+              ) : null}
+
+              {bottomDock ? (
+                <div className="flex min-w-0 flex-1 items-end gap-0 self-stretch pl-1">
+                  <span className="relative flex h-full items-center border-b-2 border-lab-ink px-2 text-[11px] font-semibold text-lab-ink">
+                    Perfumer
+                  </span>
+                  {building ? (
+                    <span className="mb-1.5 ml-1 rounded px-1 py-0.5 text-[9px] font-semibold uppercase tracking-[0.1em] text-lab-amber">
+                      {buildSteps.length
+                        ? `${Math.min(buildStepIndex + 1, buildSteps.length)}/${buildSteps.length}`
+                        : "Build"}
+                    </span>
+                  ) : null}
+                </div>
+              ) : (
+                <>
+                  <p className="truncate text-[11px] font-semibold tracking-wide text-lab-ink">
+                    {active?.title || "Perfumer"}
+                  </p>
+                  <span
+                    className={`shrink-0 rounded px-1.5 py-0.5 text-[9px] font-medium ${
+                      building
+                        ? "bg-lab-amber/15 text-lab-amber"
+                        : "text-lab-muted"
+                    }`}
                     title={
-                      chatDock === "right"
-                        ? "Dock chat below desk"
-                        : "Dock chat to the right"
+                      building
+                        ? "Build queue running on the desk"
+                        : chatAgentMode === "plan"
+                          ? "Plan mode: propose only, no desk pours"
+                          : "Agent mode: tools on, Build still explicit"
                     }
                   >
-                    {chatDock === "right" ? "Bottom" : "Right"}
-                  </button>
-                ) : null}
+                    {building
+                      ? buildSteps.length
+                        ? `Building ${Math.min(buildStepIndex + 1, buildSteps.length)}/${buildSteps.length}`
+                        : "Building"
+                      : chatAgentMode === "plan"
+                        ? "Plan"
+                        : "Agent"}
+                  </span>
+                  <div className="flex-1" />
+                </>
+              )}
+
+              {bottomDock ? (
+                <div className="mr-1 hidden md:block">
+                  <ChatModeToggle
+                    mode={chatAgentMode}
+                    onChange={changeChatMode}
+                    disabled={building}
+                    size="sm"
+                  />
+                </div>
+              ) : null}
+
+              <button
+                type="button"
+                onClick={() => setSidebarOpen(true)}
+                className="flex h-7 w-7 items-center justify-center rounded-md text-lab-muted hover:bg-lab-wash hover:text-lab-ink"
+                title="Chat history"
+                aria-label="Chat history"
+              >
+                <span aria-hidden className="font-mono text-[12px] leading-none">
+                  ◷
+                </span>
+              </button>
+              <button
+                type="button"
+                onClick={createChat}
+                className="flex h-7 w-7 items-center justify-center rounded-md text-lab-muted hover:bg-lab-wash hover:text-lab-ink"
+                title="New chat"
+                aria-label="New chat"
+              >
+                <span aria-hidden className="text-[15px] leading-none">
+                  +
+                </span>
+              </button>
+              {showDockControls ? (
                 <button
                   type="button"
-                  onClick={() => setSidebarOpen(true)}
-                  className="min-h-8 rounded-md px-2 text-[11px] font-medium text-lab-muted hover:bg-lab-wash hover:text-lab-ink"
+                  onClick={() => setRightOpen(false)}
+                  className="hidden h-7 w-7 items-center justify-center rounded-md text-lab-muted hover:bg-lab-wash hover:text-lab-ink md:flex"
+                  title="Hide chat (⌘T)"
+                  aria-label="Hide chat"
                 >
-                  History
+                  <span aria-hidden className="text-[14px] leading-none">
+                    ×
+                  </span>
                 </button>
+              ) : null}
+              {onCloseSheet ? (
                 <button
                   type="button"
-                  onClick={createChat}
-                  className="min-h-8 rounded-md px-2 text-[11px] font-medium text-lab-muted hover:bg-lab-wash hover:text-lab-ink"
+                  onClick={onCloseSheet}
+                  className="min-h-8 rounded-md bg-lab-ink px-2.5 text-[11px] font-semibold text-lab-foam md:hidden"
                 >
-                  New
+                  Done
                 </button>
-                {showDockControls ? (
-                  <button
-                    type="button"
-                    onClick={() => setRightOpen(false)}
-                    className="hidden min-h-8 rounded-md px-2 text-[11px] font-medium text-lab-muted hover:bg-lab-wash hover:text-lab-ink md:inline"
-                    title="Hide chat (⌘T)"
-                    aria-label="Hide chat"
-                  >
-                    Hide
-                  </button>
-                ) : null}
-                {onCloseSheet ? (
-                  <button
-                    type="button"
-                    onClick={onCloseSheet}
-                    className="min-h-8 rounded-md bg-lab-ink px-2.5 text-[11px] font-semibold text-lab-foam md:hidden"
-                  >
-                    Done
-                  </button>
-                ) : null}
-              </>
-            ) : (
-              <>
-                <button
-                  type="button"
-                  className="min-h-9 rounded-md border border-lab-line px-3 text-sm font-medium text-lab-ink md:hidden"
-                  onClick={() => setSidebarOpen(true)}
-                >
-                  Chats
-                </button>
-                <h2 className="min-w-0 flex-1 truncate font-display text-base text-lab-ink md:text-lg">
-                  {active?.title || "Master Perfumer"}
-                </h2>
-              </>
-            )}
-          </div>
+              ) : null}
+            </div>
+          ) : (
+            <div className="flex h-10 shrink-0 items-center gap-1.5 border-b border-lab-line/50 px-2.5 md:px-3">
+              <button
+                type="button"
+                className="min-h-9 rounded-md border border-lab-line px-3 text-sm font-medium text-lab-ink md:hidden"
+                onClick={() => setSidebarOpen(true)}
+              >
+                Chats
+              </button>
+              <h2 className="min-w-0 flex-1 truncate font-display text-base text-lab-ink md:text-lg">
+                {active?.title || "Master Perfumer"}
+              </h2>
+            </div>
+          )}
 
           <div
-            className={`scroll-thin flex-1 space-y-3 overflow-y-auto overscroll-contain px-3 py-3 ${
-              shell ? "md:space-y-3 md:px-3 md:py-3" : "md:space-y-4 md:px-5 md:py-4"
+            className={`scroll-thin flex-1 space-y-2 overflow-y-auto overscroll-contain ${
+              bottomDock
+                ? "px-2.5 py-2"
+                : shell
+                  ? "space-y-3 px-3 py-3"
+                  : "space-y-3 px-3 py-3 md:space-y-4 md:px-5 md:py-4"
             }`}
           >
             {loadingChatId === active?.id ? (
@@ -909,7 +943,11 @@ export function PerfumerChat({
                 Loading conversation…
               </p>
             ) : empty && !narration.length ? (
-              <EmptyState compact={shell} chatAgentMode={chatAgentMode} />
+              <EmptyState
+                compact={shell}
+                dense={bottomDock}
+                chatAgentMode={chatAgentMode}
+              />
             ) : (
               <>
                 {messages.map((m) => (
@@ -937,16 +975,18 @@ export function PerfumerChat({
           </div>
 
           <div
-            className={`border-t border-lab-line/50 bg-lab-panel px-2.5 py-2 ${
-              shell
-                ? "pb-2"
-                : "pb-[max(0.625rem,env(safe-area-inset-bottom))] md:px-4 md:py-3 md:pb-3"
+            className={`border-t border-lab-line/50 bg-lab-panel ${
+              bottomDock
+                ? "px-2 py-1.5"
+                : shell
+                  ? "px-2.5 py-2 pb-2"
+                  : "px-2.5 py-2 pb-[max(0.625rem,env(safe-area-inset-bottom))] md:px-4 md:py-3 md:pb-3"
             }`}
           >
             {building && shell ? (
               <div
                 role="status"
-                className="mb-2 flex items-center gap-2 rounded-lg border border-lab-amber/30 bg-lab-amber/10 px-2.5 py-1.5"
+                className="mb-1.5 flex items-center gap-2 rounded-md border border-lab-amber/30 bg-lab-amber/10 px-2 py-1"
               >
                 <span className="h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-lab-amber" />
                 <p className="min-w-0 flex-1 text-[11px] font-medium text-lab-ink">
@@ -968,7 +1008,7 @@ export function PerfumerChat({
               />
             ) : null}
 
-            {shell ? (
+            {shell && !bottomDock ? (
               <div className="mb-1.5 flex items-center justify-between gap-2">
                 <ChatModeToggle
                   mode={chatAgentMode}
@@ -984,10 +1024,21 @@ export function PerfumerChat({
               </div>
             ) : null}
 
+            {shell && bottomDock ? (
+              <div className="mb-1 flex md:hidden">
+                <ChatModeToggle
+                  mode={chatAgentMode}
+                  onChange={changeChatMode}
+                  disabled={building}
+                  size="sm"
+                />
+              </div>
+            ) : null}
+
             <div
               className={`flex items-end gap-1.5 ${
                 shell
-                  ? "rounded-lg border border-lab-line bg-white px-2 py-1.5"
+                  ? "rounded-md border border-lab-line/80 bg-white px-1.5 py-1"
                   : ""
               }`}
             >
@@ -1000,7 +1051,7 @@ export function PerfumerChat({
                     void onSend();
                   }
                 }}
-                rows={shell ? 1 : 2}
+                rows={1}
                 placeholder={
                   user
                     ? shell
@@ -1012,7 +1063,11 @@ export function PerfumerChat({
                 }
                 className={
                   shell
-                    ? "min-h-[36px] max-h-28 flex-1 resize-none border-0 bg-transparent px-1 py-1.5 text-[13px] leading-snug text-lab-ink placeholder:text-lab-muted/70 focus:outline-none"
+                    ? `max-h-24 flex-1 resize-none border-0 bg-transparent px-1 focus:outline-none ${
+                        bottomDock
+                          ? "min-h-[28px] py-1 text-xs leading-snug text-lab-ink placeholder:text-lab-muted/65"
+                          : "min-h-[32px] py-1.5 text-[12px] leading-snug text-lab-ink placeholder:text-lab-muted/70"
+                      }`
                     : "min-h-[48px] flex-1 resize-none rounded-xl border border-lab-line bg-lab-panel px-3 py-3 text-[15px] leading-snug text-lab-ink placeholder:text-lab-muted/70 focus:outline-none focus:ring-1 focus:ring-lab-ink/30 md:min-h-[44px] md:rounded-lg md:py-2.5 md:text-[13px]"
                 }
                 disabled={busy || building}
@@ -1029,7 +1084,11 @@ export function PerfumerChat({
                 disabled={busy || building || (!user ? false : !input.trim())}
                 className={
                   shell
-                    ? "mb-0.5 h-8 shrink-0 rounded-md bg-lab-ink px-3 text-[11px] font-semibold text-lab-foam transition hover:bg-black disabled:opacity-40"
+                    ? `mb-0.5 shrink-0 rounded-md bg-lab-ink font-semibold text-lab-foam transition hover:bg-black disabled:opacity-40 ${
+                        bottomDock
+                          ? "h-7 px-2.5 text-[10px]"
+                          : "h-8 px-3 text-[11px]"
+                      }`
                     : "h-12 w-16 shrink-0 self-end rounded-xl bg-lab-ink text-sm font-semibold text-lab-foam transition-opacity hover:bg-black disabled:opacity-50 md:h-11 md:w-auto md:rounded-lg md:px-4"
                 }
               >
@@ -1045,15 +1104,25 @@ export function PerfumerChat({
 
 function EmptyState({
   compact,
+  dense,
   chatAgentMode,
 }: {
   compact?: boolean;
+  dense?: boolean;
   chatAgentMode?: "plan" | "agent";
 } = {}) {
   if (compact) {
     return (
-      <div className="mx-auto flex max-w-xs flex-col items-center px-2 py-10 text-center">
-        <p className="text-sm leading-relaxed text-lab-muted">
+      <div
+        className={`mx-auto flex w-full max-w-sm flex-col items-center px-2 text-center ${
+          dense ? "py-3" : "py-8"
+        }`}
+      >
+        <p
+          className={`leading-relaxed text-lab-muted ${
+            dense ? "text-xs" : "text-sm"
+          }`}
+        >
           {chatAgentMode === "plan"
             ? "Plan mode: structure a formula first. Build pours only when you press Build."
             : "Brief a vibe. Agent drafts a formula; Build pours on the desk when you say so."}

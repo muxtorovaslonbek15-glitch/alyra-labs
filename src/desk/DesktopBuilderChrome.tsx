@@ -110,13 +110,13 @@ export function DesktopBuilderChrome({
   if (!rightOpen) {
     if (dock === "bottom") {
       return (
-        <div className="relative hidden w-full shrink-0 md:block">
+        <div className="relative hidden w-full shrink-0 border-t border-lab-line/70 bg-lab-panel md:block">
           <button
             type="button"
             onClick={() => setRightOpen(true)}
             aria-label="Show chat"
             title="Show chat (⌘T)"
-            className="flex h-8 w-full items-center justify-center gap-2 rounded-lg border border-lab-line/70 bg-lab-panel/95 text-[11px] font-medium text-lab-muted hover:text-lab-ink"
+            className="flex h-7 w-full items-center justify-center gap-2 text-[11px] font-medium text-lab-muted hover:bg-lab-wash/60 hover:text-lab-ink"
           >
             Show chat
           </button>
@@ -130,7 +130,7 @@ export function DesktopBuilderChrome({
           onClick={() => setRightOpen(true)}
           aria-label="Show chat"
           title="Show chat (⌘T)"
-          className="absolute right-0 top-1/2 z-20 flex h-16 w-5 -translate-y-1/2 items-center justify-center rounded-l-md border border-r-0 border-lab-line/70 bg-lab-panel/95 text-lab-muted shadow-sm hover:text-lab-ink"
+          className="absolute right-0 top-1/2 z-20 flex h-14 w-4 -translate-y-1/2 items-center justify-center border border-r-0 border-lab-line/70 bg-lab-panel text-lab-muted hover:text-lab-ink"
         >
           ‹
         </button>

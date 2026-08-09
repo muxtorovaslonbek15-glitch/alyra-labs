@@ -13,9 +13,12 @@ const DRAG_THRESHOLD_PX = 6;
 export function ChatDockHandle({
   dock,
   onDock,
+  variant = "dots",
 }: {
   dock: ChatDock;
   onDock: (dock: ChatDock) => void;
+  /** dots = ::: rail grip; bar = horizontal bottom-panel grab */
+  variant?: "dots" | "bar";
 }) {
   const dragging = useRef(false);
   const armed = useRef(false);
@@ -33,24 +36,20 @@ export function ChatDockHandle({
     );
   }, []);
 
-  const beginDragUi = useCallback(
-    (hover: ChatDock) => {
-      dragging.current = true;
-      setLive(hover);
-      document.body.style.cursor = "grabbing";
-      document.body.style.userSelect = "none";
-      window.dispatchEvent(
-        new CustomEvent("alyra-chat-dock-drag", {
-          detail: { active: true, hover },
-        }),
-      );
-    },
-    [],
-  );
+  const beginDragUi = useCallback((hover: ChatDock) => {
+    dragging.current = true;
+    setLive(hover);
+    document.body.style.cursor = "grabbing";
+    document.body.style.userSelect = "none";
+    window.dispatchEvent(
+      new CustomEvent("alyra-chat-dock-drag", {
+        detail: { active: true, hover },
+      }),
+    );
+  }, []);
 
   const onPointerDown = useCallback(
     (e: React.PointerEvent<HTMLButtonElement>) => {
-      // Left button only; let double-click fire without capture fights.
       if (e.button !== 0) return;
       e.stopPropagation();
       armed.current = true;
@@ -108,7 +107,6 @@ export function ChatDockHandle({
       e.preventDefault();
       e.stopPropagation();
       clearDragUi();
-      // Cursor: dblclick panel grip snaps to bottom; again restores right.
       onDock(dock === "bottom" ? "right" : "bottom");
     },
     [clearDragUi, dock, onDock],
@@ -132,16 +130,30 @@ export function ChatDockHandle({
       onPointerUp={onPointerUp}
       onPointerCancel={onPointerUp}
       onDoubleClick={onDoubleClick}
-      className={`flex h-7 min-w-7 shrink-0 cursor-grab items-center justify-center rounded-md px-1 text-lab-muted touch-none hover:bg-lab-wash hover:text-lab-ink active:cursor-grabbing ${
-        live ? "bg-lab-wash text-lab-ink" : ""
+      className={`flex shrink-0 cursor-grab touch-none items-center justify-center text-lab-muted hover:text-lab-ink active:cursor-grabbing ${
+        variant === "bar"
+          ? `h-5 w-10 rounded-md ${live ? "bg-lab-wash" : "hover:bg-lab-wash/80"}`
+          : `h-7 min-w-7 rounded-md px-1 ${live ? "bg-lab-wash text-lab-ink" : "hover:bg-lab-wash"}`
       }`}
     >
-      <span
-        aria-hidden
-        className="select-none font-mono text-[10px] font-semibold leading-none tracking-[0.18em] text-current"
-      >
-        :::
-      </span>
+      {variant === "bar" ? (
+        <span aria-hidden className="flex flex-col items-center gap-[3px]">
+          <span className="h-0.5 w-8 rounded-full bg-current opacity-45" />
+          <span className="h-0.5 w-8 rounded-full bg-current opacity-45" />
+        </span>
+      ) : (
+        <span
+          aria-hidden
+          className="grid grid-cols-2 gap-[3px] p-0.5"
+        >
+          {Array.from({ length: 6 }).map((_, i) => (
+            <span
+              key={i}
+              className="h-[3px] w-[3px] rounded-full bg-current opacity-55"
+            />
+          ))}
+        </span>
+      )}
     </button>
   );
 }
@@ -183,30 +195,27 @@ export function ChatDockDropZones({
     <div className="pointer-events-none absolute inset-0 z-[200] hidden md:block">
       <div
         id="alyra-drop-right"
-        className={`absolute inset-y-3 right-2 w-[min(18rem,28%)] rounded-xl border-2 border-dashed transition ${
+        className={`absolute inset-y-2 right-1 w-[min(18rem,28%)] border border-dashed transition ${
           hover === "right"
-            ? "border-lab-ink/55 bg-lab-ink/[0.12] shadow-[inset_0_0_0_1px_rgba(12,12,12,0.06)]"
-            : "border-lab-line/80 bg-lab-panel/40"
+            ? "border-lab-ink/50 bg-lab-ink/[0.10]"
+            : "border-lab-line/90 bg-lab-panel/50"
         }`}
       >
-        <p className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-[11px] font-semibold uppercase tracking-[0.14em] text-lab-ink/75">
-          Right rail{chatDock === "right" ? " · current" : ""}
+        <p className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-[11px] font-semibold uppercase tracking-[0.14em] text-lab-ink/70">
+          Right{chatDock === "right" ? " · current" : ""}
         </p>
       </div>
       <div
         id="alyra-drop-bottom"
-        className={`absolute bottom-2 left-[12%] right-[12%] h-[min(14rem,36%)] rounded-xl border-2 border-dashed transition ${
+        className={`absolute bottom-1 left-[10%] right-[10%] h-[min(14rem,36%)] border border-dashed transition ${
           hover === "bottom"
-            ? "border-lab-ink/55 bg-lab-ink/[0.12] shadow-[inset_0_0_0_1px_rgba(12,12,12,0.06)]"
-            : "border-lab-line/80 bg-lab-panel/40"
+            ? "border-lab-ink/50 bg-lab-ink/[0.10]"
+            : "border-lab-line/90 bg-lab-panel/50"
         }`}
       >
-        <p className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-center text-[11px] font-semibold uppercase tracking-[0.14em] text-lab-ink/75">
+        <p className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-center text-[11px] font-semibold uppercase tracking-[0.14em] text-lab-ink/70">
           Bottom panel
           {chatDock === "bottom" ? " · current" : ""}
-          <span className="mt-1 block text-[10px] font-medium normal-case tracking-normal text-lab-muted">
-            Under the desk
-          </span>
         </p>
       </div>
     </div>

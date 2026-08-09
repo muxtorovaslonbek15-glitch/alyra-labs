@@ -2,7 +2,7 @@
 
 import type { ChatAgentMode } from "@/store/builderStore";
 
-/** Cursor-like Plan | Agent segmented control — calm, compact. */
+/** Cursor-like Plan | Agent segmented control. Equal cells, calm. */
 export function ChatModeToggle({
   mode,
   onChange,
@@ -16,12 +16,12 @@ export function ChatModeToggle({
 }) {
   const pad =
     size === "sm" ? "px-1 py-1 text-[10px]" : "px-1.5 py-1 text-[11px]";
-  const width = size === "sm" ? "w-[6.75rem]" : "w-[7.5rem]";
+  const width = size === "sm" ? "w-[6.5rem]" : "w-[7.25rem]";
   return (
     <div
       role="group"
       aria-label="Chat mode"
-      className={`grid ${width} grid-cols-2 rounded-md border border-lab-line/70 bg-lab-wash/80 p-0.5`}
+      className={`grid ${width} grid-cols-2 rounded-md border border-lab-line/70 bg-lab-wash/70 p-0.5`}
     >
       {(
         [
@@ -37,9 +37,9 @@ export function ChatModeToggle({
             disabled={disabled}
             aria-pressed={active}
             onClick={() => onChange(opt.id)}
-            className={`${pad} w-full rounded-[5px] text-center font-semibold tracking-wide transition ${
+            className={`${pad} w-full rounded-[4px] text-center font-semibold tracking-wide transition ${
               active
-                ? "bg-lab-ink text-lab-foam shadow-sm"
+                ? "bg-lab-ink text-lab-foam"
                 : "text-lab-muted hover:text-lab-ink"
             } disabled:opacity-50`}
           >

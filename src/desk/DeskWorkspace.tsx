@@ -26,8 +26,11 @@ import { LAB_GLASS_FALLBACK, VESSEL_CARD } from "@/desk/vesselLayout";
 
 export function DeskWorkspace({
   onOpenAtelier,
+  flushBottom = false,
 }: {
   onOpenAtelier?: () => void;
+  /** When chat is bottom-docked: square bottom edge flush to panel */
+  flushBottom?: boolean;
 } = {}) {
   const vessels = useDeskStore((s) => s.vessels);
   const activeVesselId = useDeskStore((s) => s.activeVesselId);
@@ -191,7 +194,11 @@ export function DeskWorkspace({
     <section
       ref={bindDesk}
       data-lab-desk
-      className={`relative min-h-0 flex-1 overflow-hidden rounded-none md:rounded-[1.25rem] ${
+      className={`relative h-full min-h-0 flex-1 overflow-hidden rounded-none ${
+        flushBottom
+          ? "md:rounded-t-[1.25rem] md:rounded-b-none"
+          : "md:rounded-[1.25rem]"
+      } ${
         isOver ? "ring-2 ring-lab-teal ring-offset-2 ring-offset-lab-wash" : ""
       }`}
     >
@@ -334,34 +341,35 @@ export function DeskWorkspace({
               <p className="mt-1.5 text-xs leading-snug text-lab-foam/75 md:hidden">
                 Place a beaker. Pour notes. Mix. Nothing else in the way.
               </p>
-              <p className="mt-1.5 hidden text-xs leading-snug text-lab-foam/75 md:block">
-                The desk is the canvas. Chat plans formulas; Build pours them
-                here step by step.
+              <p className="mt-1.5 hidden text-xs leading-snug text-lab-foam/70 md:block">
+                Desk is the canvas. Chat plans; Build pours here.
               </p>
-              <dl className="mt-5 hidden space-y-2 text-left md:block">
+              <dl className="mt-6 hidden space-y-2.5 text-left md:block">
                 {(
                   [
                     ["Open Chat", "Header → Chat"],
-                    ["Toggle inventory", "⌘B / Ctrl+B"],
-                    ["Toggle chat", "⌘T / Ctrl+T"],
-                    ["Dock chat", "::: drag or double-click"],
-                    ["Inventory", "Left rail · drag oils & glass"],
+                    ["Toggle inventory", "⌘B"],
+                    ["Toggle chat", "⌘T"],
+                    ["Dock chat", "⋮⋮ drag · double-click"],
+                    ["Inventory", "Left rail"],
                     ["Build", "Plan ready → Build"],
-                    ["How it works", "⋯ → Guide"],
+                    ["Guide", "⋯ → How it works"],
                   ] as const
                 ).map(([label, hint]) => (
                   <div
                     key={label}
-                    className="flex items-baseline justify-between gap-4 rounded-lg bg-black/25 px-3 py-2 backdrop-blur-sm"
+                    className="flex items-baseline justify-between gap-6"
                   >
-                    <dt className="text-xs font-medium text-lab-foam">{label}</dt>
-                    <dd className="font-mono text-[11px] text-lab-foam/55">
+                    <dt className="text-[13px] font-medium text-lab-foam/90">
+                      {label}
+                    </dt>
+                    <dd className="font-mono text-[12px] tracking-wide text-lab-foam/45">
                       {hint}
                     </dd>
                   </div>
                 ))}
               </dl>
-              <div className="mt-4 flex flex-col items-stretch gap-2">
+              <div className="mt-5 flex flex-col items-stretch gap-2">
                 <button
                   type="button"
                   onClick={() => trySeedDemoReaction()}
