@@ -174,7 +174,7 @@ export function PlanPanel({
 
           {mode === "building" ? (
             <p className="text-xs leading-relaxed text-lab-muted">
-              Pouring on the desk — watch the beaker fill step by step.
+              Pouring on the desk. Watch the beaker fill step by step.
             </p>
           ) : mode === "built" ? (
             <p className="text-xs leading-relaxed text-lab-muted">

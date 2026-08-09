@@ -61,7 +61,7 @@ export function deriveBuildSteps(bridge: LabBridgeFormula): BuildStep[] {
 
   steps.push({
     kind: "propose_accord",
-    narration: `Starting from ${title} — ${format} teaching scale.`,
+    narration: `Starting from ${title}: ${format} teaching scale.`,
   });
 
   const equipmentId = bridge.vessel?.equipmentId || "beaker";
@@ -98,7 +98,7 @@ export function deriveBuildSteps(bridge: LabBridgeFormula): BuildStep[] {
         chemicalId: labId,
         amountMl,
         name: line.name,
-        narration: `Pouring ${line.name}${role} — aiming ~${amountMl} ml.`,
+        narration: `Pouring ${line.name}${role}, aiming ~${amountMl} ml.`,
       });
     }
 
@@ -115,7 +115,7 @@ export function deriveBuildSteps(bridge: LabBridgeFormula): BuildStep[] {
     steps.push({
       kind: "mapping_gap",
       name: line.name,
-      narration: `Skipping ${line.name} — not in Lab inventory yet.`,
+      narration: `Skipping ${line.name}: not in Lab inventory yet.`,
     });
   }
 
@@ -127,7 +127,7 @@ export function deriveBuildSteps(bridge: LabBridgeFormula): BuildStep[] {
     if (bridge.vessel?.autoMix !== false) {
       steps.push({
         kind: "mix",
-        narration: "Mixing — watching the scent notes come up.",
+        narration: "Mixing. Watching the scent notes come up.",
       });
       steps.push({
         kind: "notes",
@@ -173,7 +173,7 @@ export async function runBuildQueue(
       onStep?.(
         {
           kind: "mapping_gap",
-          narration: "Nothing mapped — no materials to place.",
+          narration: "Nothing mapped: no materials to place.",
         },
         0,
         1,

@@ -6,7 +6,7 @@ import type { PerfumerApiError } from "./types";
 const CODE_HINTS: Record<string, string> = {
   missing_env: "A server key is missing.",
   groq_down: "The model is briefly unavailable.",
-  rate_limited: "Busy / rate limited — try again in a moment.",
+  rate_limited: "Busy / rate limited. Try again in a moment.",
   timeout: "That took too long.",
   tool_use_failed: "A formulation step misfired.",
   invalid_formula: "Formula materials look off.",
@@ -48,7 +48,7 @@ export function ErrorBanner({
       : error.title || "Something went wrong";
   const message =
     error.code === "rate_limited"
-      ? "The perfume model is rate-limited right now. Your brief is saved — try again shortly."
+      ? "The perfume model is rate-limited right now. Your brief is saved. Try again shortly."
       : error.message;
 
   return (

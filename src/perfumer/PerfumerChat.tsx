@@ -819,8 +819,8 @@ export function PerfumerChat({
                     building
                       ? "Build queue running on the desk"
                       : chatAgentMode === "plan"
-                        ? "Plan mode — propose only, no desk pours"
-                        : "Agent mode — chat + tools; Build still explicit"
+                        ? "Plan mode: propose only, no desk pours"
+                        : "Agent mode: chat + tools; Build still explicit"
                   }
                 >
                   {building
@@ -1005,15 +1005,15 @@ export function PerfumerChat({
                   user
                     ? shell
                       ? chatAgentMode === "plan"
-                        ? "Plan a brief — vibe, occasion, format…"
+                        ? "Plan a brief: vibe, occasion, format…"
                         : "Brief a vibe, occasion, format…"
-                      : "Brief me — goal, type, vibe…"
+                      : "Brief me: goal, type, vibe…"
                     : "Sign in to brief the Perfumer…"
                 }
                 className={
                   shell
-                    ? "min-h-[36px] max-h-28 flex-1 resize-none border-0 bg-transparent px-1 py-1.5 text-sm text-lab-ink placeholder:text-lab-muted/70 focus:outline-none"
-                    : "min-h-[48px] flex-1 resize-none rounded-xl border border-lab-line bg-lab-panel px-3 py-3 text-base text-lab-ink placeholder:text-lab-muted/70 focus:outline-none focus:ring-1 focus:ring-lab-ink/30 md:min-h-[44px] md:rounded-lg md:py-2.5 md:text-sm"
+                    ? "min-h-[36px] max-h-28 flex-1 resize-none border-0 bg-transparent px-1 py-1.5 text-[13px] leading-snug text-lab-ink placeholder:text-lab-muted/70 focus:outline-none"
+                    : "min-h-[48px] flex-1 resize-none rounded-xl border border-lab-line bg-lab-panel px-3 py-3 text-[15px] leading-snug text-lab-ink placeholder:text-lab-muted/70 focus:outline-none focus:ring-1 focus:ring-lab-ink/30 md:min-h-[44px] md:rounded-lg md:py-2.5 md:text-[13px]"
                 }
                 disabled={busy || building}
               />
@@ -1055,8 +1055,8 @@ function EmptyState({
       <div className="mx-auto flex max-w-xs flex-col items-center px-2 py-10 text-center">
         <p className="text-sm leading-relaxed text-lab-muted">
           {chatAgentMode === "plan"
-            ? "Plan mode — structure a formula first. Build pours only when you press Build."
-            : "Brief a vibe — Agent drafts a formula; Build pours on the desk when you say so."}
+            ? "Plan mode: structure a formula first. Build pours only when you press Build."
+            : "Brief a vibe. Agent drafts a formula; Build pours on the desk when you say so."}
         </p>
       </div>
     );
@@ -1070,8 +1070,8 @@ function EmptyState({
       <p className="mt-3 text-sm leading-relaxed text-lab-muted">
         I&apos;m your Master Perfumer for Indian makers. Brief me like a client:
         solid, oil, or EDP, occasion and vibe, and we&apos;ll compose for heat,
-        with materials, IFRA caution, and cost in ₹. Nothing silent-pours —
-        press Build when the Plan looks right.
+        with materials, IFRA caution, and cost in ₹. Nothing silent-pours.
+        Press Build when the Plan looks right.
       </p>
     </div>
   );
