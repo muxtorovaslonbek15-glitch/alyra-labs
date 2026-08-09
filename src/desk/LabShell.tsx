@@ -71,7 +71,6 @@ import { ChatHistoryCanvas } from "@/perfumer/ChatHistoryCanvas";
 import { useBuilderStore, type BuilderTab } from "@/store/builderStore";
 import { useGoalStore } from "@/store/goalStore";
 import { useDeferredSwap } from "@/animation/usePresence";
-import { VesselSimTicker } from "@/desk/VesselSimTicker";
 import type { User } from "firebase/auth";
 
 const ScanWorkbench = dynamic(
@@ -942,7 +941,6 @@ export function LabShell() {
           <RecipeJournal />
         </div>
         <ToastHost />
-        <VesselSimTicker />
         <GoalPicker
           onOpenAtelier={() => {
             setShopOpen(false);
