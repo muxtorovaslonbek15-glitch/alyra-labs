@@ -13,13 +13,17 @@ test.describe("Alyra Labs smoke", () => {
 
   test("lab loads desk chrome", async ({ page }) => {
     await page.goto("/lab");
-    await expect(
-      page.getByRole("button", { name: "Equipment", exact: true }),
-    ).toBeVisible({
+    await expect(page.getByText("Alyra Labs").first()).toBeVisible({
       timeout: 45_000,
     });
-    await expect(page.getByRole("button", { name: "Desk" })).toBeVisible();
-    await expect(page.getByText("Alyra Labs").first()).toBeVisible();
+    // IDE chrome: Lab | Tutor | Chat (Desk/Scan mode toggle may be gone)
+    await expect(page.getByRole("button", { name: /^Lab$/i })).toBeVisible({
+      timeout: 45_000,
+    });
+    await expect(page.getByRole("button", { name: /^Chat$/i })).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: /Open equipment|Equipment/i }).first(),
+    ).toBeVisible();
   });
 
   test("place beaker and open chemicals", async ({ page }) => {

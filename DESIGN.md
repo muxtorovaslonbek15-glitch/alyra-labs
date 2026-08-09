@@ -204,3 +204,4 @@ WebGL liquid sits **inside** the glass well under the SVG rim. Spectacle is seco
 | 2026-07-23 | Perfume via Atelier, not legacy cologne goal | Bottle selection before commit |
 | 2026-07-24 | Phone desk-only + sheets; desktop unchanged | Mobile minimal without rewriting desktop |
 | 2026-07-24 | Hide scrollbars in `.lab-app` | Clean phone chrome |
+| 2026-08-10 | Perfume Builder IDE: Lab\|Tutor\|Chat; Plan→Build | Desk stays hero; no silent pours; Chat absorbs `/perfumer` |
