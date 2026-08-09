@@ -29,7 +29,8 @@ export type AnalyticsEventName =
   | "builder_plan_ready"
   | "builder_build_start"
   | "builder_build_complete"
-  | "builder_stop";
+  | "builder_stop"
+  | "builder_chat_mode";
 
 export const ANALYTICS_EVENT_NAMES = new Set<string>([
   "page_view",
@@ -63,4 +64,5 @@ export const ANALYTICS_EVENT_NAMES = new Set<string>([
   "builder_build_start",
   "builder_build_complete",
   "builder_stop",
+  "builder_chat_mode",
 ]);

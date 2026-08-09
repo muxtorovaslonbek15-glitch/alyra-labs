@@ -322,6 +322,8 @@ export async function sendChat(body: {
   messages?: Array<{ role: string; content: string }>;
   clientMessageId?: string;
   brief?: BriefFields;
+  /** Cursor-like orchestration: plan = propose; agent = normal tools */
+  mode?: "plan" | "agent";
 }): Promise<
   | {
       ok: true;
@@ -343,6 +345,9 @@ export async function sendChat(body: {
     chatId: body.chatId,
     clientMessageId: body.clientMessageId,
   };
+  if (body.mode === "plan" || body.mode === "agent") {
+    payload.mode = body.mode;
+  }
   if (body.brief) {
     if (body.brief.goal) payload.goal = body.brief.goal;
     if (body.brief.type) payload.type = body.brief.type;
@@ -403,6 +408,7 @@ export async function streamChat(
     messages?: Array<{ role: string; content: string }>;
     clientMessageId?: string;
     brief?: BriefFields;
+    mode?: "plan" | "agent";
   },
   handlers: {
     onMeta?: (meta: {
@@ -437,6 +443,9 @@ export async function streamChat(
     clientMessageId: body.clientMessageId,
     liveStream: true,
   };
+  if (body.mode === "plan" || body.mode === "agent") {
+    payload.mode = body.mode;
+  }
   if (body.brief) {
     Object.assign(payload, {
       goal: body.brief.goal || undefined,

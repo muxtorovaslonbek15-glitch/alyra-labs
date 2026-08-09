@@ -16,11 +16,12 @@ test.describe("Alyra Labs smoke", () => {
     await expect(page.getByText("Alyra Labs").first()).toBeVisible({
       timeout: 45_000,
     });
-    // IDE chrome: Lab | Tutor | Chat (Desk/Scan mode toggle may be gone)
-    await expect(page.getByRole("button", { name: /^Lab$/i })).toBeVisible({
+    // IDE chrome: Tutor | Chat (Lab segment removed — desk stays canvas)
+    await expect(page.getByRole("button", { name: /^Tutor$/i })).toBeVisible({
       timeout: 45_000,
     });
     await expect(page.getByRole("button", { name: /^Chat$/i })).toBeVisible();
+    await expect(page.getByRole("button", { name: /^Lab$/i })).toHaveCount(0);
     await expect(
       page.getByRole("button", { name: /Open equipment|Equipment/i }).first(),
     ).toBeVisible();

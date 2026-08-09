@@ -5,8 +5,10 @@ import type { LabBridgeFormula, StructuredPayload } from "@/perfumer/types";
 import type { BuildStep } from "@/perfumer/BuildQueue";
 import type { DeskSnapshot } from "@/perfumer/deskSnapshot";
 
-export type BuilderTab = "lab" | "tutor" | "chat";
+export type BuilderTab = "tutor" | "chat";
 export type RightSlot = "tutor" | "chat";
+/** Cursor-style chat orchestration: Plan = deliberate propose; Agent = normal tools. */
+export type ChatAgentMode = "plan" | "agent";
 export type BuilderMode =
   | "idle"
   | "planning"
@@ -30,6 +32,7 @@ export interface PanelPrefs {
 }
 
 const PANEL_PREFS_KEY = "alyra.builder.panels.v1";
+const CHAT_MODE_KEY = "alyra.builder.chatMode.v1";
 
 export const PANEL_WIDTH = {
   leftMin: 180,
@@ -96,6 +99,25 @@ function savePanelPrefs(prefs: PanelPrefs) {
   }
 }
 
+function loadChatAgentMode(): ChatAgentMode {
+  if (typeof window === "undefined") return "agent";
+  try {
+    const raw = localStorage.getItem(CHAT_MODE_KEY);
+    if (raw === "plan" || raw === "agent") return raw;
+  } catch {
+    /* ignore */
+  }
+  return "agent";
+}
+
+function saveChatAgentMode(mode: ChatAgentMode) {
+  try {
+    localStorage.setItem(CHAT_MODE_KEY, mode);
+  } catch {
+    /* ignore */
+  }
+}
+
 interface BuilderState {
   tab: BuilderTab;
   rightSlot: RightSlot;
@@ -105,6 +127,8 @@ interface BuilderState {
   rightWidth: number;
   /** Phone chat sheet */
   chatSheetOpen: boolean;
+  /** Cursor-like Plan | Agent chat mode (default Agent) */
+  chatAgentMode: ChatAgentMode;
   mode: BuilderMode;
   plan: LabBridgeFormula | null;
   structured: StructuredPayload | null;
@@ -121,6 +145,7 @@ interface BuilderState {
   setLeftWidth: (width: number) => void;
   setRightWidth: (width: number) => void;
   setChatSheetOpen: (open: boolean) => void;
+  setChatAgentMode: (mode: ChatAgentMode) => void;
   hydratePanelPrefs: () => void;
   setPlanFromStructured: (
     structured: StructuredPayload | null,
@@ -139,13 +164,14 @@ interface BuilderState {
 let narrSeq = 0;
 
 export const useBuilderStore = create<BuilderState>((set, get) => ({
-  tab: "lab",
-  rightSlot: "tutor",
+  tab: "chat",
+  rightSlot: "chat",
   leftOpen: true,
   rightOpen: true,
   leftWidth: PANEL_WIDTH.leftDefault,
   rightWidth: PANEL_WIDTH.rightDefault,
   chatSheetOpen: false,
+  chatAgentMode: "agent",
   mode: "idle",
   plan: null,
   structured: null,
@@ -162,16 +188,20 @@ export const useBuilderStore = create<BuilderState>((set, get) => ({
       rightOpen: prefs.rightOpen,
       leftWidth: prefs.leftWidth,
       rightWidth: prefs.rightWidth,
+      chatAgentMode: loadChatAgentMode(),
     });
+  },
+
+  setChatAgentMode: (chatAgentMode) => {
+    set({ chatAgentMode });
+    saveChatAgentMode(chatAgentMode);
   },
 
   setTab: (tab) => {
     if (tab === "tutor") {
-      set({ tab, rightSlot: "tutor", rightOpen: true });
-    } else if (tab === "chat") {
-      set({ tab, rightSlot: "chat", rightOpen: true, chatSheetOpen: true });
+      set({ tab, rightSlot: "tutor", rightOpen: true, chatSheetOpen: false });
     } else {
-      set({ tab });
+      set({ tab, rightSlot: "chat", rightOpen: true, chatSheetOpen: true });
     }
   },
 
@@ -262,7 +292,7 @@ export const useBuilderStore = create<BuilderState>((set, get) => ({
       narration: [],
       rightSlot: "chat",
       rightOpen: true,
-      tab: "lab",
+      tab: "chat",
       // Phone: collapse Chat sheet so desk pours stay visible (DESIGN.md / IDE §8).
       chatSheetOpen: false,
     });

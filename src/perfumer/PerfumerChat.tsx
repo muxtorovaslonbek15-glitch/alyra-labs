@@ -15,6 +15,11 @@ import {
 import { ErrorBanner, WarningBanner } from "./ErrorBanner";
 import { FormulaCard } from "./FormulaCard";
 import {
+  ChatModeToggle,
+  PlanModeNudge,
+  wordCount,
+} from "./ChatModeToggle";
+import {
   loadLocalStore,
   newLocalChat,
   saveLocalStore,
@@ -65,6 +70,11 @@ export function PerfumerChat({
   const setPlanFromStructured = useBuilderStore((s) => s.setPlanFromStructured);
   const setPlan = useBuilderStore((s) => s.setPlan);
   const narration = useBuilderStore((s) => s.narration);
+  const chatAgentMode = useBuilderStore((s) => s.chatAgentMode);
+  const setChatAgentMode = useBuilderStore((s) => s.setChatAgentMode);
+  const builderMode = useBuilderStore((s) => s.mode);
+  const buildStepIndex = useBuilderStore((s) => s.buildStepIndex);
+  const buildSteps = useBuilderStore((s) => s.buildSteps);
   const [chats, setChats] = useState<ChatSession[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [input, setInput] = useState("");
@@ -76,11 +86,22 @@ export function PerfumerChat({
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
   const [loadingChatId, setLoadingChatId] = useState<string | null>(null);
+  /** Nudge dismissed for current long draft (resets when composer clears). */
+  const [nudgeDismissed, setNudgeDismissed] = useState(false);
+  const [nudgeShownForDraft, setNudgeShownForDraft] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const persistTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const chatsRef = useRef<ChatSession[]>([]);
   const activeIdRef = useRef<string | null>(null);
   const planTracked = useRef<string | null>(null);
+  const building = builderMode === "building";
+  const inputWords = wordCount(input);
+  const showPlanNudge =
+    shell &&
+    chatAgentMode === "agent" &&
+    !building &&
+    inputWords > 10 &&
+    !nudgeDismissed;
 
   const publishPlan = useCallback(
     (structured: ChatMessage["structured"] | undefined) => {
@@ -257,6 +278,27 @@ export function PerfumerChat({
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [active?.messages, busy, active?.id, narration.length]);
+
+  // Once per long draft: mark shown; clear dismiss when composer empties.
+  useEffect(() => {
+    if (inputWords === 0) {
+      setNudgeDismissed(false);
+      setNudgeShownForDraft(false);
+      return;
+    }
+    if (showPlanNudge && !nudgeShownForDraft) {
+      setNudgeShownForDraft(true);
+    }
+  }, [inputWords, showPlanNudge, nudgeShownForDraft]);
+
+  function changeChatMode(next: "plan" | "agent") {
+    if (next === chatAgentMode) return;
+    setChatAgentMode(next);
+    track("builder_chat_mode", { mode: next });
+    if (next === "plan") {
+      setNudgeDismissed(true);
+    }
+  }
 
   async function ensureServerId(chat: ChatSession): Promise<string | null> {
     if (chat.serverId) return chat.serverId;
@@ -440,6 +482,7 @@ export function PerfumerChat({
         chatId: serverId || undefined,
         message: text,
         clientMessageId,
+        mode: chatAgentMode,
         messages: serverId
           ? undefined
           : [...historyForApi, { role: "user", content: text }],
@@ -754,6 +797,30 @@ export function PerfumerChat({
                 <p className="text-xs font-semibold tracking-wide text-lab-ink">
                   Perfumer
                 </p>
+                <span
+                  className={`rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-[0.12em] ${
+                    building
+                      ? "bg-lab-amber/15 text-lab-amber"
+                      : chatAgentMode === "plan"
+                        ? "bg-lab-wash text-lab-muted"
+                        : "bg-lab-ink/5 text-lab-muted"
+                  }`}
+                  title={
+                    building
+                      ? "Build queue running on the desk"
+                      : chatAgentMode === "plan"
+                        ? "Plan mode — propose only, no desk pours"
+                        : "Agent mode — chat + tools; Build still explicit"
+                  }
+                >
+                  {building
+                    ? buildSteps.length
+                      ? `Building ${Math.min(buildStepIndex + 1, buildSteps.length)}/${buildSteps.length}`
+                      : "Building"
+                    : chatAgentMode === "plan"
+                      ? "Plan"
+                      : "Agent"}
+                </span>
                 <div className="flex-1" />
                 <button
                   type="button"
@@ -805,7 +872,7 @@ export function PerfumerChat({
                 Loading conversation…
               </p>
             ) : empty && !narration.length ? (
-              <EmptyState compact={shell} />
+              <EmptyState compact={shell} chatAgentMode={chatAgentMode} />
             ) : (
               <>
                 {messages.map((m) => (
@@ -839,6 +906,47 @@ export function PerfumerChat({
                 : "pb-[max(0.625rem,env(safe-area-inset-bottom))] md:px-4 md:py-3 md:pb-3"
             }`}
           >
+            {building && shell ? (
+              <div
+                role="status"
+                className="mb-2 flex items-center gap-2 rounded-lg border border-lab-amber/30 bg-lab-amber/10 px-2.5 py-1.5"
+              >
+                <span className="h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-lab-amber" />
+                <p className="min-w-0 flex-1 text-[11px] font-medium text-lab-ink">
+                  Building on desk
+                  {buildSteps.length
+                    ? ` · ${Math.min(buildStepIndex + 1, buildSteps.length)}/${buildSteps.length}`
+                    : ""}
+                </p>
+                <p className="shrink-0 text-[10px] text-lab-muted">
+                  Stop from Plan
+                </p>
+              </div>
+            ) : null}
+
+            {showPlanNudge ? (
+              <PlanModeNudge
+                onSwitch={() => changeChatMode("plan")}
+                onDismiss={() => setNudgeDismissed(true)}
+              />
+            ) : null}
+
+            {shell ? (
+              <div className="mb-1.5 flex items-center justify-between gap-2">
+                <ChatModeToggle
+                  mode={chatAgentMode}
+                  onChange={changeChatMode}
+                  disabled={building}
+                  size="sm"
+                />
+                <p className="truncate text-[10px] text-lab-muted">
+                  {chatAgentMode === "plan"
+                    ? "Propose only · Build is explicit"
+                    : "Tools on · Build still explicit"}
+                </p>
+              </div>
+            ) : null}
+
             <div
               className={`flex items-end gap-1.5 ${
                 shell
@@ -859,7 +967,9 @@ export function PerfumerChat({
                 placeholder={
                   user
                     ? shell
-                      ? "Brief a vibe, occasion, format…"
+                      ? chatAgentMode === "plan"
+                        ? "Plan a brief — vibe, occasion, format…"
+                        : "Brief a vibe, occasion, format…"
                       : "Brief me — goal, type, vibe…"
                     : "Sign in to brief the Perfumer…"
                 }
@@ -868,7 +978,7 @@ export function PerfumerChat({
                     ? "min-h-[36px] max-h-28 flex-1 resize-none border-0 bg-transparent px-1 py-1.5 text-sm text-lab-ink placeholder:text-lab-muted/70 focus:outline-none"
                     : "min-h-[48px] flex-1 resize-none rounded-xl border border-lab-line bg-lab-panel px-3 py-3 text-base text-lab-ink placeholder:text-lab-muted/70 focus:outline-none focus:ring-1 focus:ring-lab-ink/30 md:min-h-[44px] md:rounded-lg md:py-2.5 md:text-sm"
                 }
-                disabled={busy}
+                disabled={busy || building}
               />
               <button
                 type="button"
@@ -879,7 +989,7 @@ export function PerfumerChat({
                   }
                   void onSend();
                 }}
-                disabled={busy || (!user ? false : !input.trim())}
+                disabled={busy || building || (!user ? false : !input.trim())}
                 className={
                   shell
                     ? "mb-0.5 h-8 shrink-0 rounded-md bg-lab-ink px-3 text-[11px] font-semibold text-lab-foam transition hover:bg-black disabled:opacity-40"
@@ -896,12 +1006,20 @@ export function PerfumerChat({
   );
 }
 
-function EmptyState({ compact }: { compact?: boolean } = {}) {
+function EmptyState({
+  compact,
+  chatAgentMode,
+}: {
+  compact?: boolean;
+  chatAgentMode?: "plan" | "agent";
+} = {}) {
   if (compact) {
     return (
       <div className="mx-auto flex max-w-xs flex-col items-center px-2 py-10 text-center">
         <p className="text-sm leading-relaxed text-lab-muted">
-          Brief a vibe — Plan first, then Build pours on the desk.
+          {chatAgentMode === "plan"
+            ? "Plan mode — structure a formula first. Build pours only when you press Build."
+            : "Brief a vibe — Agent drafts a formula; Build pours on the desk when you say so."}
         </p>
       </div>
     );
@@ -915,8 +1033,8 @@ function EmptyState({ compact }: { compact?: boolean } = {}) {
       <p className="mt-3 text-sm leading-relaxed text-lab-muted">
         I&apos;m your Master Perfumer for Indian makers. Brief me like a client:
         solid, oil, or EDP, occasion and vibe, and we&apos;ll compose for heat,
-        with materials, IFRA caution, and cost in ₹. Plan mode first — Build
-        pours on the desk when you&apos;re ready.
+        with materials, IFRA caution, and cost in ₹. Nothing silent-pours —
+        press Build when the Plan looks right.
       </p>
     </div>
   );

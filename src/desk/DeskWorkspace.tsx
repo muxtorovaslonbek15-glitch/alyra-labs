@@ -341,7 +341,7 @@ export function DeskWorkspace({
               <dl className="mt-5 hidden space-y-2 text-left md:block">
                 {(
                   [
-                    ["Open Chat", "Lab → Chat tab"],
+                    ["Open Chat", "Header → Chat"],
                     ["Inventory", "Left rail · drag oils & glass"],
                     ["Build", "Plan ready → Build"],
                     ["How it works", "⋯ → Guide"],

@@ -93,6 +93,7 @@ export function LabShell() {
   const recordDiscovery = useProgressStore((s) => s.recordDiscovery);
   const router = useRouter();
   const bridgeApplied = useRef(false);
+  const tabDeepLinkApplied = useRef(false);
 
   const [mode, setMode] = useState<LabMode>("desk");
   const [activeDrag, setActiveDrag] = useState<DragPayload | null>(null);
@@ -150,10 +151,7 @@ export function LabShell() {
     if (typeof window === "undefined") return;
     const params = new URLSearchParams(window.location.search);
     const wantsBridge = params.get("bridge") === "1";
-    const tabParam = params.get("tab");
-    if (tabParam === "chat" || tabParam === "tutor" || tabParam === "lab") {
-      setBuilderTab(tabParam as BuilderTab);
-    }
+    // Tab deep-link handled by dedicated one-shot effect; skip here to avoid fights.
     if (!wantsBridge) return;
     bridgeApplied.current = true;
     const bridge = consumeLabBridge();
@@ -286,24 +284,28 @@ export function LabShell() {
     if (tab === "tutor") {
       setTutorOpen(true);
       track("tutor_open");
-    } else if (tab === "lab") {
+    } else {
       setTutorOpen(false);
     }
   }
 
-  /** Deep-link: /lab?tab=chat|tutor|lab (also from /perfumer redirect). */
+  /** Deep-link: /lab?tab=chat|tutor (legacy ?tab=lab → Chat). Once only. */
   useEffect(() => {
-    if (typeof window === "undefined") return;
+    if (typeof window === "undefined" || tabDeepLinkApplied.current) return;
     const params = new URLSearchParams(window.location.search);
     const tab = params.get("tab");
-    if (tab === "chat" || tab === "tutor" || tab === "lab") {
-      setBuilderTab(tab as BuilderTab);
-      if (tab === "tutor") setTutorOpen(true);
-      const keep = new URLSearchParams();
-      if (params.get("fromLab") === "1") keep.set("fromLab", "1");
-      const qs = keep.toString();
-      router.replace(qs ? `/lab?${qs}` : "/lab", { scroll: false });
-    }
+    if (tab !== "chat" && tab !== "tutor" && tab !== "lab") return;
+    tabDeepLinkApplied.current = true;
+    const next: BuilderTab = tab === "tutor" ? "tutor" : "chat";
+    setBuilderTab(next);
+    if (next === "tutor") setTutorOpen(true);
+    else setTutorOpen(false);
+    const keep = new URLSearchParams();
+    if (params.get("fromLab") === "1") keep.set("fromLab", "1");
+    const qs = keep.toString();
+    const path = qs ? `/lab?${qs}` : "/lab";
+    window.history.replaceState(null, "", path);
+    router.replace(path, { scroll: false });
   }, [router, setBuilderTab]);
 
   useEffect(() => {

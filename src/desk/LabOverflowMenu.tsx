@@ -157,8 +157,8 @@ export function LabModeToggle({
   scanActive,
   onToggleScan,
 }: {
-  value: "lab" | "tutor" | "chat";
-  onChange: (v: "lab" | "tutor" | "chat") => void;
+  value: "tutor" | "chat";
+  onChange: (v: "tutor" | "chat") => void;
   showScan?: boolean;
   scanActive?: boolean;
   onToggleScan?: () => void;
@@ -168,7 +168,6 @@ export function LabModeToggle({
       <div className="flex rounded-lg bg-white/10 p-0.5">
         {(
           [
-            ["lab", "Lab"],
             ["tutor", "Tutor"],
             ["chat", "Chat"],
           ] as const
