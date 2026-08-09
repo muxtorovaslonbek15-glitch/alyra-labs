@@ -605,10 +605,10 @@ export function PerfumerChat({
       ) : null}
 
       <div
-        className={`relative flex min-h-0 flex-1 overflow-hidden bg-lab-panel/80 ${
+        className={`relative flex min-h-0 flex-1 overflow-hidden ${
           shell
-            ? "border-0"
-            : "border-y border-lab-line/70 md:rounded-2xl md:border md:border-lab-line/70"
+            ? "border-0 bg-lab-panel"
+            : "border-y border-lab-line/70 bg-lab-panel/80 md:rounded-2xl md:border md:border-lab-line/70"
         }`}
       >
         {sidebarOpen ? (
@@ -622,9 +622,9 @@ export function PerfumerChat({
           />
         ) : null}
 
-        {/* Chat list — drawer always in shell; md+ rail on page */}
+        {/* Chat list — drawer in shell; md+ rail on page */}
         <aside
-          className={`absolute inset-y-0 left-0 z-30 flex w-[min(18.5rem,86vw)] flex-col border-r border-lab-line bg-lab-wash shadow-[8px_0_24px_-16px_rgba(12,12,12,0.35)] transition-transform duration-300 ease-out ${
+          className={`absolute inset-y-0 left-0 z-30 flex w-[min(16rem,86vw)] flex-col border-r border-lab-line bg-lab-panel shadow-[8px_0_24px_-16px_rgba(12,12,12,0.35)] transition-transform duration-300 ease-out ${
             shell
               ? sidebarOpen
                 ? "translate-x-0"
@@ -634,33 +634,32 @@ export function PerfumerChat({
                 }`
           }`}
         >
-          <div className="flex items-center justify-between gap-2 border-b border-lab-line px-3 py-2.5 pt-[max(0.625rem,env(safe-area-inset-top))] md:pt-2.5">
-            <p className="font-display text-sm tracking-wide text-lab-ink">
+          <div className="flex items-center justify-between gap-2 border-b border-lab-line/60 px-3 py-2">
+            <p className="text-xs font-semibold tracking-wide text-lab-ink">
               Chats
             </p>
-            <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-1">
               <button
                 type="button"
                 onClick={createChat}
-                className="min-h-11 rounded-md bg-lab-ink px-3 text-xs font-semibold text-lab-foam hover:bg-black md:min-h-9 md:px-2.5 md:text-[11px]"
+                className="min-h-8 rounded-md bg-lab-ink px-2.5 text-[11px] font-semibold text-lab-foam hover:bg-black"
               >
                 New
               </button>
               <button
                 type="button"
                 onClick={() => setSidebarOpen(false)}
-                className="min-h-11 rounded-md border border-lab-line px-3 text-xs font-semibold text-lab-ink md:hidden"
+                className={`min-h-8 rounded-md px-2 text-[11px] font-medium text-lab-muted hover:text-lab-ink ${
+                  shell ? "" : "md:hidden"
+                }`}
               >
-                Done
+                Close
               </button>
             </div>
           </div>
-          <ul className="scroll-thin flex-1 space-y-1 overflow-y-auto p-2">
+          <ul className="scroll-thin flex-1 space-y-0.5 overflow-y-auto p-1.5">
             {chats.map((c) => {
               const selected = c.id === activeId;
-              const preview =
-                c.messages.find((m) => m.role === "user")?.content ||
-                (c.messages.length ? `${c.messages.length} messages` : "Empty");
               return (
                 <li key={c.id} className="group relative">
                   {renamingId === c.id ? (
@@ -676,71 +675,34 @@ export function PerfumerChat({
                         value={renameValue}
                         onChange={(e) => setRenameValue(e.target.value)}
                         onBlur={commitRename}
-                        className="min-h-11 w-full rounded-md border border-lab-line bg-lab-panel px-2 py-2 text-sm text-lab-ink md:min-h-0 md:py-1.5 md:text-xs"
+                        className="min-h-9 w-full rounded-md border border-lab-line bg-white px-2 py-1.5 text-xs text-lab-ink"
                       />
                     </form>
                   ) : (
                     <div
-                      className={`flex items-stretch gap-0.5 rounded-lg ${
-                        selected ? "bg-lab-ink" : "hover:bg-white/70"
+                      className={`flex items-stretch gap-0.5 rounded-md ${
+                        selected ? "bg-lab-ink" : "hover:bg-lab-wash"
                       }`}
                     >
                       <button
                         type="button"
                         onClick={() => void selectChat(c.id)}
-                        className={`flex min-h-11 min-w-0 flex-1 flex-col justify-center gap-0.5 px-2.5 py-2 text-left transition-colors md:min-h-0 ${
+                        className={`flex min-h-9 min-w-0 flex-1 items-center justify-between gap-2 px-2.5 py-1.5 text-left ${
                           selected ? "text-lab-foam" : "text-lab-ink"
                         }`}
                       >
-                        <span className="flex w-full items-baseline justify-between gap-2">
-                          <span className="line-clamp-1 flex-1 text-sm font-medium leading-snug md:text-xs">
-                            {c.title}
-                          </span>
-                          <span
-                            className={`shrink-0 font-mono text-[10px] md:text-[9px] ${
-                              selected ? "text-lab-foam/55" : "text-lab-muted"
-                            }`}
-                          >
-                            {formatChatTime(c.updatedAt)}
-                          </span>
+                        <span className="line-clamp-1 flex-1 text-xs font-medium leading-snug">
+                          {c.title}
                         </span>
                         <span
-                          className={`line-clamp-1 text-[11px] leading-snug md:text-[10px] ${
-                            selected ? "text-lab-foam/60" : "text-lab-muted"
+                          className={`shrink-0 font-mono text-[10px] ${
+                            selected ? "text-lab-foam/50" : "text-lab-muted"
                           }`}
                         >
-                          {preview}
+                          {formatChatTime(c.updatedAt)}
                         </span>
                       </button>
-                      <div className="flex shrink-0 flex-col justify-center gap-0.5 pr-1 md:hidden">
-                        <button
-                          type="button"
-                          title="Rename"
-                          aria-label="Rename chat"
-                          onClick={() => startRename(c)}
-                          className={`min-h-9 min-w-9 rounded text-xs ${
-                            selected
-                              ? "bg-white/15 text-lab-foam"
-                              : "bg-lab-panel text-lab-muted"
-                          }`}
-                        >
-                          ✎
-                        </button>
-                        <button
-                          type="button"
-                          title="Delete"
-                          aria-label="Delete chat"
-                          onClick={() => void removeChat(c.id)}
-                          className={`min-h-9 min-w-9 rounded text-xs ${
-                            selected
-                              ? "bg-white/15 text-lab-foam"
-                              : "bg-lab-panel text-lab-muted"
-                          }`}
-                        >
-                          ×
-                        </button>
-                      </div>
-                      <div className="hidden shrink-0 flex-col justify-center gap-0.5 pr-1 opacity-0 transition-opacity group-hover:opacity-100 md:flex">
+                      <div className="hidden shrink-0 items-center gap-0.5 pr-1 opacity-0 transition-opacity group-hover:opacity-100 md:flex">
                         <button
                           type="button"
                           title="Rename"
@@ -748,7 +710,7 @@ export function PerfumerChat({
                           className={`rounded px-1.5 py-0.5 text-[10px] ${
                             selected
                               ? "bg-white/15 text-lab-foam"
-                              : "bg-lab-panel text-lab-muted"
+                              : "text-lab-muted hover:bg-white"
                           }`}
                         >
                           ✎
@@ -760,7 +722,7 @@ export function PerfumerChat({
                           className={`rounded px-1.5 py-0.5 text-[10px] ${
                             selected
                               ? "bg-white/15 text-lab-foam"
-                              : "bg-lab-panel text-lab-muted"
+                              : "text-lab-muted hover:bg-white"
                           }`}
                         >
                           ×
@@ -772,7 +734,7 @@ export function PerfumerChat({
               );
             })}
           </ul>
-          {health ? (
+          {!shell && health ? (
             <p className="border-t border-lab-line px-3 py-2 font-mono text-[9px] leading-relaxed text-lab-muted">
               {String(health.ingredients || 0)} materials ·{" "}
               {String(health.formulas || 0)} formulas
@@ -782,28 +744,55 @@ export function PerfumerChat({
         </aside>
 
         <div className="flex min-w-0 flex-1 flex-col">
-          <div className="flex items-center gap-2 border-b border-lab-line px-3 py-2 md:px-3 md:py-2">
-            <button
-              type="button"
-              className={`min-h-11 rounded-md border border-lab-line px-3 text-sm font-medium text-lab-ink ${
-                shell ? "" : "md:hidden"
-              }`}
-              onClick={() => setSidebarOpen(true)}
-            >
-              Chats
-            </button>
-            <h2 className="min-w-0 flex-1 truncate font-display text-base text-lab-ink md:text-lg">
-              {active?.title || "Master Perfumer"}
-            </h2>
-            {shell && onCloseSheet ? (
-              <button
-                type="button"
-                onClick={onCloseSheet}
-                className="min-h-11 shrink-0 rounded-lg bg-lab-ink px-3 text-xs font-semibold text-lab-foam md:hidden"
-              >
-                Done
-              </button>
-            ) : null}
+          <div
+            className={`flex h-10 shrink-0 items-center gap-1.5 border-b border-lab-line/50 px-2.5 ${
+              shell ? "" : "md:px-3"
+            }`}
+          >
+            {shell ? (
+              <>
+                <p className="text-xs font-semibold tracking-wide text-lab-ink">
+                  Perfumer
+                </p>
+                <div className="flex-1" />
+                <button
+                  type="button"
+                  onClick={() => setSidebarOpen(true)}
+                  className="min-h-8 rounded-md px-2 text-[11px] font-medium text-lab-muted hover:bg-lab-wash hover:text-lab-ink"
+                >
+                  History
+                </button>
+                <button
+                  type="button"
+                  onClick={createChat}
+                  className="min-h-8 rounded-md px-2 text-[11px] font-medium text-lab-muted hover:bg-lab-wash hover:text-lab-ink"
+                >
+                  New
+                </button>
+                {onCloseSheet ? (
+                  <button
+                    type="button"
+                    onClick={onCloseSheet}
+                    className="min-h-8 rounded-md bg-lab-ink px-2.5 text-[11px] font-semibold text-lab-foam md:hidden"
+                  >
+                    Done
+                  </button>
+                ) : null}
+              </>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  className="min-h-9 rounded-md border border-lab-line px-3 text-sm font-medium text-lab-ink md:hidden"
+                  onClick={() => setSidebarOpen(true)}
+                >
+                  Chats
+                </button>
+                <h2 className="min-w-0 flex-1 truncate font-display text-base text-lab-ink md:text-lg">
+                  {active?.title || "Master Perfumer"}
+                </h2>
+              </>
+            )}
           </div>
 
           <div
@@ -830,12 +819,12 @@ export function PerfumerChat({
                 {narration.map((n) => (
                   <div
                     key={n.id}
-                    className="rounded-lg border border-lab-line/60 bg-lab-wash/80 px-3 py-2 text-sm leading-relaxed text-lab-ink/90"
+                    className="rounded-md border border-lab-line/50 bg-lab-wash/60 px-2.5 py-1.5 text-sm leading-relaxed text-lab-ink/90"
                   >
-                    <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-lab-muted">
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-lab-muted">
                       Build
                     </p>
-                    <p className="mt-1">{n.text}</p>
+                    <p className="mt-0.5">{n.text}</p>
                   </div>
                 ))}
               </>
@@ -844,13 +833,19 @@ export function PerfumerChat({
           </div>
 
           <div
-            className={`border-t border-lab-line bg-lab-wash/60 px-3 py-2.5 ${
+            className={`border-t border-lab-line/50 bg-lab-panel px-2.5 py-2 ${
               shell
-                ? "pb-2.5 md:px-3 md:py-2.5"
+                ? "pb-2"
                 : "pb-[max(0.625rem,env(safe-area-inset-bottom))] md:px-4 md:py-3 md:pb-3"
             }`}
           >
-            <div className="flex gap-2">
+            <div
+              className={`flex items-end gap-1.5 ${
+                shell
+                  ? "rounded-lg border border-lab-line bg-white px-2 py-1.5"
+                  : ""
+              }`}
+            >
               <textarea
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
@@ -860,13 +855,19 @@ export function PerfumerChat({
                     void onSend();
                   }
                 }}
-                rows={shell ? 2 : 2}
+                rows={shell ? 1 : 2}
                 placeholder={
                   user
-                    ? "Brief me — goal, type, vibe…"
-                    : "Sign in to brief Master Perfumer…"
+                    ? shell
+                      ? "Brief a vibe, occasion, format…"
+                      : "Brief me — goal, type, vibe…"
+                    : "Sign in to brief the Perfumer…"
                 }
-                className="min-h-[48px] flex-1 resize-none rounded-xl border border-lab-line bg-lab-panel px-3 py-3 text-base text-lab-ink placeholder:text-lab-muted/70 focus:outline-none focus:ring-1 focus:ring-lab-ink/30 md:min-h-[44px] md:rounded-lg md:py-2.5 md:text-sm"
+                className={
+                  shell
+                    ? "min-h-[36px] max-h-28 flex-1 resize-none border-0 bg-transparent px-1 py-1.5 text-sm text-lab-ink placeholder:text-lab-muted/70 focus:outline-none"
+                    : "min-h-[48px] flex-1 resize-none rounded-xl border border-lab-line bg-lab-panel px-3 py-3 text-base text-lab-ink placeholder:text-lab-muted/70 focus:outline-none focus:ring-1 focus:ring-lab-ink/30 md:min-h-[44px] md:rounded-lg md:py-2.5 md:text-sm"
+                }
                 disabled={busy}
               />
               <button
@@ -879,7 +880,11 @@ export function PerfumerChat({
                   void onSend();
                 }}
                 disabled={busy || (!user ? false : !input.trim())}
-                className="h-12 w-16 shrink-0 self-end rounded-xl bg-lab-ink text-sm font-semibold text-lab-foam transition-opacity hover:bg-black disabled:opacity-50 md:h-11 md:w-auto md:rounded-lg md:px-4"
+                className={
+                  shell
+                    ? "mb-0.5 h-8 shrink-0 rounded-md bg-lab-ink px-3 text-[11px] font-semibold text-lab-foam transition hover:bg-black disabled:opacity-40"
+                    : "h-12 w-16 shrink-0 self-end rounded-xl bg-lab-ink text-sm font-semibold text-lab-foam transition-opacity hover:bg-black disabled:opacity-50 md:h-11 md:w-auto md:rounded-lg md:px-4"
+                }
               >
                 {user ? "Send" : "Sign in"}
               </button>
@@ -892,12 +897,17 @@ export function PerfumerChat({
 }
 
 function EmptyState({ compact }: { compact?: boolean } = {}) {
+  if (compact) {
+    return (
+      <div className="mx-auto flex max-w-xs flex-col items-center px-2 py-10 text-center">
+        <p className="text-sm leading-relaxed text-lab-muted">
+          Brief a vibe — Plan first, then Build pours on the desk.
+        </p>
+      </div>
+    );
+  }
   return (
-    <div
-      className={`mx-auto flex max-w-md flex-col items-center px-2 text-center ${
-        compact ? "py-8" : "py-10 md:py-16"
-      }`}
-    >
+    <div className="mx-auto flex max-w-md flex-col items-center px-2 py-10 text-center md:py-16">
       <AlyraMark size="md" href={null} className="justify-center" />
       <p className="mt-6 font-display text-2xl leading-snug tracking-tight text-lab-ink">
         Hey, welcome to Alyra Labs

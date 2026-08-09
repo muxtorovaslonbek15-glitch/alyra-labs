@@ -9,7 +9,6 @@ import {
 } from "@/perfumer/deskSnapshot";
 import { deskContentsFromBridge } from "@/perfumer/labBridge";
 import { useBuilderStore } from "@/store/builderStore";
-import { useDeskStore } from "@/store/deskStore";
 import { track } from "@/lib/analytics/track";
 import { showToast } from "@/gamification/ToastHost";
 import { useMdUp } from "@/desk/useMdUp";
@@ -127,12 +126,12 @@ export function DesktopBuilderChrome() {
         onClick={() => setRightOpen(false)}
         aria-label="Hide chat"
         title="Hide chat"
-        className="absolute left-1 top-1 z-10 flex h-7 w-7 items-center justify-center rounded-md text-lab-muted hover:bg-lab-wash hover:text-lab-ink"
+        className="absolute left-2 top-1.5 z-30 flex h-7 w-7 items-center justify-center rounded-md text-lab-muted hover:bg-lab-wash hover:text-lab-ink"
       >
         ›
       </button>
       {mode === "building" ? (
-        <div className="pointer-events-none absolute inset-x-2 top-10 z-10 rounded-md border border-lab-line/60 bg-lab-wash/95 px-2 py-1.5 shadow-sm">
+        <div className="pointer-events-none absolute inset-x-3 top-10 z-20 rounded-md border border-lab-line/60 bg-lab-wash/95 px-2 py-1.5 shadow-sm">
           <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-lab-muted">
             Building
             {buildSteps.length

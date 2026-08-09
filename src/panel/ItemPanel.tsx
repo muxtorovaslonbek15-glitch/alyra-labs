@@ -22,6 +22,8 @@ import { isOilItem } from "@/domains/chemistry/perfume/oilMeta";
 import { useInventoryStockStore } from "@/store/inventoryStockStore";
 import { formatAmount } from "@/desk/unitDisplay";
 import { useUnitPrefStore } from "@/store/unitPrefStore";
+import { PanelResizeHandle } from "@/desk/PanelResizeHandle";
+import { PANEL_WIDTH } from "@/store/builderStore";
 
 type BrowseKind = "equipment" | "chemicals" | "oils";
 
@@ -34,11 +36,15 @@ export function ItemPanel({
   /** Desktop only — closable left rail. Never affects `< md` (phone stays sheet/FAB). */
   desktopOpen = true,
   onToggleDesktop,
+  desktopWidth,
+  onDesktopResize,
 }: {
   onOpenTutor?: () => void;
   onOpenChat?: () => void;
   desktopOpen?: boolean;
   onToggleDesktop?: () => void;
+  desktopWidth?: number;
+  onDesktopResize?: (deltaPx: number) => void;
 } = {}) {
   const [browse, setBrowse] = useState<BrowseKind>("equipment");
   const [expanded, setExpanded] = useState(false);
@@ -777,9 +783,14 @@ export function ItemPanel({
 
       {/* `hidden` + conditional `md:flex` — never show as a phone column */}
       <aside
-        className={`panel-glass relative hidden w-full shrink-0 flex-col border-b border-lab-line/60 md:h-full md:max-h-none md:w-[14rem] md:border-b-0 md:border-r xl:w-[15.5rem] ${
+        className={`panel-glass relative hidden w-full shrink-0 flex-col border-b border-lab-line/60 md:h-full md:max-h-none md:border-b-0 md:border-r ${
           desktopOpen ? "md:flex" : "md:hidden"
         }`}
+        style={
+          desktopOpen
+            ? { width: desktopWidth ?? PANEL_WIDTH.leftDefault }
+            : undefined
+        }
       >
         {onToggleDesktop ? (
           <button
@@ -942,6 +953,9 @@ export function ItemPanel({
 
         {expandedUi}
       </aside>
+      {desktopOpen && onDesktopResize ? (
+        <PanelResizeHandle side="left" onResize={onDesktopResize} />
+      ) : null}
     </>
   );
 }

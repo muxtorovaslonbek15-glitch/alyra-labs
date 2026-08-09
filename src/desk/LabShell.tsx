@@ -32,7 +32,6 @@ import { GoalProgressWatcher } from "@/goals/GoalProgressWatcher";
 import { AlyraMark } from "@/components/brand/AlyraMark";
 import { GoalRewardOverlay } from "@/goals/GoalRewardOverlay";
 import { AuthGateModal } from "@/components/auth/AuthGateModal";
-import { NavChrome } from "@/components/auth/NavChrome";
 import { useAuthStore } from "@/store/authStore";
 import { labCopy } from "@/lab/labCopy";
 import { VESSEL_CARD } from "@/desk/vesselLayout";
@@ -58,7 +57,13 @@ import { getVesselContents } from "@/desk/vesselContents";
 import { LAB_CHEMICAL_IDS } from "@/perfumer/labIngredientMap";
 import { MobileBuilderChrome } from "@/desk/MobileBuilderChrome";
 import { DesktopBuilderChrome } from "@/desk/DesktopBuilderChrome";
+import {
+  LabModeToggle,
+  LabOverflowMenu,
+  type LabOverflowAction,
+} from "@/desk/LabOverflowMenu";
 import { useBuilderStore, type BuilderTab } from "@/store/builderStore";
+import { useGoalStore } from "@/store/goalStore";
 import type { User } from "firebase/auth";
 
 const ScanWorkbench = dynamic(
@@ -104,6 +109,8 @@ export function LabShell() {
   const setBuilderTab = useBuilderStore((s) => s.setTab);
   const leftOpen = useBuilderStore((s) => s.leftOpen);
   const setLeftOpen = useBuilderStore((s) => s.setLeftOpen);
+  const leftWidth = useBuilderStore((s) => s.leftWidth);
+  const setLeftWidth = useBuilderStore((s) => s.setLeftWidth);
   const rightOpen = useBuilderStore((s) => s.rightOpen);
   const rightSlot = useBuilderStore((s) => s.rightSlot);
   const setRightOpen = useBuilderStore((s) => s.setRightOpen);
@@ -549,98 +556,146 @@ export function LabShell() {
     >
       <div className="lab-app flex h-dvh flex-col overflow-hidden bg-lab-wash">
         <header className="flex shrink-0 items-center justify-between gap-2 border-b border-white/10 bg-lab-ink px-3 py-1.5 md:gap-3 md:px-4">
-          <div className="min-w-0 flex-1 overflow-hidden">
+          <div className="min-w-0 shrink-0">
             <h1 className="leading-none">
               <AlyraMark
                 size="sm"
                 href={null}
                 onDark
                 className="max-w-full"
-                wordmarkClassName="md:text-2xl"
+                wordmarkClassName="md:text-xl"
               />
             </h1>
-            <p className="mt-0.5 hidden max-w-md truncate text-[11px] text-lab-foam/55 md:block">
-              {mode === "desk"
-                ? "Compose notes on the desk — press, warm, wear."
-                : "Scan notes into editable formulas — hover each piece to learn."}
-            </p>
           </div>
-          <div className="flex items-center gap-1.5 md:gap-2">
-            <NavChrome onDark />
+          <div className="flex min-w-0 items-center gap-1.5 md:gap-2">
             {mode === "desk" ? (
-              <div className="flex rounded-lg bg-white/10 p-0.5">
-                {(
-                  [
-                    ["lab", "Lab"],
-                    ["tutor", "Tutor"],
-                    ["chat", "Chat"],
-                  ] as const
-                ).map(([id, label]) => (
-                  <button
-                    key={id}
-                    type="button"
-                    onClick={() => onBuilderTab(id)}
-                    aria-pressed={builderTab === id}
-                    className={`min-h-9 rounded-md px-2.5 py-1.5 text-[11px] font-semibold transition md:min-h-0 md:py-1 ${
-                      builderTab === id
-                        ? "bg-lab-foam text-lab-ink shadow-sm"
-                        : "text-lab-foam/65 hover:text-lab-foam"
-                    }`}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-            ) : null}
-            <div className="flex rounded-lg bg-white/10 p-0.5">
+              <LabModeToggle
+                value={builderTab}
+                onChange={onBuilderTab}
+              />
+            ) : (
               <button
                 type="button"
-                onClick={() => setMode(mode === "scan" ? "desk" : "scan")}
-                aria-pressed={mode === "scan"}
-                className={`min-h-9 rounded-md px-2.5 py-1.5 text-[11px] font-semibold transition md:min-h-0 md:py-1 ${
-                  mode === "scan"
-                    ? "bg-lab-foam text-lab-ink shadow-sm"
-                    : "text-lab-foam/65 hover:text-lab-foam"
-                }`}
+                onClick={() => setMode("desk")}
+                className="min-h-9 rounded-lg bg-lab-foam px-3 text-[11px] font-semibold text-lab-ink"
               >
-                {mode === "scan" ? "Desk" : "Scan"}
+                Back to desk
               </button>
-            </div>
+            )}
+            <GamificationBar
+              onOpenAtelier={() => {
+                setShopOpen(false);
+                setMarketOpen(false);
+                setFreeformOpen(false);
+                useInventionStore.getState().setShelfOpen(false);
+                setAtelierOpen(true);
+              }}
+              onOpenShop={() => {
+                setAtelierOpen(false);
+                setMarketOpen(false);
+                setFreeformOpen(false);
+                useInventionStore.getState().setShelfOpen(false);
+                setShopOpen(true);
+              }}
+              onOpenMarket={() => {
+                setAtelierOpen(false);
+                setShopOpen(false);
+                setFreeformOpen(false);
+                useInventionStore.getState().setShelfOpen(false);
+                setMarketOpen(true);
+                track("market_open", { from: "bar" });
+              }}
+              onOpenShelf={() => {
+                setAtelierOpen(false);
+                setShopOpen(false);
+                setMarketOpen(false);
+                setFreeformOpen(false);
+                useInventionStore.getState().setShelfOpen(true);
+                track("shelf_open", { from: "bar" });
+              }}
+            />
+            <LabOverflowMenu
+              actions={
+                [
+                  {
+                    id: "guide",
+                    label: "How it works",
+                    href: "/lab/guide",
+                  },
+                  {
+                    id: "scan",
+                    label: mode === "scan" ? "Back to desk" : "Scan formula",
+                    onClick: () =>
+                      setMode(mode === "scan" ? "desk" : "scan"),
+                    dividerBefore: true,
+                  },
+                  {
+                    id: "perfume",
+                    label: "Perfume Atelier",
+                    onClick: () => {
+                      setShopOpen(false);
+                      setMarketOpen(false);
+                      setFreeformOpen(false);
+                      useInventionStore.getState().setShelfOpen(false);
+                      setAtelierOpen(true);
+                    },
+                  },
+                  {
+                    id: "shop",
+                    label: "Shop",
+                    onClick: () => {
+                      setAtelierOpen(false);
+                      setMarketOpen(false);
+                      setFreeformOpen(false);
+                      useInventionStore.getState().setShelfOpen(false);
+                      setShopOpen(true);
+                    },
+                  },
+                  {
+                    id: "market",
+                    label: "Market",
+                    onClick: () => {
+                      setAtelierOpen(false);
+                      setShopOpen(false);
+                      setFreeformOpen(false);
+                      useInventionStore.getState().setShelfOpen(false);
+                      setMarketOpen(true);
+                      track("market_open", { from: "overflow" });
+                    },
+                  },
+                  {
+                    id: "shelf",
+                    label: "Invention Shelf",
+                    onClick: () => {
+                      setAtelierOpen(false);
+                      setShopOpen(false);
+                      setMarketOpen(false);
+                      setFreeformOpen(false);
+                      useInventionStore.getState().setShelfOpen(true);
+                      track("shelf_open", { from: "overflow" });
+                    },
+                  },
+                  {
+                    id: "goals",
+                    label: "Goals",
+                    onClick: () => useGoalStore.getState().setPickerOpen(true),
+                  },
+                  {
+                    id: "teacher",
+                    label: "Teacher",
+                    href: "/teacher",
+                    dividerBefore: true,
+                  },
+                  {
+                    id: "profile",
+                    label: "Profile",
+                    href: "/profile",
+                  },
+                ] satisfies LabOverflowAction[]
+              }
+            />
           </div>
         </header>
-
-        <GamificationBar
-          onOpenAtelier={() => {
-            setShopOpen(false);
-            setMarketOpen(false);
-            setFreeformOpen(false);
-            useInventionStore.getState().setShelfOpen(false);
-            setAtelierOpen(true);
-          }}
-          onOpenShop={() => {
-            setAtelierOpen(false);
-            setMarketOpen(false);
-            setFreeformOpen(false);
-            useInventionStore.getState().setShelfOpen(false);
-            setShopOpen(true);
-          }}
-          onOpenMarket={() => {
-            setAtelierOpen(false);
-            setShopOpen(false);
-            setFreeformOpen(false);
-            useInventionStore.getState().setShelfOpen(false);
-            setMarketOpen(true);
-            track("market_open", { from: "bar" });
-          }}
-          onOpenShelf={() => {
-            setAtelierOpen(false);
-            setShopOpen(false);
-            setMarketOpen(false);
-            setFreeformOpen(false);
-            useInventionStore.getState().setShelfOpen(true);
-            track("shelf_open", { from: "bar" });
-          }}
-        />
 
         {mode === "scan" ? (
           <div className="min-h-0 flex-1 overflow-hidden bg-lab-panel/40">
@@ -713,6 +768,8 @@ export function LabShell() {
           <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden md:flex-row">
             <ItemPanel
               desktopOpen={leftOpen}
+              desktopWidth={leftWidth}
+              onDesktopResize={(dx) => setLeftWidth(leftWidth + dx)}
               onToggleDesktop={() => setLeftOpen(!leftOpen)}
               onOpenChat={() => {
                 setBuilderTab("chat");

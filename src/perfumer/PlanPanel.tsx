@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import type { LabBridgeFormula, StructuredPayload } from "./types";
 
 export function PlanPanel({
@@ -26,20 +27,11 @@ export function PlanPanel({
   onInstant?: () => void;
   compact?: boolean;
 }) {
+  const [expanded, setExpanded] = useState(false);
+
+  // Empty plan: stay invisible — don't dominate the chat rail.
   if (!bridge?.lines?.length) {
-    return (
-      <div
-        className={`border-t border-lab-line/70 bg-lab-wash/40 ${
-          compact ? "px-3 py-3" : "px-3 py-4 md:px-4"
-        }`}
-      >
-        <p className="font-display text-base text-lab-ink">Plan</p>
-        <p className="mt-1.5 text-sm leading-relaxed text-lab-muted">
-          Brief in chat first. When a formula lands, the plan appears here —
-          read it, then hit Build to pour on the desk.
-        </p>
-      </div>
-    );
+    return null;
   }
 
   const mapped = bridge.mappingReport?.mappedCount ?? 0;
@@ -53,151 +45,147 @@ export function PlanPanel({
     structured?.indiaContext?.wearAdvice ||
     structured?.indiaContext?.occasion;
   const building = mode === "building";
-  const canBuild = mode === "plan_ready" || mode === "stopped" || mode === "built";
+  const canBuild =
+    mode === "plan_ready" || mode === "stopped" || mode === "built";
   const canUndo = (mode === "built" || mode === "stopped") && Boolean(onUndo);
+  const stepLabel =
+    building && buildTotal != null && buildStepIndex != null
+      ? `${Math.min(buildStepIndex + 1, buildTotal)}/${buildTotal}`
+      : null;
 
   return (
     <div
-      className={`border-t border-lab-line/70 bg-lab-panel ${
-        compact ? "px-3 py-3" : "px-3 py-4 md:px-4"
+      className={`shrink-0 border-t border-lab-line/50 bg-lab-panel ${
+        compact ? "px-3 py-2.5" : "px-3 py-2.5"
       }`}
     >
-      <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-lab-muted">
-            Plan
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={() => setExpanded((v) => !v)}
+          className="min-w-0 flex-1 text-left"
+          aria-expanded={expanded}
+        >
+          <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-lab-muted">
+            Plan{stepLabel ? ` · ${stepLabel}` : ""}
           </p>
-          <h3 className="mt-1 font-display text-xl leading-snug text-lab-ink md:text-2xl">
+          <p className="mt-0.5 truncate text-sm font-medium text-lab-ink">
             {bridge.title}
-          </h3>
-          <p className="mt-1 text-sm text-lab-muted">
-            {bridge.format}
-            {bridge.batchGrams ? ` · ${bridge.batchGrams}g batch` : ""}
           </p>
-        </div>
-        {building && buildTotal != null && buildStepIndex != null ? (
-          <p className="shrink-0 font-mono text-xs text-lab-muted">
-            {Math.min(buildStepIndex + 1, buildTotal)}/{buildTotal}
+          <p className="mt-0.5 truncate text-[11px] text-lab-muted">
+            {bridge.lines.length} lines · {mapped} mapped
+            {unmapped > 0 ? ` · ${unmapped} missing` : ""}
+            {costInr != null
+              ? ` · ₹${Math.round(costInr).toLocaleString("en-IN")}`
+              : ""}
           </p>
-        ) : null}
-      </div>
-
-      <section className="mt-4">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-lab-muted">
-          Formula
-        </p>
-        <ol className="mt-2 space-y-1.5">
-          {bridge.lines.map((line, i) => (
-            <li
-              key={`${line.perfumerIngredientId}-${i}`}
-              className="flex items-baseline justify-between gap-3 text-sm"
+        </button>
+        <div className="flex shrink-0 items-center gap-1.5">
+          {building ? (
+            <button
+              type="button"
+              onClick={onStop}
+              className="min-h-9 rounded-md border border-lab-hazard/40 bg-lab-hazard/10 px-3 text-xs font-semibold text-lab-hazard hover:bg-lab-hazard/15"
             >
-              <span className="min-w-0 text-lab-ink">
-                <span className="mr-1.5 font-mono text-xs text-lab-muted">
-                  {i + 1}.
-                </span>
-                {line.name}
-                {!line.labChemicalId ? (
-                  <span className="ml-1.5 text-xs text-lab-hazard">unmapped</span>
-                ) : line.mapStatus === "proxy" ? (
-                  <span className="ml-1.5 text-xs text-lab-amber">proxy</span>
-                ) : null}
-              </span>
-              <span className="shrink-0 font-mono text-[13px] text-lab-ink/90">
-                {line.percent}%
-              </span>
-            </li>
-          ))}
-        </ol>
-      </section>
-
-      <section className="mt-4">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-lab-muted">
-          Mapping
-        </p>
-        <p className="mt-1.5 text-sm leading-relaxed text-lab-ink/85">
-          Lab can place {mapped} material{mapped === 1 ? "" : "s"}
-          {unmapped > 0 ? `; ${unmapped} not in inventory yet` : ""}.
-        </p>
-        {unmapped > 0 && bridge.mappingReport?.unmappedIds?.length ? (
-          <p className="mt-1 font-mono text-xs leading-relaxed text-lab-hazard/90">
-            Missing: {bridge.mappingReport.unmappedIds.slice(0, 8).join(", ")}
-            {(bridge.mappingReport.unmappedIds.length || 0) > 8 ? "…" : ""}
-          </p>
-        ) : null}
-      </section>
-
-      {costInr != null ? (
-        <section className="mt-4">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-lab-muted">
-            Cost
-          </p>
-          <p className="mt-1 font-display text-xl text-lab-ink">
-            ₹{Math.round(costInr).toLocaleString("en-IN")}
-          </p>
-        </section>
-      ) : null}
-
-      {india ? (
-        <section className="mt-4">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-lab-muted">
-            India / occasion
-          </p>
-          <p className="mt-1.5 text-sm leading-relaxed text-lab-ink/85">{india}</p>
-        </section>
-      ) : null}
-
-      <div className="mt-5 flex flex-wrap items-center gap-2">
-        {building ? (
+              Stop
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={onBuild}
+              disabled={!canBuild || mapped === 0}
+              className="min-h-9 rounded-md bg-lab-ink px-3.5 text-xs font-semibold text-lab-foam transition hover:bg-black disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              Build
+            </button>
+          )}
           <button
             type="button"
-            onClick={onStop}
-            className="min-h-11 rounded-lg border border-lab-hazard/40 bg-lab-hazard/10 px-4 py-2.5 text-sm font-semibold text-lab-hazard transition hover:bg-lab-hazard/15 md:min-h-10"
+            onClick={() => setExpanded((v) => !v)}
+            className="min-h-9 min-w-9 rounded-md text-lab-muted hover:bg-lab-wash hover:text-lab-ink"
+            aria-label={expanded ? "Collapse plan" : "Expand plan"}
           >
-            Stop
+            {expanded ? "▾" : "▸"}
           </button>
-        ) : (
-          <button
-            type="button"
-            onClick={onBuild}
-            disabled={!canBuild || mapped === 0}
-            className="min-h-11 rounded-lg bg-lab-ink px-5 py-2.5 text-sm font-semibold text-lab-foam transition hover:bg-black disabled:cursor-not-allowed disabled:opacity-40 md:min-h-10"
-          >
-            Build
-          </button>
-        )}
-        {canUndo ? (
-          <button
-            type="button"
-            onClick={onUndo}
-            className="min-h-11 rounded-lg border border-lab-line px-3 py-2.5 text-sm font-medium text-lab-ink hover:bg-lab-wash md:min-h-10"
-          >
-            Undo to plan
-          </button>
-        ) : null}
-        {onInstant && canBuild && !building ? (
-          <button
-            type="button"
-            onClick={onInstant}
-            className="min-h-11 rounded-lg px-3 py-2.5 text-sm font-medium text-lab-muted underline decoration-lab-line underline-offset-2 hover:text-lab-ink md:min-h-10"
-          >
-            Apply instantly
-          </button>
-        ) : null}
+        </div>
       </div>
 
-      {mode === "building" ? (
-        <p className="mt-3 text-sm leading-relaxed text-lab-muted">
-          Pouring on the desk — watch the beaker fill step by step.
-        </p>
-      ) : mode === "built" ? (
-        <p className="mt-3 text-sm leading-relaxed text-lab-muted">
-          Build complete. Refine in chat or open Tutor for notes.
-        </p>
-      ) : mode === "stopped" ? (
-        <p className="mt-3 text-sm leading-relaxed text-lab-muted">
-          Stopped. Undo to restore the pre-build desk, or Build again.
-        </p>
+      {expanded ? (
+        <div className="mt-3 space-y-3 border-t border-lab-line/40 pt-3">
+          <ol className="space-y-1">
+            {bridge.lines.map((line, i) => (
+              <li
+                key={`${line.perfumerIngredientId}-${i}`}
+                className="flex items-baseline justify-between gap-3 text-sm"
+              >
+                <span className="min-w-0 text-lab-ink">
+                  <span className="mr-1.5 font-mono text-[11px] text-lab-muted">
+                    {i + 1}.
+                  </span>
+                  {line.name}
+                  {!line.labChemicalId ? (
+                    <span className="ml-1.5 text-[11px] text-lab-hazard">
+                      unmapped
+                    </span>
+                  ) : line.mapStatus === "proxy" ? (
+                    <span className="ml-1.5 text-[11px] text-lab-amber">
+                      proxy
+                    </span>
+                  ) : null}
+                </span>
+                <span className="shrink-0 font-mono text-[12px] text-lab-ink/90">
+                  {line.percent}%
+                </span>
+              </li>
+            ))}
+          </ol>
+
+          {unmapped > 0 && bridge.mappingReport?.unmappedIds?.length ? (
+            <p className="font-mono text-[11px] leading-relaxed text-lab-hazard/90">
+              Missing: {bridge.mappingReport.unmappedIds.slice(0, 8).join(", ")}
+              {(bridge.mappingReport.unmappedIds.length || 0) > 8 ? "…" : ""}
+            </p>
+          ) : null}
+
+          {india ? (
+            <p className="text-sm leading-relaxed text-lab-muted">{india}</p>
+          ) : null}
+
+          <div className="flex flex-wrap items-center gap-2">
+            {canUndo ? (
+              <button
+                type="button"
+                onClick={onUndo}
+                className="min-h-9 rounded-md border border-lab-line px-3 text-xs font-medium text-lab-ink hover:bg-lab-wash"
+              >
+                Undo to plan
+              </button>
+            ) : null}
+            {onInstant && canBuild && !building ? (
+              <button
+                type="button"
+                onClick={onInstant}
+                className="min-h-9 rounded-md px-2 text-xs font-medium text-lab-muted underline decoration-lab-line underline-offset-2 hover:text-lab-ink"
+              >
+                Apply instantly
+              </button>
+            ) : null}
+          </div>
+
+          {mode === "building" ? (
+            <p className="text-xs leading-relaxed text-lab-muted">
+              Pouring on the desk — watch the beaker fill step by step.
+            </p>
+          ) : mode === "built" ? (
+            <p className="text-xs leading-relaxed text-lab-muted">
+              Build complete. Refine in chat or open Tutor for notes.
+            </p>
+          ) : mode === "stopped" ? (
+            <p className="text-xs leading-relaxed text-lab-muted">
+              Stopped. Undo to restore the pre-build desk, or Build again.
+            </p>
+          ) : null}
+        </div>
       ) : null}
     </div>
   );

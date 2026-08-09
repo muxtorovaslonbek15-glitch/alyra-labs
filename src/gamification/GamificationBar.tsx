@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { QUESTS, useProgressStore } from "@/store/progressStore";
 import { useGoalStore } from "@/store/goalStore";
@@ -12,6 +12,10 @@ import { getAuthHeaders } from "@/lib/client/authHeaders";
 import { showToast } from "@/gamification/ToastHost";
 import { track } from "@/lib/analytics/track";
 
+/**
+ * Compact XP chip + drawer. Replaces the full second toolbar on Lab.
+ * Shop / Perfume / Market / Shelf / Goals live in Lab overflow — not here.
+ */
 export function GamificationBar({
   onOpenAtelier,
   onOpenShop,
@@ -36,6 +40,8 @@ export function GamificationBar({
   const nextBadge = badges.find((b) => !b.earnedAt);
   const { level, intoLevel, toNext } = xpLevel();
   const [claiming, setClaiming] = useState(false);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
 
   const user = useAuthStore((s) => s.user);
   const guestChemicalAdds = useAuthStore((s) => s.guestChemicalAdds);
@@ -53,6 +59,22 @@ export function GamificationBar({
 
   const canClaimDaily =
     !lastDailyStarAt || Date.now() - lastDailyStarAt >= 24 * 60 * 60 * 1000;
+
+  useEffect(() => {
+    if (!drawerOpen) return;
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") setDrawerOpen(false);
+    }
+    function onDoc(e: MouseEvent) {
+      if (!rootRef.current?.contains(e.target as Node)) setDrawerOpen(false);
+    }
+    window.addEventListener("keydown", onKey);
+    document.addEventListener("mousedown", onDoc);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      document.removeEventListener("mousedown", onDoc);
+    };
+  }, [drawerOpen]);
 
   async function claimDaily() {
     if (!user) {
@@ -112,12 +134,16 @@ export function GamificationBar({
     }
   }
 
-  const [moreOpen, setMoreOpen] = useState(false);
+  // Keep callbacks typed for LabShell callers; surface via drawer shortcuts.
+  void onOpenAtelier;
+  void onOpenShop;
+  void onOpenShelf;
+  void onOpenMarket;
 
   return (
-    <div className="flex shrink-0 flex-col border-b border-white/10 bg-lab-ink text-lab-foam">
+    <div ref={rootRef} className="relative shrink-0">
       {guestWarn ? (
-        <div className="bg-lab-amber/90 px-3 py-1 text-center text-[11px] font-semibold text-lab-ink md:px-4">
+        <div className="fixed left-0 right-0 top-0 z-[300] bg-lab-amber/90 px-3 py-1 text-center text-[11px] font-semibold text-lab-ink md:px-4">
           {labCopy.guestBannerWarn}{" "}
           <Link href="/signup" className="underline">
             Sign up
@@ -125,7 +151,7 @@ export function GamificationBar({
         </div>
       ) : null}
       {guestBlocked ? (
-        <div className="bg-lab-teal px-3 py-1 text-center text-[11px] font-semibold text-white md:px-4">
+        <div className="fixed left-0 right-0 top-0 z-[300] bg-lab-teal px-3 py-1 text-center text-[11px] font-semibold text-white md:px-4">
           {labCopy.guestBannerBlocked}{" "}
           <Link href="/signup" className="underline">
             Create account
@@ -133,234 +159,130 @@ export function GamificationBar({
         </div>
       ) : null}
 
-      {/* Phone: compact strip — XP + Perfume + overflow */}
-      <div className="flex items-center gap-2 px-3 py-1.5 md:hidden">
-        <div className="flex min-w-0 flex-1 items-baseline gap-1.5">
-          <span className="font-display text-base text-lab-foam">{xp}</span>
-          <span className="text-[9px] text-lab-glass">XP</span>
-          <span className="font-display text-base text-lab-amber">{stars}</span>
-          <span className="text-[9px] text-lab-amber/80">★</span>
-          {goal ? (
-            <button
-              type="button"
-              className="ml-1 min-w-0 truncate text-left text-[11px] text-lab-foam/80"
-              onClick={() => setGuideOpen(true)}
-            >
-              {goal.title}
-            </button>
-          ) : null}
-        </div>
-        {onOpenAtelier ? (
-          <button
-            type="button"
-            onClick={onOpenAtelier}
-            className="min-h-9 shrink-0 rounded-lg bg-lab-amber/90 px-2.5 text-[11px] font-semibold text-lab-ink"
-          >
-            Perfume
-          </button>
-        ) : null}
-        <button
-          type="button"
-          onClick={() => setPickerOpen(true)}
-          className="min-h-9 shrink-0 rounded-lg bg-lab-foam/15 px-2.5 text-[11px] font-semibold text-lab-foam"
-        >
-          Goals
-        </button>
-        <button
-          type="button"
-          onClick={() => setMoreOpen((v) => !v)}
-          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-white/15 text-lab-foam"
-          aria-expanded={moreOpen}
-          aria-label="More"
-        >
-          ···
-        </button>
-      </div>
-      {moreOpen ? (
-        <div className="flex flex-wrap gap-2 border-t border-white/10 px-3 py-2 md:hidden">
-          {onOpenShelf ? (
-            <button
-              type="button"
-              onClick={() => {
-                setMoreOpen(false);
-                onOpenShelf();
-              }}
-              className="min-h-9 rounded-lg border border-white/15 px-3 text-[11px] font-semibold"
-            >
-              Shelf
-            </button>
-          ) : null}
-          {onOpenMarket ? (
-            <button
-              type="button"
-              onClick={() => {
-                setMoreOpen(false);
-                onOpenMarket();
-              }}
-              className="min-h-9 rounded-lg border border-white/15 px-3 text-[11px] font-semibold"
-            >
-              Market
-            </button>
-          ) : null}
-          {onOpenShop ? (
-            <button
-              type="button"
-              onClick={() => {
-                setMoreOpen(false);
-                onOpenShop();
-              }}
-              className="min-h-9 rounded-lg border border-white/15 px-3 text-[11px] font-semibold"
-            >
-              Shop
-            </button>
-          ) : null}
-          <button
-            type="button"
-            onClick={() => void claimDaily()}
-            disabled={claiming || (Boolean(user) && !canClaimDaily)}
-            className="min-h-9 rounded-lg border border-lab-amber/50 px-3 text-[11px] font-semibold text-lab-amber disabled:opacity-40"
-          >
-            {canClaimDaily ? "Daily ★" : "★ claimed"}
-          </button>
-        </div>
-      ) : null}
+      <button
+        type="button"
+        onClick={() => setDrawerOpen((v) => !v)}
+        aria-expanded={drawerOpen}
+        aria-label="Progress"
+        title="Progress"
+        className="flex min-h-9 items-center gap-1.5 rounded-lg border border-white/15 bg-white/5 px-2.5 py-1 text-lab-foam hover:bg-white/10"
+      >
+        <span className="text-[10px] uppercase tracking-[0.12em] text-lab-foam/55">
+          Lv {level}
+        </span>
+        <span className="font-display text-sm leading-none text-lab-foam">
+          {xp}
+        </span>
+        <span className="text-[9px] text-lab-foam/50">XP</span>
+        <span className="font-display text-sm leading-none text-lab-amber">
+          {stars}
+        </span>
+        <span className="text-[9px] text-lab-amber/80">★</span>
+      </button>
 
-      {/* Desktop: full bar (unchanged) */}
-      <div className="hidden items-center gap-2 px-3 py-1 md:flex md:gap-3 md:px-4">
-        <div className="flex shrink-0 flex-col leading-none">
-          <div className="flex items-baseline gap-1.5">
-            <span className="text-[9px] uppercase tracking-[0.18em] text-lab-glass">
-              Lv {level}
-            </span>
-            <span className="font-display text-base text-lab-foam">{xp}</span>
-            <span className="text-[9px] text-lab-glass">XP</span>
-            <span className="ml-1 font-display text-base text-lab-amber">
-              {stars}
-            </span>
-            <span className="text-[9px] text-lab-amber/80">★</span>
+      {drawerOpen ? (
+        <div className="absolute right-0 top-full z-[220] mt-1.5 w-[min(20rem,calc(100vw-1.5rem))] rounded-xl border border-lab-line bg-lab-panel p-3 text-lab-ink shadow-xl">
+          <div className="flex items-baseline justify-between gap-2">
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-lab-muted">
+                Level {level}
+              </p>
+              <p className="mt-0.5 font-display text-xl text-lab-ink">{xp} XP</p>
+            </div>
+            <p className="font-display text-lg text-lab-amber">{stars} ★</p>
           </div>
-          <div className="mt-0.5 h-1 w-16 overflow-hidden rounded-full bg-white/15">
+          <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-lab-line/70">
             <div
               role="progressbar"
               aria-valuenow={intoLevel}
               aria-valuemin={0}
               aria-valuemax={100}
-              className="h-full rounded-full bg-lab-glass"
+              className="h-full rounded-full bg-lab-ink"
               style={{ width: `${intoLevel}%` }}
             />
           </div>
-          <p className="mt-0.5 text-[8px] text-lab-glass/80">
+          <p className="mt-1 text-[11px] text-lab-muted">
             {toNext} to next level
             {nextBadge ? ` · next: ${nextBadge.title}` : ""}
           </p>
-        </div>
 
-        <div className="hidden h-8 w-px bg-white/15 sm:block" />
-
-        <div className="min-w-0 flex-1">
-          {goal ? (
-            <>
-              <p className="text-[9px] uppercase tracking-[0.16em] text-lab-glass">
-                Goal · {pct}%
-              </p>
+          <div className="mt-3 border-t border-lab-line/60 pt-3">
+            {goal ? (
               <button
                 type="button"
-                className="block w-full truncate text-left text-xs text-lab-foam/95 hover:text-white"
-                onClick={() => setGuideOpen(true)}
+                className="w-full text-left"
+                onClick={() => {
+                  setDrawerOpen(false);
+                  setGuideOpen(true);
+                }}
               >
-                {goal.icon} {goal.title}
-                {step ? ` — ${step.title}` : " — complete!"}
+                <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-lab-muted">
+                  Goal · {pct}%
+                </p>
+                <p className="mt-0.5 text-sm text-lab-ink">
+                  {goal.icon} {goal.title}
+                  {step ? ` — ${step.title}` : " — complete!"}
+                </p>
               </button>
-            </>
-          ) : (
-            <>
-              <p className="text-[9px] uppercase tracking-[0.16em] text-lab-glass">
-                Free-play quest
-              </p>
-              <p className="truncate text-xs text-lab-foam/95">{quest?.prompt}</p>
-            </>
-          )}
-        </div>
+            ) : (
+              <>
+                <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-lab-muted">
+                  Free-play
+                </p>
+                <p className="mt-0.5 text-sm text-lab-ink">{quest?.prompt}</p>
+              </>
+            )}
+          </div>
 
-        <div className="flex shrink-0 items-center gap-0.5" title="Badges earned">
-          {badges.slice(0, 6).map((b) => (
-            <span
-              key={b.id}
-              className={`inline-block h-2 w-2 rounded-full ${
-                b.earnedAt ? "bg-lab-amber" : "bg-white/20"
-              }`}
-              title={b.earnedAt ? b.title : `Locked: ${b.title}`}
-            />
-          ))}
-          <span className="ml-1 text-[10px] text-lab-foam/70">
-            {earnedBadges.length} badges
-          </span>
-        </div>
+          <div className="mt-3 flex items-center gap-1.5">
+            {badges.slice(0, 8).map((b) => (
+              <span
+                key={b.id}
+                className={`inline-block h-2 w-2 rounded-full ${
+                  b.earnedAt ? "bg-lab-amber" : "bg-lab-line"
+                }`}
+                title={b.earnedAt ? b.title : `Locked: ${b.title}`}
+              />
+            ))}
+            <span className="ml-1 text-[11px] text-lab-muted">
+              {earnedBadges.length} badges · {journal.length} logged
+            </span>
+          </div>
 
-        <button
-          type="button"
-          onClick={() => void claimDaily()}
-          disabled={claiming || (Boolean(user) && !canClaimDaily)}
-          className="hidden shrink-0 rounded-lg border border-lab-amber/50 px-2 py-1 text-[10px] font-semibold text-lab-amber hover:bg-lab-amber/15 disabled:opacity-40 sm:inline-flex"
-          title="Claim 1★ once every 24 hours"
-        >
-          {canClaimDaily ? "Daily ★" : "★ claimed"}
-        </button>
-
-        <div className="flex shrink-0 items-center gap-2">
-          {onOpenShop ? (
+          <div className="mt-3 flex flex-wrap gap-2">
             <button
               type="button"
-              onClick={onOpenShop}
-              className="hidden shrink-0 rounded-lg border border-white/20 px-2 py-1 text-[10px] font-semibold text-lab-foam/90 hover:bg-white/10 md:inline-flex"
+              onClick={() => void claimDaily()}
+              disabled={claiming || (Boolean(user) && !canClaimDaily)}
+              className="min-h-9 rounded-md border border-lab-amber/50 px-3 text-xs font-semibold text-lab-amber hover:bg-lab-amber/10 disabled:opacity-40"
             >
-              Shop
+              {canClaimDaily ? "Daily ★" : "★ claimed"}
             </button>
-          ) : null}
-
-          {onOpenAtelier ? (
             <button
               type="button"
-              onClick={onOpenAtelier}
-              className="shrink-0 rounded-lg bg-lab-amber/90 px-2.5 py-1 text-[11px] font-semibold text-lab-ink shadow-sm hover:bg-lab-amber"
+              onClick={() => {
+                setDrawerOpen(false);
+                setPickerOpen(true);
+              }}
+              className="min-h-9 rounded-md bg-lab-ink px-3 text-xs font-semibold text-lab-foam"
             >
-              Perfume
+              Goals
             </button>
-          ) : null}
-
-          {onOpenMarket ? (
-            <button
-              type="button"
-              onClick={onOpenMarket}
-              className="hidden shrink-0 rounded-lg border border-lab-glass/50 bg-white/10 px-2.5 py-1 text-[11px] font-semibold text-lab-foam hover:bg-white/15 sm:inline-flex"
-            >
-              Market
-            </button>
-          ) : null}
-
-          {onOpenShelf ? (
-            <button
-              type="button"
-              onClick={onOpenShelf}
-              className="shrink-0 rounded-lg border border-lab-glass/50 bg-white/10 px-2.5 py-1 text-[11px] font-semibold text-lab-foam hover:bg-white/15"
-            >
-              Shelf
-            </button>
-          ) : null}
-
-          <button
-            type="button"
-            onClick={() => setPickerOpen(true)}
-            className="shrink-0 rounded-lg bg-lab-teal px-2.5 py-1 text-[11px] font-semibold text-white shadow-sm transition hover:bg-lab-teal/90"
-          >
-            Goals
-          </button>
+            {onOpenAtelier ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setDrawerOpen(false);
+                  onOpenAtelier();
+                }}
+                className="min-h-9 rounded-md border border-lab-line px-3 text-xs font-medium text-lab-ink hover:bg-lab-wash"
+              >
+                Perfume
+              </button>
+            ) : null}
+          </div>
         </div>
-
-        <div className="hidden items-center gap-2 text-[11px] text-lab-foam/65 lg:flex">
-          <span>{journal.length} logged</span>
-        </div>
-      </div>
+      ) : null}
     </div>
   );
 }

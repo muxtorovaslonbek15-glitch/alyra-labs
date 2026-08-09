@@ -190,8 +190,7 @@ export function MobileBuilderChrome({
       <LabSheet
         open={chatSheetOpen}
         onClose={closeChat}
-        title="Chat & Plan"
-        eyebrow="Perfumer"
+        title="Perfumer"
         labelledBy="mobile-chat-sheet-title"
         maxHeightClass="max-h-[92dvh]"
         footer={

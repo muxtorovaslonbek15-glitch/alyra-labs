@@ -25,24 +25,66 @@ export interface NarrationLine {
 export interface PanelPrefs {
   leftOpen: boolean;
   rightOpen: boolean;
+  leftWidth: number;
+  rightWidth: number;
 }
 
 const PANEL_PREFS_KEY = "alyra.builder.panels.v1";
 
+export const PANEL_WIDTH = {
+  leftMin: 180,
+  leftMax: 360,
+  leftDefault: 240,
+  rightMin: 280,
+  rightMax: 520,
+  rightDefault: 360,
+} as const;
+
+function clamp(n: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, n));
+}
+
 function loadPanelPrefs(): PanelPrefs {
   if (typeof window === "undefined") {
-    return { leftOpen: true, rightOpen: true };
+    return {
+      leftOpen: true,
+      rightOpen: true,
+      leftWidth: PANEL_WIDTH.leftDefault,
+      rightWidth: PANEL_WIDTH.rightDefault,
+    };
   }
   try {
     const raw = localStorage.getItem(PANEL_PREFS_KEY);
-    if (!raw) return { leftOpen: true, rightOpen: true };
+    if (!raw) {
+      return {
+        leftOpen: true,
+        rightOpen: true,
+        leftWidth: PANEL_WIDTH.leftDefault,
+        rightWidth: PANEL_WIDTH.rightDefault,
+      };
+    }
     const parsed = JSON.parse(raw) as Partial<PanelPrefs>;
     return {
       leftOpen: parsed.leftOpen !== false,
       rightOpen: parsed.rightOpen !== false,
+      leftWidth: clamp(
+        Number(parsed.leftWidth) || PANEL_WIDTH.leftDefault,
+        PANEL_WIDTH.leftMin,
+        PANEL_WIDTH.leftMax,
+      ),
+      rightWidth: clamp(
+        Number(parsed.rightWidth) || PANEL_WIDTH.rightDefault,
+        PANEL_WIDTH.rightMin,
+        PANEL_WIDTH.rightMax,
+      ),
     };
   } catch {
-    return { leftOpen: true, rightOpen: true };
+    return {
+      leftOpen: true,
+      rightOpen: true,
+      leftWidth: PANEL_WIDTH.leftDefault,
+      rightWidth: PANEL_WIDTH.rightDefault,
+    };
   }
 }
 
@@ -59,6 +101,8 @@ interface BuilderState {
   rightSlot: RightSlot;
   leftOpen: boolean;
   rightOpen: boolean;
+  leftWidth: number;
+  rightWidth: number;
   /** Phone chat sheet */
   chatSheetOpen: boolean;
   mode: BuilderMode;
@@ -74,6 +118,8 @@ interface BuilderState {
   setRightSlot: (slot: RightSlot) => void;
   setLeftOpen: (open: boolean) => void;
   setRightOpen: (open: boolean) => void;
+  setLeftWidth: (width: number) => void;
+  setRightWidth: (width: number) => void;
   setChatSheetOpen: (open: boolean) => void;
   hydratePanelPrefs: () => void;
   setPlanFromStructured: (
@@ -97,6 +143,8 @@ export const useBuilderStore = create<BuilderState>((set, get) => ({
   rightSlot: "tutor",
   leftOpen: true,
   rightOpen: true,
+  leftWidth: PANEL_WIDTH.leftDefault,
+  rightWidth: PANEL_WIDTH.rightDefault,
   chatSheetOpen: false,
   mode: "idle",
   plan: null,
@@ -109,7 +157,12 @@ export const useBuilderStore = create<BuilderState>((set, get) => ({
 
   hydratePanelPrefs: () => {
     const prefs = loadPanelPrefs();
-    set({ leftOpen: prefs.leftOpen, rightOpen: prefs.rightOpen });
+    set({
+      leftOpen: prefs.leftOpen,
+      rightOpen: prefs.rightOpen,
+      leftWidth: prefs.leftWidth,
+      rightWidth: prefs.rightWidth,
+    });
   },
 
   setTab: (tab) => {
@@ -126,12 +179,48 @@ export const useBuilderStore = create<BuilderState>((set, get) => ({
 
   setLeftOpen: (leftOpen) => {
     set({ leftOpen });
-    savePanelPrefs({ leftOpen, rightOpen: get().rightOpen });
+    const s = get();
+    savePanelPrefs({
+      leftOpen,
+      rightOpen: s.rightOpen,
+      leftWidth: s.leftWidth,
+      rightWidth: s.rightWidth,
+    });
   },
 
   setRightOpen: (rightOpen) => {
     set({ rightOpen });
-    savePanelPrefs({ leftOpen: get().leftOpen, rightOpen });
+    const s = get();
+    savePanelPrefs({
+      leftOpen: s.leftOpen,
+      rightOpen,
+      leftWidth: s.leftWidth,
+      rightWidth: s.rightWidth,
+    });
+  },
+
+  setLeftWidth: (width) => {
+    const leftWidth = clamp(width, PANEL_WIDTH.leftMin, PANEL_WIDTH.leftMax);
+    set({ leftWidth });
+    const s = get();
+    savePanelPrefs({
+      leftOpen: s.leftOpen,
+      rightOpen: s.rightOpen,
+      leftWidth,
+      rightWidth: s.rightWidth,
+    });
+  },
+
+  setRightWidth: (width) => {
+    const rightWidth = clamp(width, PANEL_WIDTH.rightMin, PANEL_WIDTH.rightMax);
+    set({ rightWidth });
+    const s = get();
+    savePanelPrefs({
+      leftOpen: s.leftOpen,
+      rightOpen: s.rightOpen,
+      leftWidth: s.leftWidth,
+      rightWidth,
+    });
   },
 
   setChatSheetOpen: (chatSheetOpen) => set({ chatSheetOpen }),

@@ -16,7 +16,6 @@ import {
 } from "@/animation/fxIntensity";
 import { useFxClock } from "@/animation/useFxClock";
 import { getChemical } from "@/domains/chemistry/data/chemicals";
-import { useGoalStore } from "@/store/goalStore";
 import {
   tryMixVessel,
   trySeedDemoReaction,
@@ -37,7 +36,6 @@ export function DeskWorkspace({
   const toggleHeat = useDeskStore((s) => s.toggleHeat);
   const toggleCool = useDeskStore((s) => s.toggleCool);
   const clearDesk = useDeskStore((s) => s.clearDesk);
-  const setPickerOpen = useGoalStore((s) => s.setPickerOpen);
   const deskRef = useRef<HTMLElement | null>(null);
   const [confirmClear, setConfirmClear] = useState(false);
 
@@ -329,7 +327,7 @@ export function DeskWorkspace({
       <div className="relative z-10 h-full min-h-0 w-full md:min-h-[22rem]">
         {vessels.length === 0 ? (
           <div className="absolute inset-0 flex items-center justify-center p-3">
-            <div className="max-w-sm px-3 text-center">
+            <div className="max-w-md px-3 text-center">
               <p className="font-display text-2xl tracking-tight text-lab-foam">
                 Compose a signature
               </p>
@@ -337,27 +335,29 @@ export function DeskWorkspace({
                 Place a beaker. Pour notes. Mix. Nothing else in the way.
               </p>
               <p className="mt-1.5 hidden text-xs leading-snug text-lab-foam/75 md:block">
-                Drag glassware anywhere on the wood — or use Chemicals /
-                Equipment on mobile. Pour, stir, heat, shake to react. Drop one
-                beaker onto another to pour between them.
+                The desk is the canvas. Chat plans formulas; Build pours them
+                here step by step.
               </p>
-              <ol className="mt-4 hidden space-y-1.5 text-left md:block">
-                {[
-                  "Place a Beaker on the desk (Inventory or + Beaker)",
-                  "Drop two chemicals in — watch the stream and splash",
-                  "Use the bottom bar to Stir · Heat · Shake · Mix — or pour beaker into beaker",
-                ].map((step, i) => (
-                  <li
-                    key={step}
-                    className="flex items-start gap-2 rounded-lg bg-black/25 px-2.5 py-1.5 text-xs text-lab-foam/90 backdrop-blur-sm"
+              <dl className="mt-5 hidden space-y-2 text-left md:block">
+                {(
+                  [
+                    ["Open Chat", "Lab → Chat tab"],
+                    ["Inventory", "Left rail · drag oils & glass"],
+                    ["Build", "Plan ready → Build"],
+                    ["How it works", "⋯ → Guide"],
+                  ] as const
+                ).map(([label, hint]) => (
+                  <div
+                    key={label}
+                    className="flex items-baseline justify-between gap-4 rounded-lg bg-black/25 px-3 py-2 backdrop-blur-sm"
                   >
-                    <span className="mt-px flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-lab-teal/90 font-display text-[10px] text-white">
-                      {i + 1}
-                    </span>
-                    <span>{step}</span>
-                  </li>
+                    <dt className="text-xs font-medium text-lab-foam">{label}</dt>
+                    <dd className="font-mono text-[11px] text-lab-foam/55">
+                      {hint}
+                    </dd>
+                  </div>
                 ))}
-              </ol>
+              </dl>
               <div className="mt-4 flex flex-col items-stretch gap-2">
                 <button
                   type="button"
@@ -370,18 +370,11 @@ export function DeskWorkspace({
                   <button
                     type="button"
                     onClick={onOpenAtelier}
-                    className="rounded-lg bg-lab-teal px-3 py-1.5 text-xs font-semibold text-white shadow-lg transition hover:bg-lab-teal/90 active:scale-[0.98]"
+                    className="rounded-lg border border-lab-foam/35 bg-transparent px-3 py-1.5 text-xs font-semibold text-lab-foam transition hover:bg-white/10 active:scale-[0.98]"
                   >
                     Browse Perfume Atelier
                   </button>
                 ) : null}
-                <button
-                  type="button"
-                  onClick={() => setPickerOpen(true)}
-                  className="rounded-lg border border-lab-foam/40 bg-transparent px-3 py-1.5 text-xs font-semibold text-lab-foam transition hover:bg-white/10 active:scale-[0.98]"
-                >
-                  Pick a lab goal
-                </button>
               </div>
             </div>
           </div>
