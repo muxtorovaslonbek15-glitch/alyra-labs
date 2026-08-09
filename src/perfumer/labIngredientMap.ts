@@ -58,6 +58,8 @@ export const LAB_CHEMICAL_IDS = new Set([
   "coconut-note",
   "honey-note",
   "saffron-note",
+  "cct",
+  "jojoba-oil",
 ]);
 
 /** perfumer id → lab id + status */
@@ -166,6 +168,16 @@ export const ALIAS_MAP: Record<
   calone: { labChemicalId: "marine-note", mapStatus: "proxy" },
   norlimbanol: { labChemicalId: "cedarwood-oil", mapStatus: "proxy" },
   saffron: { labChemicalId: "saffron-note", mapStatus: "alias" },
+  // Carriers — high-traffic Open in Lab gaps
+  cct: { labChemicalId: "cct", mapStatus: "exact" },
+  "caprylic-capric-triglyceride": { labChemicalId: "cct", mapStatus: "alias" },
+  "caprylic-capric-triglycerides": { labChemicalId: "cct", mapStatus: "alias" },
+  mct: { labChemicalId: "cct", mapStatus: "alias" },
+  "mct-oil": { labChemicalId: "cct", mapStatus: "alias" },
+  "fractionated-coconut": { labChemicalId: "cct", mapStatus: "alias" },
+  "fractionated-coconut-oil": { labChemicalId: "cct", mapStatus: "alias" },
+  "jojoba-oil": { labChemicalId: "jojoba-oil", mapStatus: "exact" },
+  jojoba: { labChemicalId: "jojoba-oil", mapStatus: "alias" },
 };
 
 export function normalizeIngredientId(id: string): string {

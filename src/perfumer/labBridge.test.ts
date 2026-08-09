@@ -13,6 +13,15 @@ describe("labIngredientMap", () => {
     expect(mapIngredientToLab("iso-e-super").labChemicalId).toBe("iso-e-super");
   });
 
+  it("maps CCT / MCT carrier aliases", () => {
+    expect(mapIngredientToLab("caprylic-capric-triglyceride").labChemicalId).toBe(
+      "cct",
+    );
+    expect(mapIngredientToLab("fractionated-coconut").mapStatus).toBe("alias");
+    expect(mapIngredientToLab("cct").mapStatus).toBe("exact");
+    expect(mapIngredientToLab("jojoba-oil").labChemicalId).toBe("jojoba-oil");
+  });
+
   it("does not invent lab chemicals", () => {
     expect(mapIngredientToLab("made-up-aroma-999").mapStatus).toBe("unmapped");
     expect(mapIngredientToLab("made-up-aroma-999").labChemicalId).toBeNull();

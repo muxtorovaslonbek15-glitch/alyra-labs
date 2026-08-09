@@ -79,6 +79,12 @@ export interface StructuredPayload {
   ifraFlags?: Array<{ id: string; name: string; severity: string; ifraNotes?: string }>;
   /** Lab desk hydrate payload (schema v1) */
   lab_bridge?: LabBridgeFormula | null;
+  indiaContext?: {
+    occasion?: string;
+    climate?: string;
+    wearAdvice?: string;
+    family?: string;
+  };
 }
 
 export type LabBridgeMapStatus = "exact" | "alias" | "proxy" | "unmapped";
