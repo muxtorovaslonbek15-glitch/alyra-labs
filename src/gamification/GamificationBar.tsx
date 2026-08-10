@@ -165,19 +165,19 @@ export function GamificationBar({
         aria-expanded={drawerOpen}
         aria-label="Progress"
         title="Progress"
-        className="flex min-h-9 items-center gap-1.5 rounded-lg border border-white/15 bg-white/5 px-2.5 py-1 text-lab-foam hover:bg-white/10"
+        className="flex h-8 items-center gap-1 rounded-lg border border-white/15 bg-white/5 px-2 text-lab-foam hover:bg-white/10"
       >
-        <span className="text-[10px] uppercase tracking-[0.12em] text-lab-foam/55">
+        <span className="text-[9px] font-semibold uppercase leading-none tracking-[0.1em] text-lab-foam/55">
           Lv {level}
         </span>
-        <span className="font-display text-sm leading-none text-lab-foam">
+        <span className="font-display text-xs leading-none text-lab-foam">
           {xp}
         </span>
-        <span className="text-[9px] text-lab-foam/50">XP</span>
-        <span className="font-display text-sm leading-none text-lab-amber">
+        <span className="text-[9px] leading-none text-lab-foam/50">XP</span>
+        <span className="font-display text-xs leading-none text-lab-amber">
           {stars}
         </span>
-        <span className="text-[9px] text-lab-amber/80">★</span>
+        <span className="text-[9px] leading-none text-lab-amber/80">★</span>
       </button>
 
       {drawerOpen ? (

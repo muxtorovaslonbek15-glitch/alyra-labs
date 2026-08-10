@@ -58,7 +58,7 @@ export function LabOverflowMenu({
         aria-expanded={open}
         aria-label="More"
         title="More"
-        className={`flex h-9 w-9 items-center justify-center rounded-lg text-sm font-semibold ${
+        className={`flex h-8 w-8 items-center justify-center rounded-lg text-sm font-semibold leading-none ${
           onDark
             ? "border border-white/20 text-lab-foam hover:bg-white/10"
             : "border border-lab-line text-lab-ink hover:bg-lab-wash"
@@ -168,7 +168,7 @@ export function LabModeToggle({
       <div
         role="group"
         aria-label="Right panel mode"
-        className="grid h-9 w-[8.75rem] grid-cols-2 items-stretch rounded-lg bg-white/10 p-0.5 md:h-8"
+        className="grid h-8 w-[7.75rem] grid-cols-2 items-stretch rounded-lg bg-white/10 p-0.5"
       >
         {(
           [
@@ -181,7 +181,7 @@ export function LabModeToggle({
             type="button"
             onClick={() => onChange(id)}
             aria-pressed={value === id && !scanActive}
-            className={`flex h-full w-full items-center justify-center rounded-md px-1 text-center text-[11px] font-semibold leading-none transition ${
+            className={`flex h-full w-full items-center justify-center rounded-md px-1 text-center text-[10px] font-semibold leading-none tracking-wide transition ${
               value === id && !scanActive
                 ? "bg-lab-foam text-lab-ink"
                 : "text-lab-foam/65 hover:text-lab-foam"
@@ -197,7 +197,7 @@ export function LabModeToggle({
           onClick={onToggleScan}
           aria-pressed={scanActive}
           title="Scan formula"
-          className={`flex h-9 w-9 items-center justify-center rounded-lg border text-[11px] font-semibold md:h-8 md:w-8 ${
+          className={`flex h-8 w-8 items-center justify-center rounded-lg border text-[10px] font-semibold leading-none ${
             scanActive
               ? "border-lab-foam bg-lab-foam text-lab-ink"
               : "border-white/20 text-lab-foam/70 hover:bg-white/10 hover:text-lab-foam"

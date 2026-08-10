@@ -15,6 +15,8 @@ import { useBuilderStore } from "@/store/builderStore";
 import { useDeskStore } from "@/store/deskStore";
 import { track } from "@/lib/analytics/track";
 import { showToast } from "@/gamification/ToastHost";
+import { celebrateChatAchievement } from "@/perfumer/chatAchievements";
+import { buildUsesTin } from "@/animation/motion";
 
 const PerfumerChat = dynamic(
   () => import("@/perfumer/PerfumerChat").then((m) => m.PerfumerChat),
@@ -97,10 +99,11 @@ export function MobileBuilderChrome({
           { result },
         );
         if (result === "done") {
-          showToast({
-            title: "Build complete",
-            detail: "Refine in Chat or open Tutor for notes.",
-          });
+          if (buildUsesTin(bridge)) {
+            celebrateChatAchievement("solid_tin", { force: true });
+          } else {
+            celebrateChatAchievement("build_complete", { force: true });
+          }
         }
       })
       .catch(() => {

@@ -34,7 +34,8 @@ export type AnalyticsEventName =
   | "builder_history_open"
   | "builder_history_select"
   | "builder_history_new"
-  | "builder_history_close";
+  | "builder_history_close"
+  | "builder_chat_achievement";
 
 export const ANALYTICS_EVENT_NAMES = new Set<string>([
   "page_view",
@@ -73,4 +74,5 @@ export const ANALYTICS_EVENT_NAMES = new Set<string>([
   "builder_history_select",
   "builder_history_new",
   "builder_history_close",
+  "builder_chat_achievement",
 ]);

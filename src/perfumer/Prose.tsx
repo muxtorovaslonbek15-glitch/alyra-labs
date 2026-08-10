@@ -6,7 +6,7 @@ export function Prose({ text }: { text: string }) {
   const blocks = text.replace(/\r\n/g, "\n").split(/\n{2,}/);
 
   return (
-    <div className="space-y-3 text-[15px] leading-[1.7] text-lab-ink">
+    <div className="space-y-2.5 text-[13px] leading-relaxed text-lab-ink">
       {blocks.map((block, i) => {
         const lines = block.split("\n").map((l) => l.trimEnd());
         const isList = lines.every(

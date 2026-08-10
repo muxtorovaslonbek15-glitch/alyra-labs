@@ -2,7 +2,9 @@
 
 import type { ChatAgentMode } from "@/store/builderStore";
 
-/** Cursor-like Plan | Agent segmented control. Equal cells, calm. */
+/** Cursor-like Plan | Agent segmented control. Equal cells, calm.
+ * Radius: outer `rounded-lg`, cells `rounded-md` (Lab control scale).
+ */
 export function ChatModeToggle({
   mode,
   onChange,
@@ -14,14 +16,17 @@ export function ChatModeToggle({
   disabled?: boolean;
   size?: "sm" | "md";
 }) {
-  const pad =
-    size === "sm" ? "px-1 py-1 text-[10px]" : "px-1.5 py-1 text-[11px]";
-  const width = size === "sm" ? "w-[6.5rem]" : "w-[7.25rem]";
+  const compact = size === "sm";
+  const width = compact ? "w-[6.5rem]" : "w-[7.25rem]";
+  const height = compact ? "h-6" : "h-7";
+  const cell = compact
+    ? "px-1 text-[10px]"
+    : "px-1.5 text-[11px]";
   return (
     <div
       role="group"
       aria-label="Chat mode"
-      className={`grid ${width} grid-cols-2 rounded-md border border-lab-line/70 bg-lab-wash/70 p-0.5`}
+      className={`grid ${width} ${height} grid-cols-2 items-stretch rounded-lg border border-lab-line/70 bg-lab-wash/70 p-0.5`}
     >
       {(
         [
@@ -37,7 +42,7 @@ export function ChatModeToggle({
             disabled={disabled}
             aria-pressed={active}
             onClick={() => onChange(opt.id)}
-            className={`${pad} w-full rounded-[4px] text-center font-semibold tracking-wide transition ${
+            className={`${cell} flex h-full w-full items-center justify-center rounded-md text-center font-semibold leading-none tracking-wide transition ${
               active
                 ? "bg-lab-ink text-lab-foam"
                 : "text-lab-muted hover:text-lab-ink"
@@ -72,14 +77,14 @@ export function PlanModeNudge({
         <button
           type="button"
           onClick={onSwitch}
-          className="min-h-7 rounded-md bg-lab-ink px-2 text-[10px] font-semibold text-lab-foam hover:bg-black"
+          className="flex h-7 items-center rounded-lg bg-lab-ink px-2 text-[10px] font-semibold leading-none text-lab-foam hover:bg-black"
         >
           Switch
         </button>
         <button
           type="button"
           onClick={onDismiss}
-          className="min-h-7 rounded-md px-2 text-[10px] font-medium text-lab-muted hover:bg-white hover:text-lab-ink"
+          className="flex h-7 items-center rounded-lg px-2 text-[10px] font-medium leading-none text-lab-muted hover:bg-white hover:text-lab-ink"
         >
           Dismiss
         </button>

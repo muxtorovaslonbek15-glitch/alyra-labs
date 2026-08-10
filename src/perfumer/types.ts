@@ -192,6 +192,22 @@ export interface ToolTraceItem {
   label?: string;
 }
 
+/** Cursor-style agent work timeline (local, from SSE status/tool). */
+export interface ThoughtTimelineState {
+  startedAt: number;
+  endedAt?: number;
+  entries: Array<{
+    id: string;
+    kind: "thought" | "tool";
+    summary: string;
+    notes: string[];
+    tool?: string;
+    ok?: boolean;
+    startedAt: number;
+    endedAt?: number;
+  }>;
+}
+
 export interface ChatMessage {
   id: string;
   role: "user" | "assistant" | "system" | "error";
@@ -203,6 +219,8 @@ export interface ChatMessage {
   status?: "ok" | "error" | "streaming";
   /** Live brainstorm stage label while streaming */
   thinkingLabel?: string;
+  /** Cursor-feel expandable thought / tool timeline */
+  thoughtTimeline?: ThoughtTimelineState;
   toolTrace?: ToolTraceItem[];
   clientMessageId?: string;
   createdAt?: string;

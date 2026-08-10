@@ -205,3 +205,5 @@ WebGL liquid sits **inside** the glass well under the SVG rim. Spectacle is seco
 | 2026-07-24 | Phone desk-only + sheets; desktop unchanged | Mobile minimal without rewriting desktop |
 | 2026-07-24 | Hide scrollbars in `.lab-app` | Clean phone chrome |
 | 2026-08-10 | Perfume Builder IDE: Lab\|Tutor\|Chat; Plan→Build | Desk stays hero; no silent pours; Chat absorbs `/perfumer` |
+| 2026-08-10 | Lab radius scale: bubbles `rounded-2xl`; controls `rounded-lg`; nested cells `rounded-md` | Match MessageBubble softness without softening every chip; header + chat share one family |
+| 2026-08-10 | Lab top header controls `h-8` (Tutor\|Chat, XP chip, ⋯) | Optical align in `py-1.5` ink bar; denser XP type |

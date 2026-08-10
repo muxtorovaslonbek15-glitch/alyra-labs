@@ -630,7 +630,7 @@ export function LabShell() {
               <button
                 type="button"
                 onClick={() => setMode("desk")}
-                className="min-h-9 rounded-lg bg-lab-foam px-3 text-[11px] font-semibold text-lab-ink"
+                className="flex h-8 items-center rounded-lg bg-lab-foam px-3 text-[10px] font-semibold leading-none text-lab-ink"
               >
                 Back to desk
               </button>

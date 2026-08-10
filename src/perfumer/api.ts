@@ -428,6 +428,8 @@ export async function streamChat(
       chatId?: string,
     ) => void;
     onError?: (error: PerfumerApiError, chatId?: string) => void;
+    /** Fired when transport fails or stream dies before done — UI may show Reconnecting… */
+    onNetworkHint?: () => void;
   },
 ): Promise<void> {
   const auth = await authHeadersOrError();
@@ -554,6 +556,7 @@ export async function streamChat(
 
     // Do not hammer Groq: only fall back when stream died with neither done nor error
     if (!sawDone && !sawError) {
+      handlers.onNetworkHint?.();
       const result = await sendChat(body);
       if (!result.ok) {
         handlers.onError?.(result.error, result.chatId);
@@ -571,6 +574,7 @@ export async function streamChat(
     }
   } catch {
     // Network/transport failure only — one non-stream attempt, no loop
+    handlers.onNetworkHint?.();
     const result = await sendChat(body);
     if (!result.ok) {
       handlers.onError?.(result.error, result.chatId);

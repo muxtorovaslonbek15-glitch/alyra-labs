@@ -59,14 +59,14 @@ function HistoryListBody({
         <button
           type="button"
           onClick={onNew}
-          className="flex h-7 items-center rounded-md bg-lab-ink px-2.5 text-[11px] font-semibold text-lab-foam hover:bg-black"
+          className="flex h-7 items-center rounded-lg bg-lab-ink px-2.5 text-[11px] font-semibold leading-none text-lab-foam hover:bg-black"
         >
           New
         </button>
         <button
           type="button"
           onClick={onBack}
-          className="flex h-7 items-center rounded-md px-2.5 text-[11px] font-medium text-lab-muted hover:bg-lab-wash hover:text-lab-ink"
+          className="flex h-7 items-center rounded-lg px-2.5 text-[11px] font-medium leading-none text-lab-muted hover:bg-lab-wash hover:text-lab-ink"
         >
           Back to desk
         </button>

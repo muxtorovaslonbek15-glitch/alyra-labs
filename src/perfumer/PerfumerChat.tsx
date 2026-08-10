@@ -31,7 +31,16 @@ import {
   consumeGuidePrompt,
 } from "./labBridge";
 import { Prose } from "./Prose";
-import { ThinkingPanel } from "./ThinkingPanel";
+import { AgentTimeline } from "./AgentTimeline";
+import { celebrateChatAchievement } from "./chatAchievements";
+import {
+  applyStatus,
+  applyTool,
+  createThoughtTimeline,
+  finalizeThoughtTimeline,
+  streamConnectionState,
+  type StreamConnectionState,
+} from "./thoughtTimeline";
 import { useBuilderStore } from "@/store/builderStore";
 import { useChatSessionsStore } from "@/perfumer/chatSessionsStore";
 import { ChatDockHandle } from "@/desk/ChatDockDrag";
@@ -98,6 +107,8 @@ export function PerfumerChat({
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [banner, setBanner] = useState<PerfumerApiError | null>(null);
+  const [connectionState, setConnectionState] =
+    useState<StreamConnectionState>("working");
   const [health, setHealth] = useState<Record<string, unknown> | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [hydrated, setHydrated] = useState(false);
@@ -111,10 +122,59 @@ export function PerfumerChat({
   const composerRef = useRef<HTMLTextAreaElement>(null);
   const persistTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const chatsRef = useRef<ChatSession[]>([]);
+  const streamStartedAtRef = useRef<number | null>(null);
+  const lastActivityAtRef = useRef<number | null>(null);
+  const networkIssueRef = useRef(false);
+  const offlineRef = useRef(
+    typeof navigator !== "undefined" ? !navigator.onLine : false,
+  );
   const activeIdRef = useRef<string | null>(null);
   const planTracked = useRef<string | null>(null);
   const building = builderMode === "building";
   const inputWords = wordCount(input);
+
+  const refreshConnectionState = useCallback(() => {
+    const startedAt = streamStartedAtRef.current;
+    if (startedAt == null) {
+      setConnectionState("working");
+      return;
+    }
+    setConnectionState(
+      streamConnectionState({
+        startedAt,
+        lastActivityAt: lastActivityAtRef.current,
+        offline: offlineRef.current,
+        networkIssue: networkIssueRef.current,
+      }),
+    );
+  }, []);
+
+  const markStreamActivity = useCallback(() => {
+    lastActivityAtRef.current = Date.now();
+    networkIssueRef.current = false;
+    setConnectionState("working");
+  }, []);
+
+  useEffect(() => {
+    const syncOffline = () => {
+      offlineRef.current =
+        typeof navigator !== "undefined" ? !navigator.onLine : false;
+      if (streamStartedAtRef.current != null) refreshConnectionState();
+    };
+    window.addEventListener("online", syncOffline);
+    window.addEventListener("offline", syncOffline);
+    return () => {
+      window.removeEventListener("online", syncOffline);
+      window.removeEventListener("offline", syncOffline);
+    };
+  }, [refreshConnectionState]);
+
+  useEffect(() => {
+    if (!busy) return;
+    refreshConnectionState();
+    const id = window.setInterval(refreshConnectionState, 500);
+    return () => window.clearInterval(id);
+  }, [busy, refreshConnectionState]);
 
   /** Auto-grow composer up to ~6–8 lines, then scroll (JS fallback if no field-sizing). */
   const syncComposerHeight = useCallback(() => {
@@ -166,6 +226,9 @@ export function PerfumerChat({
           unmapped: bridge.mappingReport?.unmappedCount ?? 0,
           title: bridge.title,
         });
+        celebrateChatAchievement("plan_ready", {
+          detail: bridge.title || undefined,
+        });
       }
     },
     [shell, setPlanFromStructured],
@@ -179,6 +242,9 @@ export function PerfumerChat({
         unmapped: bridge.mappingReport?.unmappedCount ?? 0,
         title: bridge.title,
         from: "formula_card",
+      });
+      celebrateChatAchievement("plan_ready", {
+        detail: bridge.title || undefined,
       });
     },
     [setPlan],
@@ -517,6 +583,10 @@ export function PerfumerChat({
     setBanner(null);
     setBusy(true);
     setInput("");
+    streamStartedAtRef.current = Date.now();
+    lastActivityAtRef.current = null;
+    networkIssueRef.current = false;
+    setConnectionState("working");
 
     const clientMessageId = uid("cm");
     const userMsg: ChatMessage = {
@@ -550,6 +620,7 @@ export function PerfumerChat({
               content: "",
               status: "streaming",
               thinkingLabel: "Listening to the brief...",
+              thoughtTimeline: createThoughtTimeline(),
               toolTrace: [],
             },
           ],
@@ -592,6 +663,7 @@ export function PerfumerChat({
       },
       {
         onMeta: ({ chatId, toolTrace }) => {
+          markStreamActivity();
           updateChats((prev) =>
             prev.map((c) =>
               c.id === chatLocalId
@@ -612,23 +684,40 @@ export function PerfumerChat({
             }));
           }
         },
-        onStatus: (label) => {
-          patchAssistant({ thinkingLabel: label });
+        onStatus: (label, stage, tool) => {
+          markStreamActivity();
+          patchAssistant((m) => {
+            const base = m.thoughtTimeline || createThoughtTimeline();
+            return {
+              ...m,
+              thinkingLabel: label,
+              thoughtTimeline: applyStatus(base, label, { stage, tool }),
+            };
+          });
         },
         onTool: (tool, ok) => {
+          markStreamActivity();
+          if (tool === "refine_formula" && ok !== false) {
+            celebrateChatAchievement("refine_done");
+          }
           patchAssistant((m) => {
             const next: ToolTraceItem[] = [
               ...(m.toolTrace || []),
               { tool, ok },
             ];
-            // dedupe consecutive identical
             const deduped = next.filter(
               (t, i, arr) => i === 0 || t.tool !== arr[i - 1].tool,
             );
-            return { ...m, toolTrace: deduped };
+            const base = m.thoughtTimeline || createThoughtTimeline();
+            return {
+              ...m,
+              toolTrace: deduped,
+              thoughtTimeline: applyTool(base, tool, ok !== false),
+            };
           });
         },
         onToken: (chunk) => {
+          markStreamActivity();
           patchAssistant((m) => ({
             ...m,
             content: (m.content || "") + chunk,
@@ -636,6 +725,11 @@ export function PerfumerChat({
           }));
         },
         onStructured: (structured, sections) => {
+          markStreamActivity();
+          const lines = structured?.formula?.formula?.length ?? 0;
+          if (lines > 0) {
+            celebrateChatAchievement("first_formula");
+          }
           patchAssistant({
             structured,
             sections: sections || undefined,
@@ -643,6 +737,7 @@ export function PerfumerChat({
           publishPlan(structured);
         },
         onLabBridge: (payload) => {
+          markStreamActivity();
           patchAssistant((m) => {
             const nextStructured = {
               ...(m.structured || {}),
@@ -656,7 +751,15 @@ export function PerfumerChat({
           });
         },
         onDone: (reply, sections, structured, chatId) => {
+          streamStartedAtRef.current = null;
+          lastActivityAtRef.current = null;
+          networkIssueRef.current = false;
+          setConnectionState("working");
           publishPlan(structured);
+          const lines = structured?.formula?.formula?.length ?? 0;
+          if (lines > 0) {
+            celebrateChatAchievement("first_formula");
+          }
           updateChats((prev) =>
             prev.map((c) => {
               if (c.id !== chatLocalId) return c;
@@ -673,6 +776,9 @@ export function PerfumerChat({
                         structured: structured || m.structured,
                         status: "ok" as const,
                         thinkingLabel: undefined,
+                        thoughtTimeline: m.thoughtTimeline
+                          ? finalizeThoughtTimeline(m.thoughtTimeline)
+                          : m.thoughtTimeline,
                       }
                     : m,
                 ),
@@ -682,6 +788,10 @@ export function PerfumerChat({
           setBusy(false);
         },
         onError: (error, chatId) => {
+          streamStartedAtRef.current = null;
+          lastActivityAtRef.current = null;
+          networkIssueRef.current = false;
+          setConnectionState("working");
           setBanner(error);
           updateChats((prev) =>
             prev.map((c) => {
@@ -698,6 +808,9 @@ export function PerfumerChat({
                         error,
                         status: "error" as const,
                         thinkingLabel: undefined,
+                        thoughtTimeline: m.thoughtTimeline
+                          ? finalizeThoughtTimeline(m.thoughtTimeline)
+                          : m.thoughtTimeline,
                       }
                     : m,
                 ),
@@ -705,6 +818,10 @@ export function PerfumerChat({
             }),
           );
           setBusy(false);
+        },
+        onNetworkHint: () => {
+          networkIssueRef.current = true;
+          setConnectionState("reconnecting");
         },
       },
     );
@@ -781,14 +898,14 @@ export function PerfumerChat({
               <button
                 type="button"
                 onClick={createChat}
-                className="min-h-8 rounded-md bg-lab-ink px-2.5 text-[11px] font-semibold text-lab-foam hover:bg-black"
+                className="flex h-8 items-center rounded-lg bg-lab-ink px-2.5 text-[11px] font-semibold leading-none text-lab-foam hover:bg-black"
               >
                 New
               </button>
               <button
                 type="button"
                 onClick={() => setSidebarOpen(false)}
-                className={`min-h-8 rounded-md px-2 text-[11px] font-medium text-lab-muted hover:text-lab-ink ${
+                className={`flex h-8 items-center rounded-lg px-2 text-[11px] font-medium leading-none text-lab-muted hover:text-lab-ink ${
                   shell ? "" : "md:hidden"
                 }`}
               >
@@ -901,12 +1018,12 @@ export function PerfumerChat({
               ) : null}
 
               {bottomDock ? (
-                <div className="flex min-w-0 flex-1 items-end gap-0 self-stretch pl-1">
-                  <span className="relative flex h-full items-center border-b-2 border-lab-ink px-2 text-[11px] font-semibold text-lab-ink">
+                <div className="flex min-w-0 flex-1 items-center gap-0 self-stretch pl-1">
+                  <span className="relative flex h-full items-center border-b-2 border-lab-ink px-2 text-[11px] font-semibold leading-none text-lab-ink">
                     Perfumer
                   </span>
                   {building ? (
-                    <span className="mb-1.5 ml-1 rounded px-1 py-0.5 text-[9px] font-semibold uppercase tracking-[0.1em] text-lab-amber">
+                    <span className="ml-1 rounded-md px-1 py-0.5 text-[9px] font-semibold uppercase leading-none tracking-[0.1em] text-lab-amber">
                       {buildSteps.length
                         ? `${Math.min(buildStepIndex + 1, buildSteps.length)}/${buildSteps.length}`
                         : "Build"}
@@ -915,11 +1032,11 @@ export function PerfumerChat({
                 </div>
               ) : (
                 <>
-                  <p className="truncate text-[11px] font-semibold tracking-wide text-lab-ink">
+                  <p className="truncate text-[11px] font-semibold leading-none tracking-wide text-lab-ink">
                     {active?.title || "Perfumer"}
                   </p>
                   <span
-                    className={`shrink-0 rounded px-1.5 py-0.5 text-[9px] font-medium ${
+                    className={`shrink-0 rounded-md px-1.5 py-0.5 text-[9px] font-medium leading-none ${
                       building
                         ? "bg-lab-amber/15 text-lab-amber"
                         : "text-lab-muted"
@@ -945,7 +1062,7 @@ export function PerfumerChat({
               )}
 
               {bottomDock ? (
-                <div className="mr-1 hidden md:block">
+                <div className="mr-0.5 hidden shrink-0 items-center md:flex">
                   <ChatModeToggle
                     mode={chatAgentMode}
                     onChange={changeChatMode}
@@ -971,7 +1088,7 @@ export function PerfumerChat({
                   }
                   setSidebarOpen(true);
                 }}
-                className={`flex h-7 w-7 items-center justify-center rounded-md hover:bg-lab-wash hover:text-lab-ink ${
+                className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-lg hover:bg-lab-wash hover:text-lab-ink ${
                   shell && centerView === "history"
                     ? "bg-lab-wash text-lab-ink"
                     : "text-lab-muted"
@@ -988,18 +1105,18 @@ export function PerfumerChat({
                 }
                 aria-pressed={shell ? centerView === "history" : undefined}
               >
-                <span aria-hidden className="font-mono text-[12px] leading-none">
+                <span aria-hidden className="font-mono text-[11px] leading-none">
                   ◷
                 </span>
               </button>
               <button
                 type="button"
                 onClick={createChat}
-                className="flex h-7 w-7 items-center justify-center rounded-md text-lab-muted hover:bg-lab-wash hover:text-lab-ink"
+                className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg text-lab-muted hover:bg-lab-wash hover:text-lab-ink"
                 title="New chat"
                 aria-label="New chat"
               >
-                <span aria-hidden className="text-[15px] leading-none">
+                <span aria-hidden className="text-[14px] leading-none">
                   +
                 </span>
               </button>
@@ -1007,11 +1124,11 @@ export function PerfumerChat({
                 <button
                   type="button"
                   onClick={() => setRightOpen(false)}
-                  className="hidden h-7 w-7 items-center justify-center rounded-md text-lab-muted hover:bg-lab-wash hover:text-lab-ink md:flex"
+                  className="hidden h-6 w-6 shrink-0 items-center justify-center rounded-lg text-lab-muted hover:bg-lab-wash hover:text-lab-ink md:flex"
                   title="Hide chat (⌘T)"
                   aria-label="Hide chat"
                 >
-                  <span aria-hidden className="text-[14px] leading-none">
+                  <span aria-hidden className="text-[13px] leading-none">
                     ×
                   </span>
                 </button>
@@ -1020,7 +1137,7 @@ export function PerfumerChat({
                 <button
                   type="button"
                   onClick={onCloseSheet}
-                  className="min-h-8 rounded-md bg-lab-ink px-2.5 text-[11px] font-semibold text-lab-foam md:hidden"
+                  className="flex h-7 items-center rounded-lg bg-lab-ink px-2.5 text-[11px] font-semibold leading-none text-lab-foam md:hidden"
                 >
                   Done
                 </button>
@@ -1068,17 +1185,22 @@ export function PerfumerChat({
                     message={m}
                     onBuild={shell ? onUseInPlan : undefined}
                     hideLabCta={shell}
+                    connectionState={
+                      m.status === "streaming" ? connectionState : "working"
+                    }
                   />
                 ))}
                 {narration.map((n) => (
                   <div
                     key={n.id}
-                    className="rounded-md border border-lab-line/50 bg-lab-wash/60 px-2.5 py-1.5 text-sm leading-relaxed text-lab-ink/90"
+                    className="flex items-baseline gap-2 px-0.5 py-0.5 font-mono text-[11px] text-lab-muted"
                   >
-                    <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-lab-muted">
-                      Build
-                    </p>
-                    <p className="mt-0.5">{n.text}</p>
+                    <span className="rounded bg-lab-amber/12 px-1.5 py-px text-[9px] font-semibold uppercase tracking-[0.08em] text-lab-amber">
+                      build
+                    </span>
+                    <span className="min-w-0 text-[12px] leading-snug text-lab-ink/85">
+                      {n.text}
+                    </span>
                   </div>
                 ))}
               </>
@@ -1098,7 +1220,7 @@ export function PerfumerChat({
             {building && shell ? (
               <div
                 role="status"
-                className="mb-1.5 flex items-center gap-2 rounded-md border border-lab-amber/30 bg-lab-amber/10 px-2 py-1"
+                className="mb-1.5 flex items-center gap-2 rounded-lg border border-lab-amber/30 bg-lab-amber/10 px-2 py-1"
               >
                 <span className="h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-lab-amber" />
                 <p className="min-w-0 flex-1 text-[11px] font-medium text-lab-ink">
@@ -1150,7 +1272,7 @@ export function PerfumerChat({
             <div
               className={`flex items-end gap-1.5 ${
                 shell
-                  ? "rounded-md border border-lab-line/80 bg-white px-1.5 py-1"
+                  ? "rounded-lg border border-lab-line/80 bg-white px-1.5 py-1"
                   : ""
               }`}
             >
@@ -1185,7 +1307,7 @@ export function PerfumerChat({
                           ? "max-h-28 min-h-7 py-1 text-[13px] leading-snug text-lab-ink placeholder:text-lab-muted/65"
                           : "max-h-32 min-h-8 py-1.5 text-[13px] leading-snug text-lab-ink placeholder:text-lab-muted/70"
                       }`
-                    : "[field-sizing:content] max-h-40 min-h-12 min-w-0 flex-1 resize-none overflow-y-auto rounded-xl border border-lab-line bg-lab-panel px-3 py-3 text-[15px] leading-snug text-lab-ink placeholder:text-lab-muted/70 focus:outline-none focus:ring-1 focus:ring-lab-ink/30 md:min-h-11 md:rounded-lg md:py-2.5 md:text-[13px]"
+                    : "[field-sizing:content] max-h-40 min-h-12 min-w-0 flex-1 resize-none overflow-y-auto rounded-xl border border-lab-line bg-lab-panel px-3 py-3 text-[13px] leading-snug text-lab-ink placeholder:text-lab-muted/70 focus:outline-none focus:ring-1 focus:ring-lab-ink/30 md:min-h-11 md:rounded-lg md:py-2.5"
                 }
                 disabled={busy || building}
               />
@@ -1201,7 +1323,7 @@ export function PerfumerChat({
                 disabled={busy || building || (!user ? false : !input.trim())}
                 className={
                   shell
-                    ? `mb-0.5 shrink-0 rounded-md bg-lab-ink font-semibold text-lab-foam transition hover:bg-black disabled:opacity-40 ${
+                    ? `shrink-0 self-end rounded-lg bg-lab-ink font-semibold leading-none text-lab-foam transition hover:bg-black disabled:opacity-40 ${
                         bottomDock
                           ? "h-7 px-2.5 text-[10px]"
                           : "h-8 px-3 text-[11px]"
@@ -1267,10 +1389,12 @@ function MessageBubble({
   message,
   onBuild,
   hideLabCta,
+  connectionState = "working",
 }: {
   message: ChatMessage;
   onBuild?: (bridge: LabBridgeFormula) => void;
   hideLabCta?: boolean;
+  connectionState?: StreamConnectionState;
 }) {
   if (message.role === "error") {
     return message.error ? <ErrorBanner error={message.error} /> : null;
@@ -1287,12 +1411,12 @@ function MessageBubble({
       <div
         className={`max-w-[min(42rem,100%)] ${
           isUser
-            ? "rounded-2xl bg-lab-ink px-4 py-2.5 text-lab-foam"
+            ? "rounded-2xl bg-lab-ink px-3 py-2 text-lab-foam"
             : "w-full space-y-3"
         }`}
       >
         {isUser ? (
-          <p className="whitespace-pre-wrap text-[15px] leading-relaxed">
+          <p className="whitespace-pre-wrap text-[13px] leading-relaxed">
             {message.content}
           </p>
         ) : (
@@ -1315,37 +1439,41 @@ function MessageBubble({
               />
             ) : null}
 
-            {streamingEmpty ? (
-              <ThinkingPanel label={message.thinkingLabel} />
+            {message.thoughtTimeline ? (
+              <AgentTimeline
+                timeline={message.thoughtTimeline}
+                live={message.status === "streaming"}
+                showChips={message.status === "ok"}
+                connectionState={connectionState}
+              />
+            ) : streamingEmpty ? (
+              <AgentTimeline
+                timeline={{
+                  startedAt: Date.now(),
+                  entries: [
+                    {
+                      id: "fallback",
+                      kind: "thought",
+                      summary: "Thinking",
+                      notes: [
+                        message.thinkingLabel || "Listening to the brief",
+                      ],
+                      startedAt: Date.now(),
+                    },
+                  ],
+                }}
+                live
+                connectionState={connectionState}
+              />
             ) : null}
 
             {message.content ? (
               <div>
-                {message.status === "streaming" &&
-                !message.content &&
-                message.thinkingLabel ? (
-                  <ThinkingPanel label={message.thinkingLabel} />
-                ) : null}
                 <Prose text={message.content} />
                 {message.status === "streaming" ? (
                   <span className="ml-0.5 inline-block h-4 w-[2px] translate-y-0.5 animate-pulse bg-lab-ink/50" />
                 ) : null}
               </div>
-            ) : null}
-
-            {message.toolTrace?.length && message.status === "ok" ? (
-              <details className="text-[11px] text-lab-muted">
-                <summary className="cursor-pointer tracking-wide">
-                  Tools used
-                </summary>
-                <ul className="mt-1.5 space-y-0.5 font-mono">
-                  {message.toolTrace.map((t, i) => (
-                    <li key={`${t.tool}-${i}`}>
-                      {t.tool.replace(/_/g, " ")}
-                    </li>
-                  ))}
-                </ul>
-              </details>
             ) : null}
 
             <FormulaCard

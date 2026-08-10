@@ -14,6 +14,7 @@ import {
   chassisFromStructured,
   isSolidIntent,
 } from "./solidDetect";
+import { celebrateChatAchievement } from "./chatAchievements";
 
 function AccordionRow({
   label,
@@ -108,10 +109,16 @@ export function FormulaCard({
     }
     if (onBuild) {
       onBuild(payload);
+      celebrateChatAchievement("open_in_lab", {
+        detail: payload.title || undefined,
+      });
       return;
     }
     setOpening(true);
     storeLabBridge(payload);
+    celebrateChatAchievement("open_in_lab", {
+      detail: payload.title || undefined,
+    });
     const unmapped = payload.mappingReport?.unmappedCount ?? 0;
     if (unmapped > 0) {
       const ids = (payload.mappingReport?.unmappedIds || []).slice(0, 8).join(", ");
