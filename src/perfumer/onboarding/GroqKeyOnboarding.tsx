@@ -113,21 +113,22 @@ export function GroqKeyOnboarding({
 
   return (
     <div
-      className="fixed inset-0 z-[85] flex items-end justify-center bg-lab-ink/55 p-0 backdrop-blur-sm sm:items-center sm:p-4"
+      className="fixed inset-0 z-[85] flex items-center justify-center bg-lab-ink/70 p-3 backdrop-blur-[2px] sm:p-4"
       role="dialog"
       aria-modal="true"
       aria-labelledby="groq-onboard-title"
       onClick={() => onClose?.()}
     >
       {/*
-        Grid + max-height: middle row shrinks so header/footer stay visible.
-        (flex-1 + max-h alone clipped the footer under tall screenshots.)
+        Flex column + explicit maxHeight: header/footer stay in viewport;
+        body scrolls. Inline maxHeight covers Tailwind arbitrary-value gaps.
       */}
       <div
-        className="grid max-h-[min(92dvh,40rem)] w-full max-w-lg grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden rounded-t-2xl border border-lab-line bg-lab-panel shadow-2xl sm:rounded-2xl"
+        className="flex max-h-[min(90dvh,40rem)] w-full max-w-lg flex-col overflow-hidden rounded-2xl border-2 border-lab-line bg-lab-panel shadow-[0_24px_64px_-12px_rgba(12,12,12,0.55)] ring-1 ring-lab-ink/10"
+        style={{ maxHeight: "min(90dvh, 40rem)" }}
         onClick={(e) => e.stopPropagation()}
       >
-        <header className="relative shrink-0 border-b border-lab-line/70 px-4 py-3 pr-12">
+        <header className="relative shrink-0 border-b border-lab-line bg-lab-panel px-4 py-3 pr-12">
           <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-lab-muted">
             {mode === "rotate" ? "Rotate Groq key" : "Master Perfumer setup"}
           </p>
@@ -153,14 +154,14 @@ export function GroqKeyOnboarding({
           </button>
         </header>
 
-        <div className="relative min-h-0 overflow-y-auto px-4 py-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        <div className="relative min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           <figure className="overflow-hidden rounded-xl border border-lab-line bg-lab-wash">
             <Image
               src={step.image}
               alt={step.imageAlt}
               width={1100}
               height={620}
-              className="h-auto w-full object-cover object-top"
+              className="h-auto max-h-[min(28vh,12rem)] w-full object-cover object-top sm:max-h-[min(32vh,14rem)]"
               priority={stepIdx === 0}
             />
             <figcaption className="px-2.5 py-1.5 text-[10px] leading-snug text-lab-muted">
@@ -171,17 +172,6 @@ export function GroqKeyOnboarding({
           <p className="mt-3 text-sm leading-relaxed text-lab-ink/90">
             {step.body}
           </p>
-
-          {step.href ? (
-            <a
-              href={step.href}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="mt-3 inline-flex min-h-11 items-center rounded-lg border border-lab-line bg-white px-3 text-sm font-semibold text-lab-ink hover:bg-lab-wash"
-            >
-              {step.hrefLabel || "Open link"} ↗
-            </a>
-          ) : null}
 
           {isDeleteStep ? (
             <div className="mt-4">
@@ -249,7 +239,7 @@ export function GroqKeyOnboarding({
           ) : null}
         </div>
 
-        <footer className="flex shrink-0 items-center justify-between gap-2 border-t border-lab-line/70 px-4 py-3">
+        <footer className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-t border-lab-line bg-lab-panel px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
           <button
             type="button"
             onClick={() => {
@@ -260,7 +250,7 @@ export function GroqKeyOnboarding({
           >
             {stepIdx === 0 ? "Skip for now" : "Back"}
           </button>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center justify-end gap-2">
             {stepIdx > 0 ? (
               <button
                 type="button"
@@ -269,6 +259,16 @@ export function GroqKeyOnboarding({
               >
                 Skip for now
               </button>
+            ) : null}
+            {step.href ? (
+              <a
+                href={step.href}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex min-h-11 items-center rounded-lg border border-lab-line bg-white px-3 text-sm font-semibold text-lab-ink hover:bg-lab-wash"
+              >
+                {step.hrefLabel || "Open link"} ↗
+              </a>
             ) : null}
             {!step.pasteForm && !isDeleteStep ? (
               <button
