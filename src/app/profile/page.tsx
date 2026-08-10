@@ -24,13 +24,24 @@ function ProfilePageInner() {
       <AppHeader subtitle="Your account and lab profile." />
       <div className="mx-auto w-full max-w-md flex-1 px-4 py-8">
         <h1 className="font-display text-3xl text-lab-ink">
-          {onboarding ? "Complete your profile" : "Profile"}
+          {onboarding ? "Personalize your lab" : "Profile"}
         </h1>
         <p className="mt-1 text-sm text-lab-muted">
           {onboarding
-            ? "Add gender and date of birth to finish setup. Address is optional."
+            ? "Optional details help Alyra tailor briefs later. You can skip and keep experimenting."
             : "Update your lab profile details."}
         </p>
+        {onboarding ? (
+          <p className="mt-3">
+            <button
+              type="button"
+              onClick={() => router.replace("/lab")}
+              className="text-sm font-semibold text-lab-ink underline-offset-2 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-lab-teal"
+            >
+              Skip to lab
+            </button>
+          </p>
+        ) : null}
         <div className="mt-6">
           {!authReady ? (
             <p className="text-sm text-lab-muted">Loading…</p>

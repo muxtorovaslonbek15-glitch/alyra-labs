@@ -69,10 +69,12 @@ export const useAuthStore = create<AuthState>()(
 
       isProfileComplete: () => isProfileComplete(get().profile),
 
+          // Guest 2-chemical soft-cap only. Signed-in users are never blocked by
+      // incomplete demographics (gender/DOB/phone) — collect those in Settings.
       isLabBlocked: () => {
-        const { user, profile, guestChemicalAdds } = get();
+        const { user, guestChemicalAdds } = get();
         if (!user) return guestChemicalAdds >= 2;
-        return !isProfileComplete(profile);
+        return false;
       },
     }),
     {

@@ -42,6 +42,7 @@ export function GroqKeyOnboarding({
   const [error, setError] = useState<string | null>(null);
   const [deleted, setDeleted] = useState(false);
   const errorRef = useRef<HTMLParagraphElement | null>(null);
+  const closeBtnRef = useRef<HTMLButtonElement | null>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -50,12 +51,26 @@ export function GroqKeyOnboarding({
     setError(null);
     setDeleted(false);
     setBusy(false);
+    // Focus close so Escape / screen readers have a clear exit.
+    requestAnimationFrame(() => closeBtnRef.current?.focus());
   }, [open, mode]);
 
   useEffect(() => {
     if (!error) return;
     errorRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
   }, [error]);
+
+  useEffect(() => {
+    if (!open) return;
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        onClose?.();
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open, onClose]);
 
   if (!open) return null;
 
@@ -102,9 +117,17 @@ export function GroqKeyOnboarding({
       role="dialog"
       aria-modal="true"
       aria-labelledby="groq-onboard-title"
+      onClick={() => onClose?.()}
     >
-      <div className="flex max-h-[min(92dvh,40rem)] w-full max-w-lg flex-col overflow-hidden rounded-t-2xl border border-lab-line bg-lab-panel shadow-2xl sm:rounded-2xl">
-        <header className="shrink-0 border-b border-lab-line/70 px-4 py-3">
+      {/*
+        Grid + max-height: middle row shrinks so header/footer stay visible.
+        (flex-1 + max-h alone clipped the footer under tall screenshots.)
+      */}
+      <div
+        className="grid max-h-[min(92dvh,40rem)] w-full max-w-lg grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden rounded-t-2xl border border-lab-line bg-lab-panel shadow-2xl sm:rounded-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <header className="relative shrink-0 border-b border-lab-line/70 px-4 py-3 pr-12">
           <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-lab-muted">
             {mode === "rotate" ? "Rotate Groq key" : "Master Perfumer setup"}
           </p>
@@ -117,9 +140,20 @@ export function GroqKeyOnboarding({
           <p className="mt-1 text-xs text-lab-muted">
             Step {stepIdx + 1} of {steps.length}
           </p>
+          <button
+            ref={closeBtnRef}
+            type="button"
+            aria-label="Close setup"
+            onClick={() => onClose?.()}
+            className="absolute right-2 top-2 flex h-10 w-10 items-center justify-center rounded-lg text-lab-muted hover:bg-lab-wash hover:text-lab-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-lab-teal"
+          >
+            <span aria-hidden className="text-xl leading-none">
+              ×
+            </span>
+          </button>
         </header>
 
-        <div className="scroll-thin min-h-0 flex-1 overflow-y-auto px-4 py-3">
+        <div className="relative min-h-0 overflow-y-auto px-4 py-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           <figure className="overflow-hidden rounded-xl border border-lab-line bg-lab-wash">
             <Image
               src={step.image}
@@ -224,27 +258,38 @@ export function GroqKeyOnboarding({
             }}
             className="min-h-11 rounded-lg px-3 text-sm font-medium text-lab-muted hover:text-lab-ink"
           >
-            {stepIdx === 0 ? (mode === "rotate" ? "Close" : "Not now") : "Back"}
+            {stepIdx === 0 ? "Skip for now" : "Back"}
           </button>
-          {!step.pasteForm && !isDeleteStep ? (
-            <button
-              type="button"
-              onClick={() => setStepIdx((i) => Math.min(i + 1, steps.length - 1))}
-              disabled={isLast}
-              className="min-h-11 rounded-lg bg-lab-ink px-4 text-sm font-semibold text-lab-foam hover:bg-black disabled:opacity-40"
-            >
-              Next
-            </button>
-          ) : isDeleteStep ? (
-            <button
-              type="button"
-              onClick={() => setStepIdx((i) => Math.min(i + 1, steps.length - 1))}
-              disabled={!deleted}
-              className="min-h-11 rounded-lg bg-lab-ink px-4 text-sm font-semibold text-lab-foam hover:bg-black disabled:opacity-40"
-            >
-              Next
-            </button>
-          ) : null}
+          <div className="flex items-center gap-2">
+            {stepIdx > 0 ? (
+              <button
+                type="button"
+                onClick={() => onClose?.()}
+                className="min-h-11 rounded-lg px-3 text-sm font-medium text-lab-muted hover:text-lab-ink"
+              >
+                Skip for now
+              </button>
+            ) : null}
+            {!step.pasteForm && !isDeleteStep ? (
+              <button
+                type="button"
+                onClick={() => setStepIdx((i) => Math.min(i + 1, steps.length - 1))}
+                disabled={isLast}
+                className="min-h-11 rounded-lg bg-lab-ink px-4 text-sm font-semibold text-lab-foam hover:bg-black disabled:opacity-40"
+              >
+                Next
+              </button>
+            ) : isDeleteStep ? (
+              <button
+                type="button"
+                onClick={() => setStepIdx((i) => Math.min(i + 1, steps.length - 1))}
+                disabled={!deleted}
+                className="min-h-11 rounded-lg bg-lab-ink px-4 text-sm font-semibold text-lab-foam hover:bg-black disabled:opacity-40"
+              >
+                Next
+              </button>
+            ) : null}
+          </div>
         </footer>
       </div>
     </div>

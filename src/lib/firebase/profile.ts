@@ -54,9 +54,12 @@ export function ageFromDob(dob: string): number | undefined {
   return age >= 0 ? age : undefined;
 }
 
+/**
+ * Soft completeness for Settings / prompts — NOT a Lab or Chat gate.
+ * Lab unlock = signed-in; Chat = signed-in + BYOK. Prefer ageBand over DOB in P1.
+ */
 export function isProfileComplete(profile: UserProfile | null | undefined): boolean {
   if (!profile) return false;
-  // Name, phone, gender, DOB unlock the lab; address/pincode are optional extras
   return Boolean(
     profile.displayName?.trim() &&
       profile.phone &&

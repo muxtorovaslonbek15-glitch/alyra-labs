@@ -82,7 +82,8 @@ export function AuthForm({
       track(mode === "signup" ? "signup_complete" : "page_view", {
         provider: "google",
       });
-      router.replace(mode === "signup" ? "/profile?onboarding=1" : redirectTo);
+      // Signup lands in Lab — profile/demographics are Settings/soft prompts, not a wall.
+      router.replace(mode === "signup" ? "/lab" : redirectTo);
     } catch (err) {
       setError(formatAuthError(err));
     } finally {
@@ -119,7 +120,7 @@ export function AuthForm({
           phone: phone.trim(),
         });
         track("signup_complete");
-        router.replace("/profile?onboarding=1");
+        router.replace("/lab");
       } else {
         await signIn(email, password);
         router.replace(redirectTo);

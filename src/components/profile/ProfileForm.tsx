@@ -222,6 +222,18 @@ function ProfileFormFields({
       >
         {pending ? "Saving…" : onboarding ? "Save & enter lab" : "Save profile"}
       </button>
+      {onboarding ? (
+        <button
+          type="button"
+          onClick={() => {
+            closeAuthGate();
+            router.replace("/lab");
+          }}
+          className="w-full rounded-lg border border-lab-line bg-white px-3 py-2 text-sm font-semibold text-lab-ink hover:bg-lab-wash focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-lab-teal"
+        >
+          Skip for now
+        </button>
+      ) : null}
     </form>
   );
 }

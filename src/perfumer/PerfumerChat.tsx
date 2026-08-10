@@ -26,11 +26,33 @@ import {
   wordCount,
 } from "./ChatModeToggle";
 import {
+  bootstrapLocalStore,
   loadLocalStore,
   newLocalChat,
   saveLocalStore,
   uid,
 } from "./storage";
+
+const GROQ_ONBOARD_DISMISS_KEY = "alyra.groqOnboard.dismissed";
+
+function readGroqOnboardDismissed(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    return sessionStorage.getItem(GROQ_ONBOARD_DISMISS_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function writeGroqOnboardDismissed(value: boolean) {
+  if (typeof window === "undefined") return;
+  try {
+    if (value) sessionStorage.setItem(GROQ_ONBOARD_DISMISS_KEY, "1");
+    else sessionStorage.removeItem(GROQ_ONBOARD_DISMISS_KEY);
+  } catch {
+    /* private mode */
+  }
+}
 import {
   buildLabBridgeFromStructured,
   consumeChatBridge,
@@ -133,7 +155,8 @@ export function PerfumerChat({
   const [keyGuideMode, setKeyGuideMode] =
     useState<GroqOnboardingMode>("onboard");
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const keyOnboardDismissed = useRef(false);
+  const keyOnboardDismissed = useRef(readGroqOnboardDismissed());
+  const storageUidRef = useRef<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const composerRef = useRef<HTMLTextAreaElement>(null);
   const persistTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -282,7 +305,10 @@ export function PerfumerChat({
     (nextChats: ChatSession[], nextActive: string | null) => {
       if (persistTimer.current) clearTimeout(persistTimer.current);
       persistTimer.current = setTimeout(() => {
-        saveLocalStore({ version: 1, activeId: nextActive, chats: nextChats });
+        saveLocalStore(
+          { version: 1, activeId: nextActive, chats: nextChats },
+          storageUidRef.current,
+        );
       }, 80);
     },
     [],
@@ -299,79 +325,108 @@ export function PerfumerChat({
     [persist],
   );
 
-  useEffect(() => {
-    const local = loadLocalStore();
-    let nextChats = local.chats;
-    let nextActive = local.activeId;
-    if (!nextChats.length) {
-      const fresh = newLocalChat();
-      nextChats = [fresh];
-      nextActive = fresh.id;
-    }
-    if (!nextActive || !nextChats.some((c) => c.id === nextActive)) {
-      nextActive = nextChats[0].id;
-    }
+  /** Load only this Firebase UID's chats (guest scope when signed out). */
+  const hydrateForUid = useCallback(
+    (scopeUid: string | null, opts?: { ingestBridge?: boolean }) => {
+      storageUidRef.current = scopeUid;
+      const local = loadLocalStore(scopeUid);
+      let nextChats = local.chats;
+      let nextActive = local.activeId;
+      if (!nextChats.length) {
+        const boot = bootstrapLocalStore();
+        nextChats = boot.chats;
+        nextActive = boot.activeId;
+      }
+      if (!nextActive || !nextChats.some((c) => c.id === nextActive)) {
+        nextActive = nextChats[0]?.id ?? null;
+      }
 
-    // Lab → Chat: ingest desk blend (Continue in Chat / fromLab bridge)
-    if (typeof window !== "undefined") {
-      const params = new URLSearchParams(window.location.search);
-      const fromLab =
-        params.get("fromLab") === "1" ||
-        params.get("bridge") === "1" ||
-        params.get("tab") === "chat";
-      if (fromLab || shell) {
-        const payload = consumeChatBridge();
-        if (payload?.structured?.formula?.formula?.length) {
-          if (!shell) {
-            window.history.replaceState({}, "", "/perfumer");
-          }
-          const now = new Date().toISOString();
-          const msg: ChatMessage = {
-            id: uid("msg"),
-            role: "assistant",
-            content: payload.assistantMessage,
-            structured: payload.structured,
-            status: "ok",
-            createdAt: now,
-          };
-          const chat = newLocalChat(
-            payload.title?.slice(0, 48) || "Lab blend",
-          );
-          chat.messages = [msg];
-          chat.updatedAt = now;
-          nextChats = [chat, ...nextChats];
-          nextActive = chat.id;
-          // Plan artifact for shell
-          if (shell) {
-            const bridge =
-              payload.structured.lab_bridge ||
-              buildLabBridgeFromStructured(payload.structured);
-            if (bridge) setPlanFromStructured(payload.structured, bridge);
+      if (opts?.ingestBridge && typeof window !== "undefined") {
+        const params = new URLSearchParams(window.location.search);
+        const fromLab =
+          params.get("fromLab") === "1" ||
+          params.get("bridge") === "1" ||
+          params.get("tab") === "chat";
+        if (fromLab || shell) {
+          const payload = consumeChatBridge();
+          if (payload?.structured?.formula?.formula?.length) {
+            if (!shell) {
+              window.history.replaceState({}, "", "/perfumer");
+            }
+            const now = new Date().toISOString();
+            const msg: ChatMessage = {
+              id: uid("msg"),
+              role: "assistant",
+              content: payload.assistantMessage,
+              structured: payload.structured,
+              status: "ok",
+              createdAt: now,
+            };
+            const chat = newLocalChat(
+              payload.title?.slice(0, 48) || "Lab blend",
+            );
+            chat.messages = [msg];
+            chat.updatedAt = now;
+            nextChats = [chat, ...nextChats];
+            nextActive = chat.id;
+            if (shell) {
+              const bridge =
+                payload.structured.lab_bridge ||
+                buildLabBridgeFromStructured(payload.structured);
+              if (bridge) setPlanFromStructured(payload.structured, bridge);
+            }
           }
         }
       }
-    }
 
-    setChats(nextChats);
-    setActiveId(nextActive);
-    setHydrated(true);
-    saveLocalStore({ version: 1, activeId: nextActive, chats: nextChats });
+      setChats(nextChats);
+      setActiveId(nextActive);
+      setBanner(null);
+      setHydrated(true);
+      publishSessions({
+        chats: nextChats,
+        activeId: nextActive,
+        loadingChatId: null,
+      });
+      saveLocalStore(
+        { version: 1, activeId: nextActive, chats: nextChats },
+        scopeUid,
+      );
+    },
+    [shell, setPlanFromStructured, publishSessions],
+  );
 
-    // /lab/guide → Try in chat: autofill composer once
+  // Health + guide prompt once
+  useEffect(() => {
     const guidePrompt = consumeGuidePrompt();
     if (guidePrompt) setInput(guidePrompt);
-
     void checkPerfumerHealth().then((h) => {
       if (!h.ok && h.error) setBanner(h.error);
       else setHealth(h.data || null);
     });
   }, []);
 
+  // Auth identity → load that UID's chats only (guest scope when signed out).
+  useEffect(() => {
+    if (!authReady) return;
+    const nextUid = user?.uid ?? null;
+    if (storageUidRef.current === nextUid && hydrated) return;
+    const prevUid = storageUidRef.current;
+    keyOnboardDismissed.current = readGroqOnboardDismissed();
+    setGroqKeyStatus(null);
+    setGroqKeyChecked(false);
+    setKeyGuideOpen(false);
+    setLoadingChatId(null);
+    // Ingest desk→chat bridge on first hydrate or when switching into a signed-in scope.
+    hydrateForUid(nextUid, {
+      ingestBridge: !hydrated || (prevUid !== nextUid && nextUid !== null),
+    });
+  }, [authReady, user?.uid, hydrateForUid, hydrated]);
+
   const refreshGroqKeyStatus = useCallback(async () => {
     if (!user) {
       setGroqKeyStatus(null);
       setGroqKeyChecked(false);
-      keyOnboardDismissed.current = false;
       return;
     }
     const res = await fetchGroqKeyStatus();
@@ -406,8 +461,10 @@ export function PerfumerChat({
   // Server chat list only when signed in (API is auth-gated).
   useEffect(() => {
     if (!authReady || !user || !hydrated) return;
+    const uidAtStart = user.uid;
     const nextActive = activeIdRef.current;
     void listServerChats().then(async (res) => {
+      if (storageUidRef.current !== uidAtStart) return;
       if (!res.ok) {
         if (res.error.code === "auth_required" || res.error.code === "auth_invalid") {
           setBanner(res.error);
@@ -415,6 +472,7 @@ export function PerfumerChat({
         return;
       }
       setChats((prev) => {
+        if (storageUidRef.current !== uidAtStart) return prev;
         const byServer = new Map(
           prev.filter((c) => c.serverId).map((c) => [c.serverId!, c]),
         );
@@ -431,11 +489,14 @@ export function PerfumerChat({
           });
         }
         merged.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
-        saveLocalStore({
-          version: 1,
-          activeId: nextActive,
-          chats: merged,
-        });
+        saveLocalStore(
+          {
+            version: 1,
+            activeId: nextActive,
+            chats: merged,
+          },
+          uidAtStart,
+        );
         return merged;
       });
     });
@@ -1514,12 +1575,14 @@ export function PerfumerChat({
         mode={keyGuideMode}
         onClose={() => {
           keyOnboardDismissed.current = true;
+          writeGroqOnboardDismissed(true);
           setKeyGuideOpen(false);
         }}
         onConfigured={(status) => {
           // Keep dismissed=true after successful save so a slow GET cannot
           // reopen the wizard if status briefly races.
           keyOnboardDismissed.current = true;
+          writeGroqOnboardDismissed(true);
           setGroqKeyStatus({
             configured: status.configured,
             hint: status.hint,

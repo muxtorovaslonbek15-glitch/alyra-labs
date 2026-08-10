@@ -15,7 +15,8 @@ export function notifyLabBlocked(
 }
 
 /**
- * Run a lab action only when the guest/profile gate allows it.
+ * Run a lab action only when the guest soft-cap allows it.
+ * Signed-in users are never blocked by incomplete profile.
  * Store methods also call assertLabActionAllowed; this adds the missing toast.
  */
 export function withLabAccess<T>(
