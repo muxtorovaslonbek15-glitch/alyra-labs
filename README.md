@@ -74,17 +74,17 @@ Open [http://localhost:3000](http://localhost:3000). Marketing site is `/`; the 
 
 Without Admin credentials, the desk UI still runs; AI and progress sync APIs return 503.
 
-### Master Perfumer (optional)
+### Master Perfumer (BYOK)
 
-Backend lives in `ZPL_BACKEND` (`alyra-perfumer/`). Start it, then open `/perfumer`:
+Backend: `ZPL_BACKEND` (`alyra-perfumer/`). **Open-source posture:** end users bring their own Groq key (illustrated onboarding in the Lab chat). See [docs/oss-byok-groq.md](./docs/oss-byok-groq.md).
 
 ```bash
 cd /Users/neil/Desktop/ZPL/ZPL_BACKEND
-npm run perfumer:seed   # once
+# Set PERFUMER_BYOK_SECRET + PERFUMER_REQUIRE_USER_GROQ=1 in .env (no shared user key)
 PORT=3001 npm run dev
-# requires GROQ_API_KEY; optional TAVILY_API_KEY or SERPER_API_KEY for web search
 ```
 
+Tutor/OCR on this Next app still use server `GROQ_API_KEY` for Chem Lab explain/OCR — separate from Perfumer chat BYOK.
 ### Scripts
 
 ```bash

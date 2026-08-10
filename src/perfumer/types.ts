@@ -2,6 +2,8 @@
 
 export type PerfumerErrorCode =
   | "missing_env"
+  | "missing_api_key"
+  | "byok_misconfigured"
   | "groq_down"
   | "rate_limited"
   | "timeout"
@@ -12,7 +14,9 @@ export type PerfumerErrorCode =
   | "not_found"
   | "bad_request"
   | "network"
-  | "internal";
+  | "internal"
+  | "auth_required"
+  | "auth_invalid";
 
 export interface PerfumerApiError {
   code: PerfumerErrorCode | string;
@@ -22,6 +26,15 @@ export interface PerfumerApiError {
   actionable?: string | null;
   /** Suggested wait before retry (seconds) */
   retryAfterSec?: number;
+  /** Show rotate-key CTA (free-tier BYOK) */
+  rotateKey?: boolean;
+}
+
+export interface GroqKeyStatus {
+  configured: boolean;
+  hint?: string;
+  updatedAt?: string;
+  requireUserGroq?: boolean;
 }
 
 export interface FormulaLine {

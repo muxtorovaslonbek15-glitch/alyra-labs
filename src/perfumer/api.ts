@@ -3,6 +3,7 @@ import type {
   ChatListItem,
   ChatMessage,
   ChatSession,
+  GroqKeyStatus,
   PerfumerApiError,
   StructuredPayload,
   ChatSections,
@@ -71,6 +72,10 @@ function normalizeError(data: unknown, status: number): PerfumerApiError {
     retryAfterSec?: number;
   };
   if (d?.error) {
+    const rotateKey =
+      d.error.rotateKey === true ||
+      d.error.code === "rate_limited" ||
+      d.error.code === "missing_api_key";
     return {
       code: d.error.code || "internal",
       title: d.error.title || "Error",
@@ -78,6 +83,7 @@ function normalizeError(data: unknown, status: number): PerfumerApiError {
       details: d.error.details,
       actionable: d.error.actionable,
       retryAfterSec: d.error.retryAfterSec ?? d.retryAfterSec,
+      rotateKey,
     };
   }
   if (status === 401) {
@@ -91,11 +97,22 @@ function normalizeError(data: unknown, status: number): PerfumerApiError {
   if (status === 429) {
     return {
       code: "rate_limited",
-      title: "Model is busy",
+      title: "Rate limit — rotate key",
       message:
-        "The perfume model is rate-limited right now. Try again in a moment.",
-      actionable: "Wait about 30s, then send again.",
+        "Your Groq free-tier key hit a rate limit. Delete the old key, create a new one at console.groq.com, and paste it to restore access.",
+      actionable: "Use Rotate Groq key in chat.",
       retryAfterSec: 30,
+      rotateKey: true,
+    };
+  }
+  if (status === 403) {
+    return {
+      code: "missing_api_key",
+      title: "Add your Groq key",
+      message:
+        "Master Perfumer needs your own Groq API key. We don't ship a shared key.",
+      actionable: "Open onboarding and paste a key from console.groq.com/keys.",
+      rotateKey: true,
     };
   }
   if (status === 0 || status >= 500) {
@@ -395,6 +412,105 @@ export async function sendChat(body: {
         message: "Could not reach Perfumer just now.",
         actionable:
           "Check that the backend is running and CORS allows this origin.",
+      },
+    };
+  }
+}
+
+export async function fetchGroqKeyStatus(): Promise<
+  | ({ ok: true } & GroqKeyStatus)
+  | { ok: false; error: PerfumerApiError }
+> {
+  const auth = await authHeadersOrError();
+  if (!auth.ok) return auth;
+  try {
+    const res = await fetch(`${baseUrl()}/keys/groq`, {
+      headers: auth.headers,
+    });
+    const data = await parseJson(res);
+    if (!res.ok || data.ok === false) {
+      return { ok: false, error: normalizeError(data, res.status) };
+    }
+    return {
+      ok: true,
+      configured: Boolean(data.configured),
+      hint: data.hint,
+      updatedAt: data.updatedAt,
+      requireUserGroq: Boolean(data.requireUserGroq),
+    };
+  } catch {
+    return {
+      ok: false,
+      error: {
+        code: "network",
+        title: "Network error",
+        message: "Could not check Groq key status.",
+      },
+    };
+  }
+}
+
+export async function saveGroqKey(
+  apiKey: string,
+): Promise<
+  | ({ ok: true } & GroqKeyStatus)
+  | { ok: false; error: PerfumerApiError }
+> {
+  const auth = await authHeadersOrError();
+  if (!auth.ok) return auth;
+  try {
+    const res = await fetch(`${baseUrl()}/keys/groq`, {
+      method: "PUT",
+      headers: {
+        ...auth.headers,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ apiKey: apiKey.trim() }),
+    });
+    const data = await parseJson(res);
+    if (!res.ok || data.ok === false) {
+      return { ok: false, error: normalizeError(data, res.status) };
+    }
+    return {
+      ok: true,
+      configured: true,
+      hint: data.hint,
+      updatedAt: data.updatedAt,
+    };
+  } catch {
+    return {
+      ok: false,
+      error: {
+        code: "network",
+        title: "Network error",
+        message: "Could not save Groq key.",
+      },
+    };
+  }
+}
+
+export async function deleteGroqKey(): Promise<
+  { ok: true } | { ok: false; error: PerfumerApiError }
+> {
+  const auth = await authHeadersOrError();
+  if (!auth.ok) return auth;
+  try {
+    const res = await fetch(`${baseUrl()}/keys/groq`, {
+      method: "DELETE",
+      headers: auth.headers,
+    });
+    const data = await parseJson(res);
+    if (!res.ok || data.ok === false) {
+      return { ok: false, error: normalizeError(data, res.status) };
+    }
+    return { ok: true };
+  } catch {
+    return {
+      ok: false,
+      error: {
+        code: "network",
+        title: "Network error",
+        message: "Could not delete Groq key.",
       },
     };
   }

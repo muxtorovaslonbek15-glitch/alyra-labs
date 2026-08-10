@@ -5,8 +5,10 @@ import type { PerfumerApiError } from "./types";
 
 const CODE_HINTS: Record<string, string> = {
   missing_env: "A server key is missing.",
+  missing_api_key: "Add your own Groq API key.",
+  byok_misconfigured: "Key storage isn't configured on the server.",
   groq_down: "The model is briefly unavailable.",
-  rate_limited: "Busy / rate limited. Try again in a moment.",
+  rate_limited: "Free-tier limit — rotate your Groq key.",
   timeout: "That took too long.",
   tool_use_failed: "A formulation step misfired.",
   invalid_formula: "Formula materials look off.",
@@ -21,9 +23,15 @@ const CODE_HINTS: Record<string, string> = {
 export function ErrorBanner({
   error,
   onDismiss,
+  onRotateKey,
+  onAddKey,
 }: {
   error: PerfumerApiError;
   onDismiss?: () => void;
+  /** Opens delete → new Groq key → paste flow */
+  onRotateKey?: () => void;
+  /** Opens first-run BYOK onboarding */
+  onAddKey?: () => void;
 }) {
   const initial =
     error.retryAfterSec && error.retryAfterSec > 0
@@ -42,13 +50,22 @@ export function ErrorBanner({
     return () => window.clearInterval(id);
   }, [error.code, error.message, initial]);
 
-  const title =
-    error.code === "rate_limited"
-      ? "Model is busy"
+  const needsKey =
+    error.code === "missing_api_key" || error.code === "byok_misconfigured";
+  const showRotate =
+    Boolean(onRotateKey) &&
+    (error.rotateKey || error.code === "rate_limited") &&
+    !needsKey;
+
+  const title = needsKey
+    ? "Add your Groq key"
+    : error.code === "rate_limited"
+      ? "Rate limit — rotate key"
       : error.title || "Something went wrong";
-  const message =
-    error.code === "rate_limited"
-      ? "The perfume model is rate-limited right now. Your brief is saved. Try again shortly."
+  const message = needsKey
+    ? "Master Perfumer is open source — we don't ship a shared Groq key. Add your free key to continue."
+    : error.code === "rate_limited"
+      ? "Your Groq free-tier key hit a limit. Limits are per key: delete the old one, create a new key at console.groq.com, and paste it here."
       : error.message;
 
   return (
@@ -65,13 +82,35 @@ export function ErrorBanner({
           <p className="mt-1.5 text-sm leading-relaxed text-lab-ink/90">
             {message}
           </p>
-          {left > 0 ? (
+          {left > 0 && error.code === "rate_limited" ? (
             <p className="mt-1.5 text-xs font-medium text-lab-muted">
-              Retry in {left}s
+              Optional wait {left}s — or rotate key now
             </p>
           ) : error.actionable ? (
             <p className="mt-1.5 text-xs text-lab-muted">{error.actionable}</p>
           ) : null}
+          {(showRotate || (needsKey && onAddKey)) && (
+            <div className="mt-2.5 flex flex-wrap gap-2">
+              {needsKey && onAddKey ? (
+                <button
+                  type="button"
+                  onClick={onAddKey}
+                  className="rounded-lg bg-lab-ink px-3 py-1.5 text-xs font-semibold text-lab-foam hover:bg-black"
+                >
+                  Add Groq key
+                </button>
+              ) : null}
+              {showRotate ? (
+                <button
+                  type="button"
+                  onClick={onRotateKey}
+                  className="rounded-lg bg-lab-ink px-3 py-1.5 text-xs font-semibold text-lab-foam hover:bg-black"
+                >
+                  Rotate Groq key
+                </button>
+              ) : null}
+            </div>
+          )}
         </div>
         {onDismiss ? (
           <button

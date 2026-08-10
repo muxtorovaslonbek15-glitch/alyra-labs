@@ -7,12 +7,18 @@ import {
   checkPerfumerHealth,
   createServerChat,
   deleteServerChat,
+  fetchGroqKeyStatus,
   fetchServerChat,
   listServerChats,
   renameServerChat,
   streamChat,
 } from "./api";
 import { ErrorBanner, WarningBanner } from "./ErrorBanner";
+import {
+  GroqKeyOnboarding,
+  GroqKeySettingsCard,
+} from "./onboarding/GroqKeyOnboarding";
+import type { GroqOnboardingMode } from "./onboarding/groqSteps";
 import { FormulaCard } from "./FormulaCard";
 import {
   ChatModeToggle,
@@ -48,6 +54,7 @@ import { track } from "@/lib/analytics/track";
 import type {
   ChatMessage,
   ChatSession,
+  GroqKeyStatus,
   LabBridgeFormula,
   PerfumerApiError,
   ToolTraceItem,
@@ -118,6 +125,15 @@ export function PerfumerChat({
   /** Nudge dismissed for current long draft (resets when composer clears). */
   const [nudgeDismissed, setNudgeDismissed] = useState(false);
   const [nudgeShownForDraft, setNudgeShownForDraft] = useState(false);
+  const [groqKeyStatus, setGroqKeyStatus] = useState<GroqKeyStatus | null>(
+    null,
+  );
+  const [groqKeyChecked, setGroqKeyChecked] = useState(false);
+  const [keyGuideOpen, setKeyGuideOpen] = useState(false);
+  const [keyGuideMode, setKeyGuideMode] =
+    useState<GroqOnboardingMode>("onboard");
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const keyOnboardDismissed = useRef(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const composerRef = useRef<HTMLTextAreaElement>(null);
   const persistTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -351,6 +367,42 @@ export function PerfumerChat({
     });
   }, []);
 
+  const refreshGroqKeyStatus = useCallback(async () => {
+    if (!user) {
+      setGroqKeyStatus(null);
+      setGroqKeyChecked(false);
+      keyOnboardDismissed.current = false;
+      return;
+    }
+    const res = await fetchGroqKeyStatus();
+    setGroqKeyChecked(true);
+    if (!res.ok) {
+      if (res.error.code === "auth_required" || res.error.code === "auth_invalid") {
+        setBanner(res.error);
+      }
+      return;
+    }
+    setGroqKeyStatus({
+      configured: res.configured,
+      hint: res.hint,
+      updatedAt: res.updatedAt,
+      requireUserGroq: res.requireUserGroq,
+    });
+    if (
+      !res.configured &&
+      res.requireUserGroq &&
+      !keyOnboardDismissed.current
+    ) {
+      setKeyGuideMode("onboard");
+      setKeyGuideOpen(true);
+    }
+  }, [user]);
+
+  useEffect(() => {
+    if (!authReady || !user || !hydrated) return;
+    void refreshGroqKeyStatus();
+  }, [authReady, user, hydrated, refreshGroqKeyStatus]);
+
   // Server chat list only when signed in (API is auth-gated).
   useEffect(() => {
     if (!authReady || !user || !hydrated) return;
@@ -576,6 +628,23 @@ export function PerfumerChat({
         title: "Sign in required",
         message: "Sign in to chat with Master Perfumer.",
         actionable: "Use Sign in in the top bar, then send again.",
+      });
+      return;
+    }
+
+    const needsByok =
+      groqKeyStatus?.requireUserGroq ||
+      (health && !health.groqConfigured);
+    if (needsByok && groqKeyChecked && !groqKeyStatus?.configured) {
+      setKeyGuideMode("onboard");
+      setKeyGuideOpen(true);
+      setBanner({
+        code: "missing_api_key",
+        title: "Add your Groq key",
+        message:
+          "Add your free Groq API key before chatting. We don't ship a shared key.",
+        actionable: "Follow the illustrated steps, then send again.",
+        rotateKey: true,
       });
       return;
     }
@@ -850,18 +919,62 @@ export function PerfumerChat({
     >
       {banner ? (
         <div className={shell ? "px-2 pt-2" : "px-3 md:px-0"}>
-          <ErrorBanner error={banner} onDismiss={() => setBanner(null)} />
+          <ErrorBanner
+            error={banner}
+            onDismiss={() => setBanner(null)}
+            onAddKey={() => {
+              setKeyGuideMode("onboard");
+              setKeyGuideOpen(true);
+            }}
+            onRotateKey={() => {
+              setKeyGuideMode("rotate");
+              setKeyGuideOpen(true);
+            }}
+          />
         </div>
       ) : null}
 
-      {health && !health.groqConfigured ? (
+      {user &&
+      groqKeyChecked &&
+      groqKeyStatus &&
+      !groqKeyStatus.configured &&
+      groqKeyStatus.requireUserGroq &&
+      !keyGuideOpen ? (
         <div className={shell ? "px-2 pt-2" : "px-3 md:px-0"}>
           <ErrorBanner
             error={{
-              code: "missing_env",
-              title: "Model not configured",
-              message: "Chat needs a model key on the server before it can reply.",
-              actionable: "Ask whoever runs the backend to set the Groq key and restart.",
+              code: "missing_api_key",
+              title: "Add your Groq key",
+              message:
+                "Master Perfumer is open source — add your free Groq API key to chat. We don't ship a shared key.",
+              actionable: "Follow the illustrated steps to create and paste a key.",
+              rotateKey: true,
+            }}
+            onAddKey={() => {
+              setKeyGuideMode("onboard");
+              setKeyGuideOpen(true);
+            }}
+          />
+        </div>
+      ) : null}
+
+      {health &&
+      !health.groqConfigured &&
+      !health.requireUserGroq &&
+      groqKeyStatus &&
+      !groqKeyStatus.configured ? (
+        <div className={shell ? "px-2 pt-2" : "px-3 md:px-0"}>
+          <ErrorBanner
+            error={{
+              code: "missing_api_key",
+              title: "Add your Groq key",
+              message:
+                "No server Groq key is configured. Add your own free key to use chat.",
+              actionable: "Open onboarding and paste a key from console.groq.com.",
+            }}
+            onAddKey={() => {
+              setKeyGuideMode("onboard");
+              setKeyGuideOpen(true);
             }}
           />
         </div>
@@ -1058,17 +1171,41 @@ export function PerfumerChat({
                         : "Agent"}
                   </span>
                   <div className="flex-1" />
+                  {user ? (
+                    <button
+                      type="button"
+                      title="Groq API key"
+                      onClick={() => setSettingsOpen((o) => !o)}
+                      className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg text-lab-muted hover:bg-lab-wash hover:text-lab-ink"
+                    >
+                      <span className="text-[11px] font-semibold leading-none">
+                        Key
+                      </span>
+                    </button>
+                  ) : null}
                 </>
               )}
 
               {bottomDock ? (
-                <div className="mr-0.5 hidden shrink-0 items-center md:flex">
-                  <ChatModeToggle
-                    mode={chatAgentMode}
-                    onChange={changeChatMode}
-                    disabled={building}
-                    size="sm"
-                  />
+                <div className="mr-0.5 flex shrink-0 items-center gap-0.5">
+                  <div className="hidden md:flex">
+                    <ChatModeToggle
+                      mode={chatAgentMode}
+                      onChange={changeChatMode}
+                      disabled={building}
+                      size="sm"
+                    />
+                  </div>
+                  {user ? (
+                    <button
+                      type="button"
+                      title="Groq API key"
+                      onClick={() => setSettingsOpen((o) => !o)}
+                      className="flex h-6 items-center rounded-lg px-1.5 text-[10px] font-semibold text-lab-muted hover:bg-lab-wash hover:text-lab-ink"
+                    >
+                      Key
+                    </button>
+                  ) : null}
                 </div>
               ) : null}
 
@@ -1155,9 +1292,35 @@ export function PerfumerChat({
               <h2 className="min-w-0 flex-1 truncate font-display text-base text-lab-ink md:text-lg">
                 {active?.title || "Master Perfumer"}
               </h2>
+              {user ? (
+                <button
+                  type="button"
+                  title="Groq API key"
+                  onClick={() => setSettingsOpen((o) => !o)}
+                  className="min-h-9 rounded-md border border-lab-line px-2.5 text-xs font-semibold text-lab-ink hover:bg-lab-wash"
+                >
+                  API key
+                </button>
+              ) : null}
             </div>
           )}
 
+          {settingsOpen && user ? (
+            <div className={shell ? "px-2 pt-2" : "px-3 pt-2 md:px-5"}>
+              <GroqKeySettingsCard
+                status={groqKeyStatus}
+                onRefresh={() => void refreshGroqKeyStatus()}
+                onOpenOnboarding={() => {
+                  setKeyGuideMode("onboard");
+                  setKeyGuideOpen(true);
+                }}
+                onOpenRotate={() => {
+                  setKeyGuideMode("rotate");
+                  setKeyGuideOpen(true);
+                }}
+              />
+            </div>
+          ) : null}
           <div
             className={`scroll-thin min-h-0 flex-1 space-y-2 overflow-y-auto overscroll-contain ${
               bottomDock
@@ -1188,6 +1351,14 @@ export function PerfumerChat({
                     connectionState={
                       m.status === "streaming" ? connectionState : "working"
                     }
+                    onAddKey={() => {
+                      setKeyGuideMode("onboard");
+                      setKeyGuideOpen(true);
+                    }}
+                    onRotateKey={() => {
+                      setKeyGuideMode("rotate");
+                      setKeyGuideOpen(true);
+                    }}
                   />
                 ))}
                 {narration.map((n) => (
@@ -1337,6 +1508,29 @@ export function PerfumerChat({
           </div>
         </div>
       </div>
+
+      <GroqKeyOnboarding
+        open={keyGuideOpen}
+        mode={keyGuideMode}
+        onClose={() => {
+          keyOnboardDismissed.current = true;
+          setKeyGuideOpen(false);
+        }}
+        onConfigured={(status) => {
+          // Keep dismissed=true after successful save so a slow GET cannot
+          // reopen the wizard if status briefly races.
+          keyOnboardDismissed.current = true;
+          setGroqKeyStatus({
+            configured: status.configured,
+            hint: status.hint,
+            updatedAt: status.updatedAt,
+            requireUserGroq: groqKeyStatus?.requireUserGroq,
+          });
+          setBanner(null);
+          setSettingsOpen(false);
+          void refreshGroqKeyStatus();
+        }}
+      />
     </div>
   );
 }
@@ -1390,14 +1584,24 @@ function MessageBubble({
   onBuild,
   hideLabCta,
   connectionState = "working",
+  onAddKey,
+  onRotateKey,
 }: {
   message: ChatMessage;
   onBuild?: (bridge: LabBridgeFormula) => void;
   hideLabCta?: boolean;
   connectionState?: StreamConnectionState;
+  onAddKey?: () => void;
+  onRotateKey?: () => void;
 }) {
   if (message.role === "error") {
-    return message.error ? <ErrorBanner error={message.error} /> : null;
+    return message.error ? (
+      <ErrorBanner
+        error={message.error}
+        onAddKey={onAddKey}
+        onRotateKey={onRotateKey}
+      />
+    ) : null;
   }
 
   const isUser = message.role === "user";
