@@ -1,10 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { readMdUp } from "@/desk/vesselLayout";
 
 /** Tailwind `md` breakpoint (768px). Desktop rails / closable panels apply only when true. */
 export function useMdUp(): boolean {
-  const [mdUp, setMdUp] = useState(false);
+  const [mdUp, setMdUp] = useState(readMdUp);
 
   useEffect(() => {
     const mq = window.matchMedia("(min-width: 768px)");

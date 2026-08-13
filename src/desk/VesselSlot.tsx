@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, type RefObject } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
 import { useDroppable } from "@dnd-kit/core";
 import type { DeskVessel } from "@/types";
 import { EQUIPMENT_BY_ID } from "@/domains/chemistry/data/equipment";
@@ -10,15 +10,31 @@ import { GlassVessel } from "@/animation/glassware/GlassVessel";
 import { SolidTinVessel } from "@/animation/glassware/SolidTinVessel";
 import {
   computeFxIntensities,
+  pourHomeFactor,
+  pourPoseLiftPx,
   pourPoseTiltDeg,
+  MIX_WINDOW_MS,
   POUR_WINDOW_MS,
 } from "@/animation/fxIntensity";
+import { CUP_SET_WINDOW_MS, cupSetFrame } from "@/animation/cupSet";
+import { CastMixCue } from "@/animation/VesselEffects";
 import { useFxClock, usePrefersReducedMotion } from "@/animation/useFxClock";
 import { useDeskStore } from "@/store/deskStore";
 import { showToast } from "@/gamification/ToastHost";
 import { tryMixVessel } from "@/lab/labActions";
 import { labCopy } from "@/lab/labCopy";
-import { snapAlignPosition, VESSEL_CARD } from "@/desk/vesselLayout";
+import { LAB_EASE } from "@/animation/motion";
+import {
+  SLOT_MOVE_MS,
+  snapAlignPosition,
+  stampSlotFrom,
+  peekSlotFrom,
+  clearSlotFrom,
+  slotInvertDelta,
+  vesselCardMetrics,
+} from "@/desk/vesselLayout";
+import { useMdUp } from "@/desk/useMdUp";
+import { useWearStore } from "@/wear/wearStore";
 import {
   capacityMlForEquipment,
   fillPctFromContents,
@@ -29,6 +45,11 @@ import {
 } from "@/desk/vesselContents";
 import { ensureSim } from "@/desk/vesselSim";
 import { VesselSimHud } from "@/desk/VesselSimHud";
+import { CupSetStage } from "@/animation/cupSet/CupSetStage";
+import {
+  CardCoolAtmosphere,
+  CardHeatAtmosphere,
+} from "@/animation/heatSource";
 
 interface Props {
   vessel: DeskVessel;
@@ -53,12 +74,20 @@ export function VesselSlot({ vessel, deskRef }: Props) {
   const transferVesselContents = useDeskStore((s) => s.transferVesselContents);
   const setChemicalAmount = useDeskStore((s) => s.setChemicalAmount);
 
+  const mdUp = useMdUp();
+  const card = vesselCardMetrics(mdUp);
+  const isWear = useWearStore((s) => s.audience === "owner");
+
   const dragOffset = useRef<{ dx: number; dy: number } | null>(null);
   /** Latest drag position — DOM-written during move; committed to store on up. */
   const dragPosRef = useRef<{ x: number; y: number } | null>(null);
   const cardRef = useRef<HTMLDivElement | null>(null);
+  const wrapRef = useRef<HTMLDivElement | null>(null);
   const deskRectRef = useRef<DOMRect | null>(null);
   const [dragging, setDragging] = useState(false);
+  const prevPosRef = useRef(vessel.position);
+  const [slotNudge, setSlotNudge] = useState({ x: 0, y: 0 });
+  const [slotEasing, setSlotEasing] = useState(false);
 
   const sim = ensureSim(vessel);
   const simAlive =
@@ -75,8 +104,14 @@ export function VesselSlot({ vessel, deskRef }: Props) {
       vessel.fx.pourAt,
       vessel.fx.transferAt,
       vessel.fx.stirAt,
+      vessel.fx.cupSetAt,
+      vessel.fx.castRevealAt,
     ],
-    Math.max(2200, POUR_WINDOW_MS + 200),
+    Math.max(
+      MIX_WINDOW_MS + 200,
+      CUP_SET_WINDOW_MS + 200,
+      POUR_WINDOW_MS + 200,
+    ),
     simAlive,
   );
   const reducedMotion = usePrefersReducedMotion();
@@ -86,6 +121,7 @@ export function VesselSlot({ vessel, deskRef }: Props) {
   const isActive = activeVesselId === vessel.instanceId;
   const result = vessel.lastResult;
   const contents = getVesselContents(vessel);
+  const empty = contents.length === 0;
   const preview = vessel.livePreview;
   const hazard =
     result?.effects.some(
@@ -172,15 +208,82 @@ export function VesselSlot({ vessel, deskRef }: Props) {
   });
 
   const shaking =
-    sim.shakeActive ||
-    (Boolean(vessel.fx.shakeAt) &&
-      now > 0 &&
-      now - (vessel.fx.shakeAt ?? 0) < 700);
-  const mixing = intensities.mix > 0.35;
+    !isTin &&
+    (sim.shakeActive ||
+      (Boolean(vessel.fx.shakeAt) &&
+        now > 0 &&
+        now - (vessel.fx.shakeAt ?? 0) < 700));
+  const mixPop = !isTin && intensities.mixBloom > 0.35;
+  const cupStarted = Boolean(vessel.fx.cupSetAt) && fillPct > 0;
+  const cupFrame = cupStarted
+    ? cupSetFrame({
+        elapsedMs: now > 0 ? now - (vessel.fx.cupSetAt ?? 0) : 0,
+        hasFill: fillPct > 0,
+        started: true,
+        reducedMotion,
+      })
+    : null;
+  const cupSetBusy =
+    cupFrame != null &&
+    cupFrame.phase !== "idle" &&
+    cupFrame.phase !== "ready";
+  const showCastCue =
+    isTin &&
+    (cupFrame?.phase === "mix_hold" ||
+      (!vessel.fx.cupSetAt && intensities.castCue > 0.08));
   const isSource =
     vessel.fx.transferRole === "source" && intensities.pourPhase !== "idle";
   const isTarget =
     vessel.fx.transferRole === "target" && intensities.pourPhase !== "idle";
+
+  // Place / nudge-apart: store already has the free slot; invert then ease transform.
+  // Pour pose stays on the inner card so this never steals z-index lift.
+  useLayoutEffect(() => {
+    if (dragging || isSource) {
+      prevPosRef.current = vessel.position;
+      clearSlotFrom(vessel.instanceId);
+      setSlotEasing(false);
+      setSlotNudge({ x: 0, y: 0 });
+      return;
+    }
+    const to = vessel.position;
+    const from = peekSlotFrom(vessel.instanceId) ?? prevPosRef.current;
+    prevPosRef.current = to;
+    const delta = slotInvertDelta(from, to);
+    if (
+      reducedMotion ||
+      (Math.abs(delta.x) < 0.5 && Math.abs(delta.y) < 0.5)
+    ) {
+      clearSlotFrom(vessel.instanceId);
+      setSlotEasing(false);
+      setSlotNudge({ x: 0, y: 0 });
+      return;
+    }
+    setSlotEasing(false);
+    setSlotNudge(delta);
+    let play = 0;
+    let settle = 0;
+    const invert = requestAnimationFrame(() => {
+      play = requestAnimationFrame(() => {
+        clearSlotFrom(vessel.instanceId);
+        setSlotEasing(true);
+        setSlotNudge({ x: 0, y: 0 });
+        settle = window.setTimeout(() => setSlotEasing(false), SLOT_MOVE_MS);
+      });
+    });
+    return () => {
+      cancelAnimationFrame(invert);
+      cancelAnimationFrame(play);
+      window.clearTimeout(settle);
+    };
+  }, [
+    vessel.instanceId,
+    vessel.position.x,
+    vessel.position.y,
+    dragging,
+    isSource,
+    reducedMotion,
+  ]);
 
   const pourIntensity = Math.max(
     intensities.pour,
@@ -191,12 +294,52 @@ export function VesselSlot({ vessel, deskRef }: Props) {
   // Card owns pour pose (phase machine); glass tip stays small in GlassVessel.
   const pourCardTilt = isSource
     ? reducedMotion
-      ? -28
+      ? 0
       : pourPoseTiltDeg(intensities.pourPhase, intensities.pourElapsed)
     : 0;
+  const pourLiftPx =
+    isSource && !reducedMotion
+      ? pourPoseLiftPx(intensities.pourPhase, intensities.pourElapsed)
+      : 0;
+  const pourHome = vessel.fx.pourHome;
+  const homeT =
+    isSource && pourHome
+      ? reducedMotion
+        ? 1
+        : pourHomeFactor(intensities.pourPhase, intensities.pourElapsed)
+      : 0;
+  const homeDx = pourHome ? (pourHome.x - vessel.position.x) * homeT : 0;
+  const homeDy = pourHome ? (pourHome.y - vessel.position.y) * homeT : 0;
+  const homeCommitted = useRef(false);
+
+  useEffect(() => {
+    if (!isSource) {
+      homeCommitted.current = false;
+      return;
+    }
+    if (!pourHome || homeCommitted.current) return;
+    if (reducedMotion || homeT >= 0.97) {
+      homeCommitted.current = true;
+      if (
+        Math.abs(pourHome.x - vessel.position.x) > 0.5 ||
+        Math.abs(pourHome.y - vessel.position.y) > 0.5
+      ) {
+        moveVessel(vessel.instanceId, pourHome);
+      }
+    }
+  }, [
+    isSource,
+    reducedMotion,
+    homeT,
+    pourHome,
+    vessel.instanceId,
+    vessel.position.x,
+    vessel.position.y,
+    moveVessel,
+  ]);
   const tiltDeg = shaking && !isSource ? Math.sin(now / 40) * 8 : 0;
   const blastKick =
-    intensities.blast > 0.4 && !isSource
+    intensities.blast > 0.4 && !isSource && !isTin && !cupSetBusy
       ? Math.sin(now / 28) * 5 * intensities.blast
       : 0;
 
@@ -227,7 +370,7 @@ export function VesselSlot({ vessel, deskRef }: Props) {
     };
     dragPosRef.current = next;
     // Direct DOM write — avoid Zustand re-render of every vessel / WebGL canvas
-    const el = cardRef.current;
+    const el = wrapRef.current;
     if (el) {
       el.style.left = `${next.x}px`;
       el.style.top = `${next.y}px`;
@@ -263,7 +406,7 @@ export function VesselSlot({ vessel, deskRef }: Props) {
     const others = useDeskStore
       .getState()
       .vessels.filter((v) => v.instanceId !== vessel.instanceId);
-    const target = findOverlapTarget(positioned, others);
+    const target = findOverlapTarget(positioned, others, card);
     if (target && latestContents.length > 0) {
       const ok = transferVesselContents(vessel.instanceId, target.instanceId);
       if (ok) {
@@ -280,8 +423,10 @@ export function VesselSlot({ vessel, deskRef }: Props) {
     const snapped = snapAlignPosition(
       dropPos,
       others.map((v) => v.position),
+      card,
     );
     if (snapped) {
+      stampSlotFrom(vessel.instanceId, dropPos, snapped);
       moveVessel(vessel.instanceId, snapped);
     }
   }
@@ -291,24 +436,42 @@ export function VesselSlot({ vessel, deskRef }: Props) {
     setNodeRef(node);
   }
 
+  const slotSettling = slotNudge.x !== 0 || slotNudge.y !== 0;
+  const skipSlotEase = dragging || isSource || reducedMotion || !slotEasing;
+
   return (
+    <div
+      ref={wrapRef}
+      className="absolute"
+      style={{
+        left: vessel.position.x,
+        top: vessel.position.y,
+        width: card.width,
+        zIndex: dragging ? 45 : isSource ? 50 : isTarget ? 18 : slotSettling || slotEasing ? 20 : 10,
+        transform: `translate3d(${slotNudge.x}px, ${slotNudge.y}px, 0)`,
+        transition: skipSlotEase
+          ? "none"
+          : `transform ${SLOT_MOVE_MS}ms ${LAB_EASE}`,
+        willChange: dragging || isSource || slotSettling || slotEasing ? "transform" : undefined,
+      }}
+    >
     <div
       ref={bindCard}
       role="button"
       tabIndex={0}
       style={{
-        left: vessel.position.x,
-        top: vessel.position.y,
+        width: "100%",
+        overflow: isSource || isTarget ? "visible" : undefined,
         transform:
-          pourCardTilt || blastKick
-            ? `rotate(${pourCardTilt + blastKick}deg)`
+          pourCardTilt || blastKick || pourLiftPx || homeDx || homeDy
+            ? `translate(${homeDx}px, ${homeDy - pourLiftPx}px) rotate(${pourCardTilt + blastKick}deg)`
             : undefined,
         transformOrigin: "72% 85%",
-        // No left/top transition while dragging — that was the lag
+        // Pour pose owns this transform. Place/nudge lives on the wrapper.
         transition: dragging || isSource
           ? "none"
-          : "transform 0.35s ease-out, left 0.15s, top 0.15s, box-shadow 0.2s, border-color 0.2s, background-color 0.2s",
-        willChange: dragging ? "left, top" : undefined,
+          : "transform 0.35s ease-out, box-shadow 0.2s, border-color 0.2s, background-color 0.2s",
+        willChange: dragging || isSource ? "transform" : undefined,
       }}
       onPointerDown={onMovePointerDown}
       onPointerMove={onMovePointerMove}
@@ -316,6 +479,7 @@ export function VesselSlot({ vessel, deskRef }: Props) {
       onPointerCancel={onMovePointerUp}
       onDoubleClick={(e) => {
         e.stopPropagation();
+        if (isWear) return;
         if (canMix) tryMixVessel(vessel.instanceId);
         else toggleStirActive(vessel.instanceId);
       }}
@@ -324,6 +488,7 @@ export function VesselSlot({ vessel, deskRef }: Props) {
         if (e.key === "Enter" || e.key === " ") {
           setActiveVessel(vessel.instanceId);
         }
+        if (isWear) return;
         if (e.key === "m" || e.key === "M") {
           if (canMix) tryMixVessel(vessel.instanceId);
         }
@@ -337,53 +502,65 @@ export function VesselSlot({ vessel, deskRef }: Props) {
           toggleCool(vessel.instanceId);
         }
       }}
-      className={`group absolute z-10 w-[11.5rem] select-none rounded-2xl border p-2.5 touch-none ${
+      className={`lab-vessel-card group relative w-full overflow-hidden select-none border touch-none outline-none focus-visible:ring-1 focus-visible:ring-lab-line ${
+        mdUp ? "rounded-2xl p-2.5" : "rounded-xl p-1.5"
+      } ${
         dragging
-          ? "z-30 cursor-grabbing scale-[1.03] shadow-2xl"
-          : "cursor-grab transition-[left,top,box-shadow,border-color,background-color] duration-200"
-      } ${shaking || intensities.blast > 0.5 ? "lab-vessel-shake" : ""} ${
-        mixing ? "lab-vessel-pop" : ""
+          ? "cursor-grabbing scale-[1.03] shadow-2xl"
+          : "cursor-grab transition-[box-shadow,border-color,background-color] duration-200"
+      } ${shaking && !cupSetBusy ? "lab-vessel-shake" : ""} ${
+        mixPop ? "lab-vessel-pop" : ""
       } ${isSource ? "lab-vessel-pour-source" : ""} ${
         isTarget && intensities.splash > 0.3 ? "lab-vessel-pour-receive" : ""
       } ${
-        hazard
+        isWear
+          ? "border-transparent bg-transparent shadow-none"
+          : hazard
           ? "border-lab-hazard bg-lab-hazard/10 shadow-[0_0_28px_rgba(180,35,24,0.35)]"
           : isOver
             ? "scale-[1.04] border-lab-teal bg-white/95 shadow-xl"
-            : isActive
-              ? "border-lab-teal/80 bg-white/90 shadow-lg ring-2 ring-lab-teal/25"
-              : "border-white/35 bg-white/55 shadow-md backdrop-blur-[2px] hover:border-white/70 hover:bg-white/80"
+            : vessel.heatAttached
+              ? `border-lab-amber/55 bg-white/80 shadow-md ${
+                  isActive ? "ring-2 ring-lab-amber/30" : ""
+                }`
+              : vessel.coolAttached
+                ? `border-[#7dd3fc]/40 bg-white/80 shadow-md ${
+                    isActive ? "ring-2 ring-[#7dd3fc]/25" : ""
+                  }`
+                : isActive
+                  ? "border-lab-teal/80 bg-white/90 shadow-lg ring-2 ring-lab-teal/25"
+                  : "border-white/35 bg-white/55 shadow-md backdrop-blur-[2px] hover:border-white/70 hover:bg-white/80"
       }`}
     >
-      <div className="flex items-start justify-between gap-2">
+      {!isWear ? (
+      <div className="relative z-[1] flex items-start justify-between gap-2">
         <div>
-          <p className="text-[11px] font-semibold tracking-wide text-lab-ink">
-            {eq?.name ?? "Vessel"}
-          </p>
-          <p className="text-[9px] uppercase tracking-wider text-lab-muted">
-            {isTin
-              ? "Melt · blend · cast"
-              : "Drag onto another to pour"}
-          </p>
+          {!empty ? (
+            <p className={`${mdUp ? "text-[11px]" : "text-[9px]"} font-semibold tracking-wide text-lab-ink`}>
+              {eq?.name ?? "Vessel"}
+            </p>
+          ) : null}
         </div>
         <div
           className="flex gap-0.5 opacity-80 transition group-hover:opacity-100"
           data-no-drag
         >
-          <button
-            type="button"
-            className="rounded-md px-1.5 py-0.5 text-[10px] text-lab-muted hover:bg-lab-wash hover:text-lab-ink"
-            onClick={(e) => {
-              e.stopPropagation();
-              clearVessel(vessel.instanceId);
-            }}
-          >
-            Clear
-          </button>
+          {!empty ? (
+            <button
+              type="button"
+              className="rounded-md px-1.5 py-0.5 text-[10px] text-lab-muted outline-none hover:bg-lab-wash hover:text-lab-ink focus-visible:ring-1 focus-visible:ring-lab-line"
+              onClick={(e) => {
+                e.stopPropagation();
+                clearVessel(vessel.instanceId);
+              }}
+            >
+              Clear
+            </button>
+          ) : null}
           <button
             type="button"
             aria-label="Remove vessel"
-            className="rounded-md px-1.5 py-0.5 text-[10px] text-lab-muted hover:bg-lab-hazard/15 hover:text-lab-hazard"
+            className="rounded-md px-1.5 py-0.5 text-[10px] text-lab-muted outline-none hover:bg-lab-hazard/15 hover:text-lab-hazard focus-visible:ring-1 focus-visible:ring-lab-line"
             onClick={(e) => {
               e.stopPropagation();
               removeVessel(vessel.instanceId);
@@ -393,47 +570,57 @@ export function VesselSlot({ vessel, deskRef }: Props) {
           </button>
         </div>
       </div>
-
-      {/* Bunsen stand under glass — physical heat, not button paint */}
-      {vessel.heatAttached && !isTin ? (
-        <div className="lab-burner pointer-events-none absolute -bottom-1 left-1/2 z-0 h-7 w-[5rem] -translate-x-1/2 rounded-b-lg bg-gradient-to-b from-[#2a1a12] to-[#1a100c] shadow-[0_4px_12px_rgba(0,0,0,0.4)]">
-          <div className="absolute inset-x-2 top-0 h-px bg-lab-amber/40" />
-          <div className="absolute -top-7 left-1/2 flex -translate-x-1/2 items-end gap-[3px]">
-            <span className="lab-flame inline-block h-6 w-[9px] rounded-[50%_50%_45%_45%] bg-gradient-to-t from-lab-amber via-[#ffb347] to-[#fff3c4]" />
-            <span className="lab-flame lab-flame-delay inline-block h-8 w-[11px] rounded-[50%_50%_45%_45%] bg-gradient-to-t from-[#c4783a] via-[#ff9f43] to-[#fff8e1]" />
-            <span className="lab-flame inline-block h-5 w-[8px] rounded-[50%_50%_45%_45%] bg-gradient-to-t from-lab-amber via-[#ffb347] to-[#fff3c4]" />
-            <span className="lab-flame lab-flame-delay inline-block h-6 w-[8px] rounded-[50%_50%_45%_45%] bg-gradient-to-t from-[#c4783a] via-[#ffb347] to-[#fff8e1]" />
-          </div>
-        </div>
       ) : null}
 
-      {/* Ice bath under glass — tin uses cool rim on the puck instead */}
-      {vessel.coolAttached && !isTin ? (
-        <div className="lab-ice-bath pointer-events-none absolute -bottom-1 left-1/2 z-0 h-7 w-[5rem] -translate-x-1/2 rounded-b-lg bg-gradient-to-b from-[#0c4a6e] to-[#082f49] shadow-[0_4px_12px_rgba(8,47,73,0.45)]">
-          <div className="absolute inset-x-2 top-0 h-px bg-[#7dd3fc]/45" />
-          <div className="absolute -top-3 left-1/2 flex -translate-x-1/2 items-end gap-[3px]">
-            <span className="lab-ice-cube inline-block h-3 w-3 rotate-12 rounded-[2px] bg-gradient-to-br from-white/95 to-[#7dd3fc]/85" />
-            <span className="lab-ice-cube lab-ice-delay inline-block h-3.5 w-3.5 -rotate-6 rounded-[2px] bg-gradient-to-br from-white to-[#bae6fd]/9" />
-            <span className="lab-ice-cube inline-block h-2.5 w-3 rotate-6 rounded-[2px] bg-gradient-to-br from-[#e0f2fe] to-[#7dd3fc]/8" />
-            <span className="lab-ice-cube lab-ice-delay inline-block h-3 w-2.5 -rotate-12 rounded-[2px] bg-gradient-to-br from-white/90 to-[#7dd3fc]/75" />
-          </div>
-        </div>
+      {!isWear && vessel.heatAttached ? (
+        <CardHeatAtmosphere intensity={intensities.heat} />
+      ) : null}
+      {!isWear && vessel.coolAttached ? (
+        <CardCoolAtmosphere frost={sim.frost} />
       ) : null}
 
-      <div data-no-drag className="relative mt-1">
+      <div data-no-drag className="relative z-[1] mt-1">
         {isTin ? (
-          <SolidTinVessel
-            fillPct={fillPct}
-            fillColor={fillColor}
-            heatAttached={vessel.heatAttached}
-            coolAttached={vessel.coolAttached}
-            meltFraction={sim.meltFraction}
-            castRevealAt={vessel.fx.castRevealAt}
-            pressEnabled={Boolean(vessel.fx.castRevealAt || result)}
-            onPress={() => {
-              showToast({ title: "Press · Warm · Wear" });
-            }}
-          />
+          <>
+            <CupSetStage
+              fillPct={fillPct}
+              fillColor={fillColor}
+              cupSetAt={vessel.fx.cupSetAt}
+              meltFraction={sim.meltFraction}
+              heatAttached={vessel.heatAttached}
+              viscosity={sim.viscosity}
+              pressEnabled={Boolean(vessel.fx.castRevealAt || result)}
+              onPress={() => {
+                showToast({ title: "Press · Warm · Wear" });
+              }}
+            >
+              <SolidTinVessel
+                fillPct={fillPct}
+                fillColor={fillColor}
+                heatAttached={vessel.heatAttached}
+                coolAttached={vessel.coolAttached}
+                meltFraction={sim.meltFraction}
+                castRevealAt={vessel.fx.castRevealAt}
+                pressEnabled={
+                  Boolean(vessel.fx.castRevealAt || result) &&
+                  !vessel.fx.cupSetAt
+                }
+                onPress={() => {
+                  showToast({ title: "Press · Warm · Wear" });
+                }}
+              />
+            </CupSetStage>
+            {showCastCue ? (
+              <CastMixCue
+                fillColor={
+                  fillColor === "transparent" ? undefined : fillColor
+                }
+                mixAt={vessel.fx.mixAt}
+                intensity={intensities.castCue}
+                reduced={reducedMotion}
+              />
+            ) : null}
+          </>
         ) : (
           <GlassVessel
             equipmentId={vessel.equipmentId}
@@ -465,38 +652,44 @@ export function VesselSlot({ vessel, deskRef }: Props) {
             }}
           />
         )}
-        <div className="absolute left-1 right-1 top-1 z-10 flex flex-col items-start gap-0.5">
-          {usedMl > 0 ? (
-            <div
-              className={`rounded-full px-1.5 py-0.5 font-mono text-[9px] ${
-                overflowing
-                  ? "bg-lab-hazard/80 text-lab-foam"
-                  : "bg-black/35 text-lab-foam"
-              }`}
-            >
-              {isTin
-                ? `${usedMl.toFixed(1)} g*`
-                : `${usedMl.toFixed(1)}/${capacityMl} ml`}
-              {overflowing ? " ⚠" : ""}
-            </div>
-          ) : null}
+        {!isWear ? (
+        <div className="absolute inset-x-1 top-1 z-10 flex min-w-0 flex-col gap-0.5 overflow-hidden">
+          <div className="flex min-w-0 items-start justify-between gap-1">
+            {usedMl > 0 ? (
+              <div
+                className={`max-w-[70%] truncate rounded-full px-1.5 py-0.5 font-mono text-[8px] leading-tight ${
+                  overflowing
+                    ? "bg-lab-hazard/80 text-lab-foam"
+                    : "bg-black/35 text-lab-foam"
+                }`}
+              >
+                {isTin
+                  ? `${usedMl.toFixed(1)} g*`
+                  : `${usedMl.toFixed(1)}/${capacityMl} ml`}
+                {overflowing ? " ⚠" : ""}
+              </div>
+            ) : (
+              <span />
+            )}
+            {vessel.stirLevel > 0 || sim.stirActive ? (
+              <div className="shrink-0 truncate rounded-full bg-black/35 px-1.5 py-0.5 text-[8px] leading-tight text-lab-foam">
+                {sim.stirActive ? "Stir" : `×${vessel.stirLevel}`}
+              </div>
+            ) : null}
+          </div>
           <VesselSimHud vessel={vessel} compact now={now} />
         </div>
-        {vessel.stirLevel > 0 || sim.stirActive ? (
-          <div className="absolute right-1 top-1 rounded-full bg-black/35 px-1.5 py-0.5 text-[9px] text-lab-foam">
-            {sim.stirActive ? "Stir · on" : `Stir ×${vessel.stirLevel}`}
-          </div>
         ) : null}
       </div>
 
+      {!isWear && !empty ? (
       <ul
-        className="mt-1.5 min-h-[2rem] space-y-1 text-[11px] text-lab-muted"
+        className={`relative z-[1] mt-1.5 min-h-0 space-y-1 text-lab-muted ${
+          mdUp ? "text-[11px]" : "text-[9px]"
+        }`}
         data-no-drag
       >
-        {contents.length === 0 ? (
-          <li className="italic text-lab-muted/80">Awaiting chemicals…</li>
-        ) : (
-          contents.map((entry, idx) => {
+        {contents.map((entry, idx) => {
             const c = getChemical(entry.chemicalId);
             const isLast = idx === contents.length - 1;
             const othersMl = usedMl - entry.amountMl;
@@ -584,7 +777,7 @@ export function VesselSlot({ vessel, deskRef }: Props) {
                           );
                         }}
                         onClick={(e) => e.stopPropagation()}
-                        className="w-12 rounded border border-lab-line/60 bg-white px-1 py-0.5 font-mono text-[10px] text-lab-ink outline-none focus:border-lab-teal focus:ring-1 focus:ring-lab-teal/30"
+                        className="w-12 rounded border border-lab-line/60 bg-white px-1 py-0.5 font-mono text-[10px] text-lab-ink outline-none focus-visible:border-lab-teal focus-visible:ring-1 focus-visible:ring-lab-teal/30"
                         aria-label={`Custom ml for ${c?.name ?? entry.chemicalId}`}
                       />
                       <span className="text-[9px] text-lab-muted">
@@ -599,15 +792,16 @@ export function VesselSlot({ vessel, deskRef }: Props) {
                 )}
               </li>
             );
-          })
-        )}
+          })}
       </ul>
+      ) : null}
 
-      {result?.label ? (
-        <p className="equation-pop mt-1.5 rounded-lg bg-lab-ink px-2 py-1.5 font-mono text-[10px] leading-snug text-lab-foam">
+      {!isWear && result?.label ? (
+        <p className="equation-pop relative z-[1] mt-1.5 rounded-lg bg-lab-ink px-2 py-1.5 font-mono text-[10px] leading-snug text-lab-foam">
           {result.label}
         </p>
       ) : null}
+    </div>
     </div>
   );
 }
@@ -615,6 +809,7 @@ export function VesselSlot({ vessel, deskRef }: Props) {
 function findOverlapTarget(
   source: DeskVessel,
   all: DeskVessel[],
+  card: { width: number; height: number },
 ): DeskVessel | null {
   const sx = source.position.x;
   const sy = source.position.y;
@@ -626,14 +821,12 @@ function findOverlapTarget(
     const ox = other.position.x;
     const oy = other.position.y;
     const overlapW =
-      Math.min(sx + VESSEL_CARD.width, ox + VESSEL_CARD.width) -
-      Math.max(sx, ox);
+      Math.min(sx + card.width, ox + card.width) - Math.max(sx, ox);
     const overlapH =
-      Math.min(sy + VESSEL_CARD.height, oy + VESSEL_CARD.height) -
-      Math.max(sy, oy);
+      Math.min(sy + card.height, oy + card.height) - Math.max(sy, oy);
     if (overlapW <= 0 || overlapH <= 0) continue;
     const area = overlapW * overlapH;
-    const minArea = VESSEL_CARD.width * VESSEL_CARD.height * 0.28;
+    const minArea = card.width * card.height * 0.28;
     if (area >= minArea && area > bestArea) {
       bestArea = area;
       best = other;

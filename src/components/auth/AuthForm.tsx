@@ -30,7 +30,7 @@ function PasswordField({
     <div>
       <label
         htmlFor={id}
-        className="text-[10px] font-semibold uppercase tracking-wider text-lab-muted"
+        className="text-[10px] font-semibold uppercase tracking-label text-lab-muted"
       >
         {label}
       </label>
@@ -139,7 +139,7 @@ export function AuthForm({
           <div>
             <label
               htmlFor="displayName"
-              className="text-[10px] font-semibold uppercase tracking-wider text-lab-muted"
+              className="text-[10px] font-semibold uppercase tracking-label text-lab-muted"
             >
               Name
             </label>
@@ -156,7 +156,7 @@ export function AuthForm({
           <div>
             <label
               htmlFor="phone"
-              className="text-[10px] font-semibold uppercase tracking-wider text-lab-muted"
+              className="text-[10px] font-semibold uppercase tracking-label text-lab-muted"
             >
               Phone number
             </label>
@@ -176,7 +176,7 @@ export function AuthForm({
       <div>
         <label
           htmlFor="email"
-          className="text-[10px] font-semibold uppercase tracking-wider text-lab-muted"
+          className="text-[10px] font-semibold uppercase tracking-label text-lab-muted"
         >
           Email
         </label>

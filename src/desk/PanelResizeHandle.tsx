@@ -11,10 +11,12 @@ export function PanelResizeHandle({
   side,
   onResize,
   className = "",
+  label: labelProp,
 }: {
   side: ResizeSide;
   onResize: (deltaPx: number) => void;
   className?: string;
+  label?: string;
 }) {
   const dragging = useRef(false);
   const last = useRef(0);
@@ -70,11 +72,12 @@ export function PanelResizeHandle({
   }, []);
 
   const label =
-    side === "left"
+    labelProp ??
+    (side === "left"
       ? "Resize inventory"
       : side === "right"
-        ? "Resize chat"
-        : "Resize chat height";
+        ? "Resize panel"
+        : "Resize chat height");
 
   return (
     <div

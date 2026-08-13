@@ -1,30 +1,69 @@
 "use client";
 
-import { useEffect, useRef, type CSSProperties } from "react";
+import { useEffect, useId, useRef, type CSSProperties } from "react";
 import type { EngineResult, VesselFx } from "@/types";
 import { labSound } from "@/desk/labSound";
 import { computeFxIntensities } from "./fxIntensity";
 import { resolveGlassShape } from "./glassware/shapes";
 import { useFxClock, usePrefersReducedMotion } from "./useFxClock";
+import { FrostFilm } from "./heatSource/FrostFilm";
+import "./heatFx.css";
+import "./heatSource/heatSource.css";
 
 /** Keep tip inside the well: smaller swing for narrow glassware. */
 const STIR_SWING_DEG: Record<string, number> = {
   beaker: 12,
   flask: 6,
-  "test-tube": 6,
+  "test-tube": 5,
   "graduated-cylinder": 7,
 };
 
 /**
  * Horizontal inset of the rod clip relative to the FX overlay
- * (overlay is already inset ~12% from the SVG). Matches well width.
+ * (overlay is already inset ~8% from the SVG). Matches well width.
  */
 const STIR_ROD_INSET_X: Record<string, string> = {
-  beaker: "16%",
-  flask: "38%",
-  "test-tube": "34%",
-  "graduated-cylinder": "30%",
+  beaker: "20%",
+  flask: "36%",
+  "test-tube": "37%",
+  "graduated-cylinder": "34%",
 };
+
+const STIR_ROD_HEIGHT: Record<string, string> = {
+  beaker: "80%",
+  flask: "84%",
+  "test-tube": "82%",
+  "graduated-cylinder": "82%",
+};
+
+/** Arc period — slightly different per vessel so the loop never reads as a metronome. */
+const STIR_PERIOD_S: Record<string, number> = {
+  beaker: 0.88,
+  flask: 0.8,
+  "test-tube": 0.96,
+  "graduated-cylinder": 0.86,
+};
+
+const STIR_DRIFT_PX: Record<string, number> = {
+  beaker: 5,
+  flask: 3,
+  "test-tube": 2,
+  "graduated-cylinder": 3,
+};
+
+/** Ellipse vortex sits on the liquid, not as a spinner filling the card. */
+const STIR_SWIRL: Record<
+  string,
+  { insetX: string; top: string; height: string; scaleY: number }
+> = {
+  beaker: { insetX: "18%", top: "36%", height: "34%", scaleY: 0.42 },
+  flask: { insetX: "22%", top: "48%", height: "36%", scaleY: 0.48 },
+  "test-tube": { insetX: "36%", top: "38%", height: "28%", scaleY: 0.36 },
+  "graduated-cylinder": { insetX: "32%", top: "40%", height: "30%", scaleY: 0.38 },
+};
+
+/** Sim patches stirAt every ~250ms; treat as live within two ticks. */
+const STIR_LIVE_MS = 520;
 
 interface Props {
   result?: EngineResult;
@@ -37,6 +76,14 @@ interface Props {
   equipmentId?: string;
   /** When WebGL liquid is showing, tone down CSS boil DOM bubbles. */
   fluid3dActive?: boolean;
+  /** Live sim — cool/freeze must track frost/viscosity, not pop on attach. */
+  simTemperature?: number;
+  simFrost?: number;
+  simViscosity?: number;
+  /** Solid melt 0–1 — wax/tin pooling, not a water drip. */
+  meltFraction?: number;
+  /** Continuous Mix toggle — suppresses one-shot bloom so it cannot strobe. */
+  mixActive?: boolean;
 }
 
 export function VesselEffects({
@@ -49,19 +96,34 @@ export function VesselEffects({
   boiling = false,
   equipmentId = "beaker",
   fluid3dActive = false,
+  simTemperature,
+  simFrost,
+  simViscosity,
+  meltFraction = 0,
+  mixActive = false,
 }: Props) {
   const reduced = usePrefersReducedMotion();
+  const flameGradId = `liqFlame-${useId().replace(/:/g, "")}`;
   const now = useFxClock(
     [
       fx?.pourAt,
       fx?.stirAt,
       fx?.shakeAt,
       fx?.mixAt,
+      fx?.cupSetAt,
+      fx?.castRevealAt,
       fx?.heatFlashAt,
       fx?.coolFlashAt,
       fx?.transferAt,
     ],
     3200,
+    Boolean(
+      heatAttached ||
+        coolAttached ||
+        boiling ||
+        meltFraction > 0.06 ||
+        stirLevel >= 1,
+    ),
   );
 
   const intensities = computeFxIntensities({
@@ -71,21 +133,22 @@ export function VesselEffects({
     heatAttached: Boolean(heatAttached),
     coolAttached: Boolean(coolAttached),
     boiling,
+    simTemperature,
+    simFrost,
+    simViscosity,
+    meltFraction,
+    mixActive,
   });
 
-  const pouring =
-    intensities.pourPhase !== "idle" &&
-    (fx?.transferRole !== "source" || intensities.splash > 0);
-  const transferringIn =
-    fx?.transferRole === "target" && intensities.pourPhase !== "idle";
-  const splashOn =
-    intensities.splash > 0.15 &&
-    (transferringIn || Boolean(fx?.pourAt));
+  const isTin = equipmentId === "tin";
   const stirring = intensities.mix > 0.05 || stirLevel > 0;
   const mixing = intensities.mix > 0.2;
+  const mixBloomOn = !isTin && intensities.mixBloom > 0.08;
   const heatFlash = intensities.heat > 0.55 && Boolean(fx?.heatFlashAt);
   const coolFlash = intensities.cool > 0.55 && Boolean(fx?.coolFlashAt);
-  const stirActive = Boolean(fx?.stirAt) && intensities.mix > 0.15;
+  const stirLive =
+    Boolean(fx?.stirAt) && now > 0 && now - (fx?.stirAt ?? 0) < STIR_LIVE_MS;
+  const stirActive = stirLive || (Boolean(fx?.stirAt) && intensities.mix > 0.15);
   const blastWindow = intensities.blast > 0.12;
 
   const gas = result?.effects.some((e) => e.kind === "gas" || e.kind === "bubble");
@@ -111,12 +174,16 @@ export function VesselEffects({
     (e) => e.kind === "dirty" || e.kind === "turbid",
   );
   const layerFx = result?.effects.find((e) => e.kind === "layer");
-  const solidify = intensities.solidify > 0.2;
   const melt = intensities.melt > 0.2;
   const steam = result?.effects.some((e) => e.kind === "steam");
   const crystal = result?.effects.some((e) => e.kind === "crystal");
   const overflow = result?.effects.some((e) => e.kind === "overflow");
-  const forceBoil = intensities.boil > 0.25;
+  const iceLanguage = equipmentId !== "tin";
+  const chillAmt = intensities.cool;
+  const iceAmt = intensities.solidify;
+  const showChill = iceLanguage && (chillAmt > 0.08 || Boolean(coolAttached));
+  const showIce = iceLanguage && iceAmt > 0.12;
+  const forceBoil = intensities.boil > 0.18;
   const gasVisible = Boolean(
     gas && (mixing || intensities.mix > 0.05 || forceBoil || stirLevel > 0),
   );
@@ -139,13 +206,21 @@ export function VesselEffects({
         : energetic
           ? 8
           : 12;
-  const boilCount = forceBoil
-    ? fluid3dActive
-      ? 3
-      : energetic
-        ? 10
-        : 14
-    : 0;
+  const boilCount =
+    forceBoil && !reduced
+      ? fluid3dActive
+        ? intensities.boil > 0.72
+          ? 3
+          : intensities.boil > 0.4
+            ? 2
+            : 1
+        : Math.round(3 + intensities.boil * 9)
+      : 0;
+  const heatCssGain = fluid3dActive ? 0.55 : 1;
+  const showHeat =
+    intensities.heat > 0.12 ||
+    Boolean(heatAttached) ||
+    heat?.intensity === "exo";
   const burning = intensities.burn > 0.25;
 
   const prevPhase = useRef(intensities.pourPhase);
@@ -206,86 +281,36 @@ export function VesselEffects({
   const dramaKey = fx?.mixAt ?? fx?.shakeAt ?? fx?.heatFlashAt ?? 0;
   const pptColor =
     ppt?.value && ppt.value !== "transparent" ? ppt.value : "#c4b5a0";
-  const splashColor = fx?.pourColor ?? fillColor ?? "var(--lab-glass, #8fc0b5)";
+  const splashColor = fx?.pourColor ?? fillColor ?? "var(--lab-glass, #c4b49a)";
   const shapeId = resolveGlassShape(equipmentId).id;
-  const stirDeg = STIR_SWING_DEG[shapeId] ?? 10;
+  const stirDegFull = STIR_SWING_DEG[shapeId] ?? 10;
+  const stirDeg = reduced ? Math.max(3, Math.round(stirDegFull * 0.42)) : stirDegFull;
   const stirInsetX = STIR_ROD_INSET_X[shapeId] ?? "18%";
+  const stirRodH = STIR_ROD_HEIGHT[shapeId] ?? "82%";
+  const stirPeriodS = (STIR_PERIOD_S[shapeId] ?? 0.85) * (reduced ? 1.95 : 1);
+  const stirDrift = (STIR_DRIFT_PX[shapeId] ?? 4) * (reduced ? 0.4 : 1);
+  const stirSwirl = STIR_SWIRL[shapeId] ?? STIR_SWIRL.beaker;
 
-  const frostOpacity = reduced
-    ? Math.max(0.7, intensities.solidify)
-    : undefined;
   const meltStatic = reduced && melt;
   const hazardStatic = reduced && hazard;
 
   return (
     <div
-      className="pointer-events-none absolute inset-0 overflow-visible"
+      className="pointer-events-none absolute inset-0 overflow-hidden"
       style={
         {
           ["--fx-boil"]: intensities.boil,
           ["--fx-blast"]: intensities.blast,
           ["--fx-solidify"]: intensities.solidify,
+          ["--fx-cool"]: intensities.cool,
           ["--fx-melt"]: intensities.melt,
+          ["--fx-heat"]: intensities.heat,
           ["--fx-burn"]: intensities.burn,
           ["--fx-splash"]: intensities.splash,
         } as CSSProperties
       }
     >
-      {/* Surface hit ripples — timed to stream arrival splash */}
-      {splashOn || (pouring && transferringIn)
-        ? [0, 1, 2, 3].map((i) => (
-            <span
-              key={`ripple-${fx?.pourAt ?? fx?.transferAt}-${i}`}
-              className={`lab-ripple absolute left-1/2 top-[28%] -translate-x-1/2 rounded-full border-2 border-white/70 ${
-                reduced ? "lab-fx-static-visible" : ""
-              }`}
-              style={{
-                width: 16 + i * 16,
-                height: 8 + i * 6,
-                animationDelay: `${i * 0.1}s`,
-                opacity: reduced ? 0.45 : undefined,
-              }}
-            />
-          ))
-        : null}
-
-      {/* Pour splash droplets — bloom on receive */}
-      {splashOn
-        ? Array.from({ length: reduced ? 4 : 12 }).map((_, i) => (
-            <span
-              key={`splash-${fx?.pourAt ?? fx?.transferAt}-${i}`}
-              className="lab-splash absolute rounded-full"
-              style={{
-                left: `${10 + i * 7}%`,
-                top: `${6 + (i % 3) * 4}%`,
-                width: 5 + (i % 4) * 2,
-                height: 5 + (i % 4) * 2,
-                background: splashColor,
-                boxShadow: `0 0 6px ${splashColor}`,
-                animationDelay: `${i * 0.03}s`,
-                opacity: reduced ? 0.55 : undefined,
-              }}
-            />
-          ))
-        : null}
-
-      {/* Rim drip during stream onto target */}
-      {splashOn && intensities.pourPhase === "stream"
-        ? [0, 1, 2].map((i) => (
-            <span
-              key={`drip-${i}`}
-              className="lab-rim-drip absolute rounded-full"
-              style={{
-                left: `${58 + i * 10}%`,
-                top: "2%",
-                width: 4,
-                height: 12,
-                background: splashColor,
-                animationDelay: `${0.1 + i * 0.12}s`,
-              }}
-            />
-          ))
-        : null}
+      {/* Pour splash lives on PourStream (SVG meniscus + rings), not CSS droplets */}
 
       {/* Stirring rod — clipped to well so the tip never leaves the glass */}
       {stirring && (stirActive || stirLevel >= 1) ? (
@@ -294,55 +319,119 @@ export function VesselEffects({
           style={{ left: stirInsetX, right: stirInsetX }}
         >
           <div
-            className={`lab-stir-rod absolute left-1/2 top-0 h-[88%] w-1 origin-top -translate-x-1/2 rounded-full bg-gradient-to-b from-stone-300 to-stone-500 ${
-              stirActive && !reduced ? "lab-stir-rod-active" : ""
+            className={`lab-stir-rod absolute left-1/2 top-0 w-[3px] origin-top -translate-x-1/2 rounded-full ${
+              stirActive ? "lab-stir-rod-active" : ""
             }`}
             style={
               {
-                opacity: 0.35 + stirLevel * 0.15,
+                height: stirRodH,
+                opacity: stirActive ? 0.72 : 0.38 + stirLevel * 0.08,
                 ["--stir-deg"]: `${stirDeg}deg`,
+                ["--stir-period"]: `${stirPeriodS}s`,
+                ["--stir-drift"]: `${stirDrift}px`,
+              } as CSSProperties
+            }
+          />
+          {stirActive ? (
+            <div
+              className="lab-stir-wake absolute left-1/2 rounded-full"
+              style={
+                {
+                  top: "58%",
+                  width: "72%",
+                  height: "18%",
+                  ["--stir-period"]: `${stirPeriodS}s`,
+                  ["--stir-drift"]: `${stirDrift}px`,
+                } as CSSProperties
+              }
+            />
+          ) : null}
+        </div>
+      ) : null}
+
+      {/* Stir vortex — ellipse on the liquid surface; follows the rod with lag */}
+      {stirring && (stirActive || stirLevel >= 2) ? (
+        <div
+          className="absolute overflow-hidden"
+          style={{
+            left: stirSwirl.insetX,
+            right: stirSwirl.insetX,
+            top: stirSwirl.top,
+            height: stirSwirl.height,
+          }}
+        >
+          <div
+            className={`lab-swirl absolute inset-[8%] rounded-full ${
+              stirActive ? "lab-swirl-active" : "lab-swirl-idle"
+            }`}
+            style={
+              {
+                opacity: stirActive ? 0.18 : 0.1,
+                ["--swirl-sy"]: stirSwirl.scaleY,
+                animationDuration: stirActive
+                  ? reduced
+                    ? "3.4s"
+                    : "1.8s"
+                  : "4.2s",
+                animationDelay: "0.12s",
+              } as CSSProperties
+            }
+          />
+        </div>
+      ) : null}
+      {/* Secondary counter-swirl only when mix energy is high */}
+      {stirring && intensities.mix > 0.6 && !reduced ? (
+        <div
+          className="absolute overflow-hidden"
+          style={{
+            left: stirSwirl.insetX,
+            right: stirSwirl.insetX,
+            top: stirSwirl.top,
+            height: stirSwirl.height,
+          }}
+        >
+          <div
+            className="lab-swirl lab-swirl-active absolute inset-[18%] rounded-full"
+            style={
+              {
+                opacity: 0.12,
+                animationDirection: "reverse",
+                animationDuration: "2.2s",
+                ["--swirl-sy"]: stirSwirl.scaleY,
               } as CSSProperties
             }
           />
         </div>
       ) : null}
 
-      {/* Stir vortex — stronger ring when actively stirring */}
-      {stirring && (stirActive || stirLevel >= 2) ? (
-        <div
-          className={`lab-swirl absolute inset-4 rounded-full border-2 border-white/40 ${
-            stirActive && !reduced ? "lab-swirl-active" : "lab-swirl-idle"
-          }`}
-          style={{
-            opacity: 0.28 + stirLevel * 0.18 + intensities.mix * 0.25,
-            borderWidth: stirActive ? 2.5 : 2,
-          }}
-        />
-      ) : null}
-      {/* Secondary counter-swirl for mix / shake energy */}
-      {stirring && intensities.mix > 0.35 && !reduced ? (
-        <div
-          className="lab-swirl lab-swirl-active absolute inset-6 rounded-full border border-white/25"
-          style={{
-            opacity: 0.2 + intensities.mix * 0.3,
-            animationDirection: "reverse",
-            animationDuration: "0.9s",
-          }}
-        />
-      ) : null}
-
-      {/* Mix shockwave + color bloom */}
-      {mixing ? (
+      {/* Liquid Mix — homogenize bloom in the well. Cast uses CastMixCue. */}
+      {mixBloomOn ? (
         <>
           <div
             key={`shock-${fx?.mixAt}`}
-            className="lab-shock absolute inset-2 rounded-[1rem] border-2 border-lab-foam/70"
+            className={`lab-mix-shock absolute inset-[8%] rounded-full border border-lab-foam/40 ${
+              reduced ? "lab-fx-static-visible" : ""
+            }`}
+            style={{ opacity: reduced ? 0.32 : undefined }}
+          />
+          <div
+            key={`unify-${fx?.mixAt}`}
+            className={`lab-mix-unify absolute inset-[10%] rounded-full ${
+              reduced ? "lab-fx-static-visible" : ""
+            }`}
+            style={{
+              background: `radial-gradient(circle at 50% 58%, ${splashColor}99 0%, ${splashColor}33 44%, transparent 74%)`,
+              opacity: reduced ? 0.38 : undefined,
+            }}
           />
           <div
             key={`bloom-${fx?.mixAt}`}
-            className="lab-color-bloom absolute inset-3 rounded-full"
+            className={`lab-mix-bloom absolute inset-3 rounded-full ${
+              reduced ? "lab-fx-static-visible" : ""
+            }`}
             style={{
-              background: `radial-gradient(circle, ${splashColor}88, transparent 70%)`,
+              background: `radial-gradient(circle at 46% 40%, ${splashColor}55, transparent 68%)`,
+              opacity: reduced ? 0.26 : undefined,
             }}
           />
         </>
@@ -367,35 +456,41 @@ export function VesselEffects({
           ))
         : null}
 
-      {/* Continuous boil — nucleation from bottom; capped when fluid3d active */}
+      {/* Continuous boil — nucleation from heat; WebGL owns bulk when fluid3d */}
       {forceBoil
         ? Array.from({ length: boilCount }).map((_, i) => (
             <span
               key={`boil-${i}`}
-              className="bubble lab-boil-bubble absolute rounded-full"
+              className="bubble lab-boil-bubble lab-heat-fx absolute rounded-full"
               style={{
                 left: `${10 + ((i * 13 + 7) % 72)}%`,
-                width: 3.5 + (i % 4) * 2.8,
-                height: 3.5 + (i % 4) * 2.8,
-                animationDelay: `${(i * 0.08) % 1.05}s`,
-                animationDuration: `${0.65 + (i % 5) * 0.14}s`,
-                bottom: `${8 + (i % 3) * 5}%`,
-                opacity: 0.5 + intensities.boil * 0.45,
+                width: 2.8 + (i % 4) * 2.2 + intensities.boil * 1.4,
+                height: 2.8 + (i % 4) * 2.2 + intensities.boil * 1.4,
+                animationDelay: `${(i * 0.09) % 1.15}s`,
+                animationDuration: `${Math.max(0.42, 0.95 - intensities.boil * 0.38 + (i % 5) * 0.08)}s`,
+                bottom: `${6 + (i % 3) * 4}%`,
+                opacity: 0.38 + intensities.boil * 0.42,
               }}
             />
           ))
         : null}
-      {forceBoil ? (
+      {forceBoil && !fluid3dActive ? (
         <>
+          {intensities.boil > 0.42 && !reduced ? (
+            <div
+              className="lab-boil-roil lab-heat-fx absolute inset-x-[14%] top-[30%] h-3 rounded-full bg-white/20"
+              style={{ opacity: 0.12 + intensities.boil * 0.38 }}
+            />
+          ) : null}
           <div
-            className="lab-boil-roil absolute inset-x-[14%] top-[30%] h-3 rounded-full bg-white/25"
-            style={{ opacity: 0.25 + intensities.boil * 0.55 }}
-          />
-          <div
-            className={`lab-steam lab-boil-steam absolute inset-x-2 top-0 h-14 bg-gradient-to-t from-transparent via-white/35 to-white/55 ${
+            className={`lab-steam lab-boil-steam lab-heat-fx absolute inset-x-2 top-0 h-14 bg-gradient-to-t from-transparent via-white/28 to-white/45 ${
               reduced ? "lab-fx-static-visible" : ""
             }`}
-            style={{ opacity: reduced ? 0.45 : 0.4 + intensities.boil * 0.5 }}
+            style={{
+              opacity: reduced
+                ? 0.32
+                : 0.18 + intensities.boil * 0.42,
+            }}
           />
         </>
       ) : null}
@@ -507,25 +602,31 @@ export function VesselEffects({
         />
       ) : null}
 
-      {/* Burning liquid tongues — combustion only, not plain boil */}
+      {/* Burning liquid — layered cone, not oval tongues */}
       {burning ? (
-        <div className="absolute inset-x-[18%] bottom-[18%] top-[32%] overflow-hidden">
-          {Array.from({ length: 5 }).map((_, i) => (
-            <span
-              key={`fire-${i}`}
-              className={`lab-liquid-flame absolute bottom-0 rounded-[50%_50%_40%_40%] ${
-                reduced ? "lab-fx-static-visible" : ""
-              }`}
-              style={{
-                left: `${8 + i * 18}%`,
-                width: 8 + (i % 3) * 3,
-                height: 16 + (i % 4) * 5,
-                animationDelay: `${i * 0.11}s`,
-                opacity: reduced ? 0.7 : 0.55 + intensities.burn * 0.4,
-              }}
-            />
-          ))}
-        </div>
+        <svg
+          viewBox="0 0 60 40"
+          className="absolute inset-x-[20%] bottom-[14%] h-[36%] w-[60%] overflow-hidden"
+          aria-hidden
+        >
+          <defs>
+            <linearGradient id={flameGradId} x1="0.5" y1="1" x2="0.5" y2="0">
+              <stop offset="0%" stopColor="#1e4fd8" />
+              <stop offset="28%" stopColor="#b8956c" />
+              <stop offset="70%" stopColor="#ffe08a" />
+              <stop offset="100%" stopColor="#fff8e8" />
+            </linearGradient>
+          </defs>
+          <g
+            className={reduced ? undefined : "lab-liquid-flame-group"}
+            fill={`url(#${flameGradId})`}
+            opacity={reduced ? 0.55 : 0.5 + intensities.burn * 0.4}
+          >
+            <path d="M18 38 C14 26 15 16 18 8 C21 16 23 26 21 38 Z" />
+            <path d="M30 40 C24 24 25 10 30 2 C35 10 36 24 36 40 Z" />
+            <path d="M42 38 C39 26 40 16 43 9 C46 16 47 26 45 38 Z" />
+          </g>
+        </svg>
       ) : null}
 
       {glow ? (
@@ -551,88 +652,84 @@ export function VesselEffects({
       ) : null}
 
       {melt ? (
-        <div
-          className={`lab-melt-drip absolute inset-x-[30%] top-[20%] h-10 w-2.5 rounded-full bg-amber-200/70 ${
-            meltStatic ? "lab-fx-static-visible" : ""
-          }`}
-          style={{ opacity: meltStatic ? 0.65 : undefined }}
-        />
-      ) : null}
-
-      {/* Solidify — ice front; cool bath alone is chill frost without full freeze */}
-      {solidify || coolAttached ? (
-        <>
+        <div className="lab-heat-fx pointer-events-none absolute inset-x-[14%] bottom-[10%] top-[26%] overflow-hidden">
           <div
-            className={`lab-solidify-frost absolute inset-x-[12%] bottom-[10%] rounded-sm bg-gradient-to-t from-sky-200/85 via-sky-100/50 to-transparent shadow-[inset_0_2px_10px_rgba(255,255,255,0.6)] ${
-              reduced ? "lab-fx-static-visible" : ""
+            className={`lab-melt-pool absolute inset-x-[6%] bottom-0 rounded-[50%] ${
+              meltStatic ? "lab-fx-static-visible" : ""
             }`}
             style={{
-              height: `${18 + intensities.solidify * 52}%`,
-              opacity:
-                frostOpacity ??
-                0.35 + intensities.solidify * 0.55 + (coolAttached ? 0.15 : 0),
-              transformOrigin: "bottom center",
+              height: `${14 + intensities.melt * 40}%`,
+              background: `radial-gradient(ellipse at 50% 35%, ${fillColor ?? "rgba(196,180,154,0.85)"}cc, ${fillColor ?? "rgba(184,149,108,0.7)"}99 70%)`,
+              opacity: meltStatic
+                ? 0.62
+                : 0.38 + intensities.melt * 0.48,
+              filter: `blur(${Math.max(0.2, 1.1 - intensities.melt * 0.7)}px)`,
             }}
           />
-          {/* Dendrite veins — only when actually freezing hard */}
-          {!reduced && intensities.solidify > 0.45
-            ? Array.from({ length: 4 }).map((_, i) => (
-                <span
-                  key={`vein-${i}`}
-                  className="lab-ice-vein absolute bg-gradient-to-t from-white/70 to-transparent"
-                  style={{
-                    left: `${18 + i * 18}%`,
-                    bottom: "10%",
-                    width: 1.5,
-                    height: `${18 + intensities.solidify * 28 + (i % 2) * 8}%`,
-                    opacity: 0.35 + intensities.solidify * 0.4,
-                    transform: `rotate(${(i - 1.5) * 6}deg)`,
-                    animationDelay: `${i * 0.15}s`,
-                  }}
-                />
-              ))
-            : null}
           <div
-            className={`lab-frost-rim absolute inset-x-[10%] top-[28%] h-2 rounded-full bg-sky-100/70 ${
-              reduced ? "lab-fx-static-visible" : ""
-            }`}
-            style={{ opacity: reduced ? 0.75 : 0.4 + intensities.cool * 0.4 }}
+            className="lab-melt-meniscus absolute inset-x-[18%] rounded-full"
+            style={{
+              bottom: `${10 + intensities.melt * 36}%`,
+              height: 3,
+              background:
+                "linear-gradient(180deg, rgba(255,248,230,0.4), transparent)",
+              opacity: 0.22 + intensities.melt * 0.45,
+            }}
           />
-          {intensities.solidify > 0.4
-            ? Array.from({ length: reduced ? 3 : 7 }).map((_, i) => (
+          {!reduced
+            ? [0, 1, 2].map((i) => (
                 <span
-                  key={`ice-${i}`}
-                  className={`lab-ice-shard absolute bg-gradient-to-br from-white to-sky-200/90 ${
-                    reduced ? "lab-fx-static-visible" : ""
-                  }`}
+                  key={`chunk-${i}`}
+                  className="lab-melt-chunk absolute rounded-[2px]"
                   style={{
-                    left: `${12 + i * 11}%`,
-                    bottom: `${10 + (i % 3) * 6}%`,
-                    width: 4 + (i % 3) * 2,
-                    height: 6 + (i % 2) * 5,
-                    animationDelay: `${i * 0.1}s`,
-                    opacity: reduced ? 0.85 : undefined,
+                    left: `${16 + i * 24}%`,
+                    top: `${4 + (1 - intensities.melt) * 14}%`,
+                    width: 11 - i * 1.5,
+                    height: 7 - (i % 2),
+                    background: fillColor ?? "#c4b49a",
+                    opacity: Math.max(0, 0.72 - intensities.melt * 0.68),
+                    animationDelay: `${i * 0.2}s`,
                   }}
                 />
               ))
             : null}
-        </>
+          {!reduced && intensities.melt > 0.22 && intensities.melt < 0.92
+            ? [0, 1].map((i) => (
+                <span
+                  key={`mdrip-${i}`}
+                  className="lab-melt-drip absolute w-1.5 rounded-full"
+                  style={{
+                    left: `${30 + i * 26}%`,
+                    top: "16%",
+                    background: fillColor ?? "rgba(184,149,108,0.72)",
+                    animationDelay: `${i * 0.32}s`,
+                    opacity: 0.5,
+                  }}
+                />
+              ))
+            : null}
+        </div>
       ) : null}
 
-      {crystal
-        ? Array.from({ length: reduced ? 5 : 10 }).map((_, i) => (
+      {/* Cool bath: condensation → rime → dendrites. Ice only after live freeze. */}
+      {showChill || showIce ? (
+        <FrostFilm chill={chillAmt} ice={iceAmt} reduced={reduced} />
+      ) : null}
+
+      {crystal && iceAmt > 0.28
+        ? Array.from({ length: reduced ? 3 : 5 }).map((_, i) => (
             <span
               key={`xtal-${i}`}
-              className={`lab-crystal absolute rotate-45 bg-gradient-to-br from-white via-sky-100 to-sky-300/90 shadow-[0_0_6px_rgba(186,230,253,0.85)] ${
+              className={`lab-crystal absolute bg-gradient-to-br from-white/90 to-[#bae6fd]/50 ${
                 reduced ? "lab-fx-static-visible" : ""
               }`}
               style={{
-                left: `${12 + i * 8}%`,
-                bottom: `${8 + (i % 4) * 7}%`,
-                width: 6 + (i % 3) * 2,
-                height: 6 + (i % 3) * 2,
-                animationDelay: `${i * 0.1}s`,
-                opacity: reduced ? 0.75 : undefined,
+                left: `${16 + i * 14}%`,
+                bottom: `${10 + (i % 3) * 8}%`,
+                width: 4 + (i % 2),
+                height: 4 + (i % 2),
+                opacity: reduced ? 0.45 : 0.2 + iceAmt * 0.35,
+                borderRadius: 1,
               }}
             />
           ))
@@ -643,9 +740,9 @@ export function VesselEffects({
           <div
             className="lab-overflow absolute inset-x-[12%] top-[10%] h-5 rounded-full"
             style={{
-              background: `linear-gradient(to bottom, ${fillColor ?? "rgba(143,192,181,0.9)"}ee, ${fillColor ?? "rgba(143,192,181,0.4)"}66 55%, transparent)`,
+              background: `linear-gradient(to bottom, ${fillColor ?? "rgba(196,180,154,0.9)"}ee, ${fillColor ?? "rgba(196,180,154,0.4)"}66 55%, transparent)`,
               opacity: 0.95,
-              boxShadow: `0 2px 8px ${fillColor ?? "rgba(143,192,181,0.35)"}`,
+              boxShadow: `0 2px 8px ${fillColor ?? "rgba(196,180,154,0.35)"}`,
             }}
           />
           {/* Foam beads riding the lip */}
@@ -671,7 +768,7 @@ export function VesselEffects({
                 top: "14%",
                 width: 3.5 + (i % 2),
                 height: 11 + i * 2.5,
-                background: fillColor ?? "rgba(143,192,181,0.8)",
+                background: fillColor ?? "rgba(196,180,154,0.8)",
                 opacity: 0.75,
                 animationDelay: `${i * 0.11}s`,
               }}
@@ -721,48 +818,63 @@ export function VesselEffects({
           ))
         : null}
 
-      {/* Exothermic shimmer / endothermic frost — secondary to glass */}
-      {heat?.intensity === "exo" || heatAttached ? (
-        <div
-          className={`pointer-events-none absolute inset-0 rounded-[inherit] ${
-            heat?.intensity === "exo" ? "lab-heat-exo" : "lab-heat-attached"
-          }`}
-        />
-      ) : null}
-      {heat?.intensity === "exo" || heatAttached ? (
-        <>
-          <div className="lab-heat-haze pointer-events-none absolute inset-x-3 top-1 h-8" />
-          {/* Convection shimmer bands */}
-          {!reduced
+      {/* Heat — amber shimmer / convection. Presence, not orange fireworks. */}
+      {showHeat ? (
+        <div className="lab-heat-fx pointer-events-none absolute inset-0 overflow-hidden rounded-[inherit]">
+          <div
+            className={
+              heat?.intensity === "exo" ? "lab-heat-exo" : "lab-heat-well"
+            }
+            style={{
+              opacity: (0.28 + intensities.heat * 0.5) * heatCssGain,
+            }}
+          />
+          {!reduced && intensities.heat > 0.16 ? (
+            <div
+              className="lab-heat-shimmer absolute inset-x-2 top-0 h-10"
+              style={{ opacity: (0.2 + intensities.heat * 0.38) * heatCssGain }}
+            />
+          ) : null}
+          {!reduced && intensities.heat > 0.2
             ? [0, 1, 2].map((i) => (
                 <div
                   key={`convect-${i}`}
-                  className="lab-heat-convection pointer-events-none absolute inset-x-[18%] rounded-full bg-gradient-to-t from-amber-200/0 via-amber-100/25 to-transparent"
+                  className="lab-heat-band pointer-events-none absolute inset-x-[18%] rounded-full"
                   style={{
-                    bottom: `${22 + i * 14}%`,
-                    height: 10,
-                    animationDelay: `${i * 0.35}s`,
-                    opacity: 0.35 + intensities.heat * 0.45,
+                    bottom: `${18 + i * 16}%`,
+                    height: 7 + intensities.heat * 5,
+                    animationDelay: `${i * 0.42}s`,
+                    animationDuration: `${2.05 - intensities.heat * 0.5}s`,
+                    opacity: (0.14 + intensities.heat * 0.26) * heatCssGain,
                   }}
                 />
               ))
             : null}
-        </>
+        </div>
       ) : null}
-      {heat?.intensity === "endo" || coolAttached ? (
-        <div className="lab-heat-endo pointer-events-none absolute inset-0 rounded-[inherit]">
-          <div className="lab-frost absolute inset-x-1 top-0.5 h-5 rounded-t-lg" />
+      {heat?.intensity === "endo" || showChill ? (
+        <div
+          className="lab-heat-endo pointer-events-none absolute inset-0 rounded-[inherit]"
+          style={{ opacity: 0.28 + chillAmt * 0.5 }}
+        >
+          <div
+            className="lab-frost absolute inset-x-1 top-0.5 h-5 rounded-t-lg"
+            style={{ opacity: 0.2 + chillAmt * 0.5 }}
+          />
         </div>
       ) : null}
 
       {heatFlash ? (
         <div
           key={fx?.heatFlashAt}
-          className="lab-heat-ignite pointer-events-none absolute inset-x-4 bottom-0 h-12"
+          className={`lab-heat-flash lab-heat-fx pointer-events-none absolute inset-x-4 bottom-0 h-10 ${
+            reduced ? "lab-fx-static-visible" : ""
+          }`}
+          style={{ opacity: reduced ? 0.35 : undefined }}
         />
       ) : null}
 
-      {coolFlash ? (
+      {coolFlash && iceLanguage ? (
         <div
           key={fx?.coolFlashAt}
           className="lab-cool-flash pointer-events-none absolute inset-x-3 bottom-0 h-10"
@@ -797,20 +909,57 @@ export function VesselEffects({
         </div>
       ) : null}
 
-      {/* Sparkles on successful mix */}
-      {(mixing && result?.ok) || sparkleFx
-        ? Array.from({ length: 8 }).map((_, i) => (
+      {/* Champagne motes on Mix — 4 max, not amber game sparks */}
+      {!isTin &&
+      !reduced &&
+      (intensities.mixBloom > 0.22 || sparkleFx)
+        ? Array.from({ length: 4 }).map((_, i) => (
             <span
-              key={`sp-${i}`}
-              className="lab-spark absolute h-1.5 w-1.5 rounded-full bg-amber-200"
+              key={`mote-${fx?.mixAt ?? "sparkle"}-${i}`}
+              className="lab-mix-mote absolute h-1 w-1 rounded-full"
               style={{
-                left: `${12 + i * 10}%`,
-                top: `${20 + (i % 4) * 12}%`,
-                animationDelay: `${i * 0.05}s`,
+                left: `${22 + i * 16}%`,
+                top: `${28 + (i % 2) * 14}%`,
+                background: "var(--lab-glass, #c4b49a)",
+                animationDelay: `${i * 0.09}s`,
               }}
             />
           ))
         : null}
+    </div>
+  );
+}
+
+/**
+ * Solid Cast mix_hold cue — champagne wash, then cup-set owns the eye.
+ * Mount on the tin card only; never sparks, never a shock ring.
+ */
+export function CastMixCue({
+  fillColor,
+  mixAt,
+  intensity,
+  reduced,
+}: {
+  fillColor?: string;
+  mixAt?: number;
+  intensity: number;
+  reduced?: boolean;
+}) {
+  if (intensity < 0.05) return null;
+  const tint =
+    fillColor && fillColor !== "transparent" ? fillColor : "#c4b49a";
+  return (
+    <div className="pointer-events-none absolute inset-[14%] z-[5] overflow-visible">
+      <div
+        key={`cast-cue-${mixAt ?? 0}`}
+        className={`absolute inset-0 rounded-full ${
+          reduced ? "lab-fx-static-visible" : "lab-cast-cue"
+        }`}
+        style={{
+          background: `radial-gradient(circle at 48% 42%, ${tint}4d 0%, rgba(196,180,154,0.28) 36%, transparent 72%)`,
+          opacity: reduced ? 0.38 : undefined,
+        }}
+      />
     </div>
   );
 }

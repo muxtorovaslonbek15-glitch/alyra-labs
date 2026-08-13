@@ -15,7 +15,7 @@ interface AuthState {
   authReady: boolean;
   guestChemicalAdds: number;
   authGateOpen: boolean;
-  /** Name/phone captured on signup — consumed when creating the Firestore profile */
+  /** Name/phone captured on signup — consumed when creating the lab profile */
   pendingSignup: SignupProfileFields | null;
   setUser: (user: User | null) => void;
   setProfile: (profile: UserProfile | null) => void;

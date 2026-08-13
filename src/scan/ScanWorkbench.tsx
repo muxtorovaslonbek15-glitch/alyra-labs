@@ -202,7 +202,7 @@ export function ScanWorkbench({ onAddChemical, onClose, onRunOnDesk }: Props) {
     <div className="flex h-full min-h-0 flex-col gap-3 overflow-hidden p-3 md:p-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <p className="font-display text-[11px] uppercase tracking-[0.22em] text-lab-teal">
+          <p className="text-[11px] font-semibold uppercase tracking-label text-lab-muted">
             Formula scan
           </p>
           <h2 className="font-display text-2xl text-lab-ink">

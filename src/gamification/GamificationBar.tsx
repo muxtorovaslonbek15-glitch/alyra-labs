@@ -1,64 +1,108 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import Link from "next/link";
-import { QUESTS, useProgressStore } from "@/store/progressStore";
-import { useGoalStore } from "@/store/goalStore";
+import { MOTION_MS, motionMs } from "@/animation/motion";
+import { composeOverlayOpen, costumeFadeClass } from "@/animation/CostumeLayer";
+import { usePresence } from "@/animation/usePresence";
+import { useProgressStore } from "@/store/progressStore";
 import { useAuthStore } from "@/store/authStore";
-import { getGoal } from "@/domains/chemistry/data/goals";
-import { currentStep, goalProgressPct } from "@/goals/goalProgress";
-import { labCopy } from "@/lab/labCopy";
-import { getAuthHeaders } from "@/lib/client/authHeaders";
-import { showToast } from "@/gamification/ToastHost";
+import { nextDailyClaimState } from "@/lib/stars/dailyStar";
+import {
+  requestDailyStarIfDue,
+  useDailyStarVisit,
+} from "@/gamification/useDailyStarVisit";
+import {
+  checkInAria,
+  checkInCopy,
+  checkInPresence,
+  checkInShowsCount,
+} from "@/gamification/checkIn";
+import { useWearStore } from "@/wear/wearStore";
+import { getHouseSku, OCCASION_CHIPS } from "@/wear/houseSkus";
+import {
+  STAR_MILESTONE_COUNT,
+  milestoneDismissKey,
+  starMilestoneMailto,
+} from "@/lib/stars/milestone";
 import { track } from "@/lib/analytics/track";
 
 /**
- * Compact XP chip + drawer. Replaces the full second toolbar on Lab.
- * Shop / Perfume / Market / Shelf / Goals live in Lab overflow — not here.
+ * Compact ★ check-in chip + ledger. XP stays off chrome.
+ * Wear and Compose never open Goals / FREE-PLAY / badges from this chip.
  */
-export function GamificationBar({
-  onOpenAtelier,
-  onOpenShop,
-  onOpenShelf,
-  onOpenMarket,
-}: {
-  onOpenAtelier?: () => void;
-  onOpenShop?: () => void;
-  onOpenShelf?: () => void;
-  onOpenMarket?: () => void;
-} = {}) {
-  const xp = useProgressStore((s) => s.xp);
+export function GamificationBar() {
+  useDailyStarVisit();
+
   const stars = useProgressStore((s) => s.stars);
   const lastDailyStarAt = useProgressStore((s) => s.lastDailyStarAt);
-  const setStarsFromServer = useProgressStore((s) => s.setStarsFromServer);
-  const journal = useProgressStore((s) => s.journal);
-  const badges = useProgressStore((s) => s.badges);
-  const questIndex = useProgressStore((s) => s.questIndex);
-  const xpLevel = useProgressStore((s) => s.xpLevel);
-  const quest = QUESTS[questIndex % QUESTS.length];
-  const earnedBadges = badges.filter((b) => b.earnedAt);
-  const nextBadge = badges.find((b) => !b.earnedAt);
-  const { level, intoLevel, toNext } = xpLevel();
-  const [claiming, setClaiming] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [popoverShown, setPopoverShown] = useState(false);
+  const [milestoneDismissed, setMilestoneDismissed] = useState(true);
   const rootRef = useRef<HTMLDivElement>(null);
+  const closeTimerRef = useRef<number | null>(null);
 
   const user = useAuthStore((s) => s.user);
-  const guestChemicalAdds = useAuthStore((s) => s.guestChemicalAdds);
-  const guestWarn = !user && guestChemicalAdds === 1;
-  const guestBlocked = !user && guestChemicalAdds >= 2;
+  const isWear = useWearStore((s) => s.audience === "owner");
+  const skuId = useWearStore((s) => s.skuId);
+  const occasion = useWearStore((s) => s.occasion);
 
-  const activeGoalId = useGoalStore((s) => s.activeGoalId);
-  const completedStepIds = useGoalStore((s) => s.completedStepIds);
-  const setPickerOpen = useGoalStore((s) => s.setPickerOpen);
-  const setGuideOpen = useGoalStore((s) => s.setGuideOpen);
+  const daily = nextDailyClaimState(lastDailyStarAt, Date.now());
+  const presence = checkInPresence({
+    signedIn: Boolean(user),
+    grantedToday: Boolean(user) && !daily.canClaim,
+  });
+  const copy = checkInCopy(presence);
+  const showCount = checkInShowsCount(stars, presence);
+  const pendingRing = presence === "not-yet";
 
-  const goal = activeGoalId ? getGoal(activeGoalId) : undefined;
-  const step = goal ? currentStep(goal, completedStepIds) : null;
-  const pct = goal ? goalProgressPct(goal, completedStepIds) : 0;
+  const sku = isWear ? getHouseSku(skuId) : null;
+  const showSkuName = Boolean(
+    isWear && sku && skuId && skuId !== "generic",
+  );
+  const occasionLabel = occasion
+    ? OCCASION_CHIPS.find((c) => c.id === occasion)?.label
+    : null;
 
-  const canClaimDaily =
-    !lastDailyStarAt || Date.now() - lastDailyStarAt >= 24 * 60 * 60 * 1000;
+  const milestoneEligible = Boolean(user) && stars >= STAR_MILESTONE_COUNT;
+  const showMilestoneRow = milestoneEligible && !milestoneDismissed;
+
+  useEffect(() => {
+    if (!user) {
+      setMilestoneDismissed(true);
+      return;
+    }
+    try {
+      setMilestoneDismissed(
+        window.localStorage.getItem(milestoneDismissKey(user.uid)) === "1",
+      );
+    } catch {
+      setMilestoneDismissed(false);
+    }
+  }, [user, stars]);
+
+  useEffect(() => {
+    if (drawerOpen) {
+      if (closeTimerRef.current != null) {
+        window.clearTimeout(closeTimerRef.current);
+        closeTimerRef.current = null;
+      }
+      setPopoverShown(true);
+      return;
+    }
+    if (!popoverShown) return;
+    closeTimerRef.current = window.setTimeout(() => {
+      setPopoverShown(false);
+      closeTimerRef.current = null;
+    }, motionMs(MOTION_MS.checkIn));
+    return () => {
+      if (closeTimerRef.current != null) {
+        window.clearTimeout(closeTimerRef.current);
+        closeTimerRef.current = null;
+      }
+    };
+  }, [drawerOpen, popoverShown]);
 
   useEffect(() => {
     if (!drawerOpen) return;
@@ -76,242 +120,166 @@ export function GamificationBar({
     };
   }, [drawerOpen]);
 
-  async function claimDaily() {
-    if (!user) {
-      showToast({
-        title: "Sign in for daily ★",
-        detail: "Daily stars need an account.",
-      });
+  function onChip() {
+    if (presence === "not-yet") requestDailyStarIfDue();
+    if (drawerOpen) {
+      setDrawerOpen(false);
       return;
     }
-    if (!canClaimDaily || claiming) return;
-    setClaiming(true);
-    try {
-      const headers = await getAuthHeaders();
-      if (!headers) {
-        showToast({
-          title: "Sign in for daily ★",
-          detail: "Session expired — log in again to claim.",
-        });
-        return;
-      }
-      const res = await fetch("/api/daily-star", {
-        method: "POST",
-        headers,
-        body: "{}",
-      });
-      const data = (await res.json()) as {
-        granted?: boolean;
-        stars?: number;
-        lastDailyStarAt?: number;
-        message?: string;
-        error?: string;
-      };
-      if (!res.ok) {
-        showToast({
-          title: res.status === 401 ? "Sign in for daily ★" : "Claim failed",
-          detail: data.error ?? data.message ?? "Try again shortly",
-        });
-        return;
-      }
-      if (typeof data.stars === "number") {
-        setStarsFromServer({
-          stars: data.stars,
-          lastDailyStarAt: data.lastDailyStarAt,
-        });
-      }
-      if (data.granted) {
-        track("daily_star_claim", { stars: data.stars });
-      }
-      showToast({
-        title: data.granted ? "+1★ Daily check-in" : "Already claimed",
-        detail: data.message ?? "",
-      });
-    } catch {
-      showToast({ title: "Claim failed", detail: "Try again shortly" });
-    } finally {
-      setClaiming(false);
-    }
+    setPopoverShown(true);
+    setDrawerOpen(true);
   }
-
-  // Keep callbacks typed for LabShell callers; surface via drawer shortcuts.
-  void onOpenAtelier;
-  void onOpenShop;
-  void onOpenShelf;
-  void onOpenMarket;
 
   return (
     <div ref={rootRef} className="relative shrink-0">
-      {guestWarn ? (
-        <div className="fixed left-0 right-0 top-0 z-[300] bg-lab-amber/90 px-3 py-1 text-center text-[11px] font-semibold text-lab-ink md:px-4">
-          {labCopy.guestBannerWarn}{" "}
-          <Link href="/signup" className="underline">
-            Sign up
-          </Link>
-        </div>
-      ) : null}
-      {guestBlocked ? (
-        <div className="fixed left-0 right-0 top-0 z-[300] bg-lab-teal px-3 py-1 text-center text-[11px] font-semibold text-white md:px-4">
-          {labCopy.guestBannerBlocked}{" "}
-          <Link href="/signup" className="underline">
-            Create account
-          </Link>
-        </div>
-      ) : null}
-
       <button
         type="button"
-        onClick={() => setDrawerOpen((v) => !v)}
+        onClick={onChip}
         aria-expanded={drawerOpen}
-        aria-label="Progress"
-        title="Progress"
-        className="flex h-8 items-center gap-1 rounded-lg border border-white/15 bg-white/5 px-2 text-lab-foam hover:bg-white/10"
+        aria-label={checkInAria(stars, presence)}
+        title={showCount ? `${stars} ★` : "★"}
+        className={`relative flex h-8 items-center gap-1 rounded-lg border px-2 text-lab-foam outline-none hover:bg-white/10 focus-visible:ring-1 focus-visible:ring-white/35 ${
+          pendingRing
+            ? "border-lab-glass/60 bg-white/5 ring-1 ring-lab-glass/40 motion-reduce:ring-0"
+            : "border-white/15 bg-white/5"
+        }`}
       >
-        <span className="text-[9px] font-semibold uppercase leading-none tracking-[0.1em] text-lab-foam/55">
-          Lv {level}
-        </span>
-        <span className="font-display text-xs leading-none text-lab-foam">
-          {xp}
-        </span>
-        <span className="text-[9px] leading-none text-lab-foam/50">XP</span>
-        <span className="font-display text-xs leading-none text-lab-amber">
-          {stars}
-        </span>
+        <span
+          className="pointer-events-none absolute -inset-y-1.5 -inset-x-1.5 md:hidden"
+          aria-hidden
+        />
+        {showCount ? (
+          <span className="font-display text-xs leading-none text-lab-amber">
+            {stars}
+          </span>
+        ) : null}
         <span className="text-[9px] leading-none text-lab-amber/80">★</span>
       </button>
 
-      {drawerOpen ? (
-        <div className="absolute right-0 top-full z-[220] mt-1.5 w-[min(20rem,calc(100vw-1.5rem))] rounded-xl border border-lab-line bg-lab-panel p-3 text-lab-ink shadow-xl">
-          <div className="flex items-baseline justify-between gap-2">
-            <div>
-              <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-lab-muted">
-                Level {level}
-              </p>
-              <p className="mt-0.5 font-display text-xl text-lab-ink">{xp} XP</p>
-            </div>
-            <p className="font-display text-lg text-lab-amber">{stars} ★</p>
-          </div>
-          <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-lab-line/70">
-            <div
-              role="progressbar"
-              aria-valuenow={intoLevel}
-              aria-valuemin={0}
-              aria-valuemax={100}
-              className="h-full rounded-full bg-lab-ink"
-              style={{ width: `${intoLevel}%` }}
-            />
-          </div>
-          <p className="mt-1 text-[11px] text-lab-muted">
-            {toNext} to next level
-            {nextBadge ? ` · next: ${nextBadge.title}` : ""}
+      {popoverShown ? (
+        <div
+          className={`absolute right-0 top-full z-[220] mt-1.5 w-[min(20rem,calc(100vw-1.5rem))] rounded-xl border border-lab-line bg-lab-panel p-3 text-lab-ink shadow-xl ${
+            drawerOpen ? "lab-checkin-in" : "lab-checkin-out"
+          }`}
+        >
+          <p className="font-display text-lg text-lab-amber">
+            {showCount ? `${stars} ★` : "★"}
+          </p>
+          {copy.title ? (
+            <p className="mt-1 text-sm font-medium text-lab-ink">{copy.title}</p>
+          ) : null}
+          <p
+            className={`text-[11px] text-lab-muted ${copy.title ? "mt-0.5" : "mt-1"}`}
+          >
+            {copy.subline}
           </p>
 
-          <div className="mt-3 border-t border-lab-line/60 pt-3">
-            {goal ? (
-              <button
-                type="button"
-                className="w-full text-left"
+          {showSkuName && sku ? (
+            <div className="mt-3 border-t border-lab-line/60 pt-3">
+              <p className="font-display text-base tracking-display text-lab-ink">
+                {sku.name}
+              </p>
+              {occasionLabel ? (
+                <p className="mt-0.5 text-[11px] text-lab-muted">
+                  {occasionLabel}
+                </p>
+              ) : null}
+            </div>
+          ) : null}
+
+          {presence === "guest" ? (
+            <Link
+              href="/login"
+              className="mt-3 flex min-h-9 items-center justify-center rounded-md bg-lab-ink px-3 text-xs font-semibold text-lab-foam"
+            >
+              Sign in
+            </Link>
+          ) : null}
+
+          {showMilestoneRow && user ? (
+            <div className="mt-3 border-t border-lab-line/60 pt-3">
+              <p className="text-[11px] text-lab-muted">
+                Have done 30. I will get a star.
+              </p>
+              <a
+                href={starMilestoneMailto()}
+                className="mt-1.5 inline-flex min-h-9 items-center text-xs font-semibold text-lab-ink underline decoration-lab-line underline-offset-2 hover:text-lab-ink"
                 onClick={() => {
-                  setDrawerOpen(false);
-                  setGuideOpen(true);
+                  track("star_milestone_mailto", { stars });
                 }}
               >
-                <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-lab-muted">
-                  Goal · {pct}%
-                </p>
-                <p className="mt-0.5 text-sm text-lab-ink">
-                  {goal.icon} {goal.title}
-                  {step ? ` — ${step.title}` : " — complete!"}
-                </p>
-              </button>
-            ) : (
-              <>
-                <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-lab-muted">
-                  Free-play
-                </p>
-                <p className="mt-0.5 text-sm text-lab-ink">{quest?.prompt}</p>
-              </>
-            )}
-          </div>
-
-          <div className="mt-3 flex items-center gap-1.5">
-            {badges.slice(0, 8).map((b) => (
-              <span
-                key={b.id}
-                className={`inline-block h-2 w-2 rounded-full ${
-                  b.earnedAt ? "bg-lab-amber" : "bg-lab-line"
-                }`}
-                title={b.earnedAt ? b.title : `Locked: ${b.title}`}
-              />
-            ))}
-            <span className="ml-1 text-[11px] text-lab-muted">
-              {earnedBadges.length} badges · {journal.length} logged
-            </span>
-          </div>
-
-          <div className="mt-3 flex flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={() => void claimDaily()}
-              disabled={claiming || (Boolean(user) && !canClaimDaily)}
-              className="min-h-9 rounded-md border border-lab-amber/50 px-3 text-xs font-semibold text-lab-amber hover:bg-lab-amber/10 disabled:opacity-40"
-            >
-              {canClaimDaily ? "Daily ★" : "★ claimed"}
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setDrawerOpen(false);
-                setPickerOpen(true);
-              }}
-              className="min-h-9 rounded-md bg-lab-ink px-3 text-xs font-semibold text-lab-foam"
-            >
-              Goals
-            </button>
-            {onOpenAtelier ? (
-              <button
-                type="button"
-                onClick={() => {
-                  setDrawerOpen(false);
-                  onOpenAtelier();
-                }}
-                className="min-h-9 rounded-md border border-lab-line px-3 text-xs font-medium text-lab-ink hover:bg-lab-wash"
-              >
-                Perfume
-              </button>
-            ) : null}
-          </div>
+                Write Neil
+              </a>
+            </div>
+          ) : null}
         </div>
       ) : null}
     </div>
   );
 }
 
-export function RecipeJournal() {
-  const [open, setOpen] = useState(false);
+export function RecipeJournal({
+  open,
+  onClose,
+}: {
+  open: boolean;
+  onClose: () => void;
+}) {
   const journal = useProgressStore((s) => s.journal);
   const badges = useProgressStore((s) => s.badges);
   const earned = badges.filter((b) => b.earnedAt);
+  const isWear = useWearStore((s) => s.audience === "owner");
+  const live = composeOverlayOpen(isWear, open);
+  const { mounted, visible } = usePresence(live, MOTION_MS.crossfade);
 
-  return (
-    <div className="border-t border-lab-line/50 bg-lab-panel/95">
+  useEffect(() => {
+    if (!live) return;
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") onClose();
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [live, onClose]);
+
+  if (!mounted || typeof document === "undefined") return null;
+
+  return createPortal(
+    <div
+      className={costumeFadeClass(
+        visible,
+        "fixed inset-0 z-[220] flex items-end justify-center p-3 md:items-start md:justify-end md:pt-14 md:pr-4",
+      )}
+    >
       <button
         type="button"
-        onClick={() => setOpen((v) => !v)}
-        className="flex w-full items-center justify-between px-3 py-1.5 text-left text-xs text-lab-ink hover:bg-lab-wash/50"
-      >
-        <span className="font-medium">
-          Recipe log & badges
-          <span className="ml-1.5 text-[10px] font-normal text-lab-muted">
-            {journal.length} discoveries · {earned.length} badges
-          </span>
-        </span>
-        <span className="text-lab-muted">{open ? "▾" : "▴"}</span>
-      </button>
-      {open ? (
-        <div className="grid max-h-40 grid-cols-1 gap-3 overflow-hidden border-t border-lab-line/40 px-3 py-2 sm:grid-cols-2">
+        className="absolute inset-0 bg-lab-ink/35"
+        aria-label="Close recipe log"
+        onClick={onClose}
+      />
+      <div className="relative w-full max-w-lg rounded-xl border border-lab-line bg-lab-panel p-3 text-lab-ink shadow-xl">
+        <div className="flex items-start justify-between gap-2">
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-label text-lab-muted">
+              Journal
+            </p>
+            <h2 className="font-display text-lg tracking-display text-lab-ink">
+              Recipe log
+            </h2>
+            <p className="mt-0.5 text-[11px] text-lab-muted">
+              {journal.length} discoveries · {earned.length} badges
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="flex h-8 items-center rounded-lg bg-lab-ink px-3 text-xs font-semibold text-lab-foam outline-none focus-visible:ring-1 focus-visible:ring-lab-line"
+          >
+            Done
+          </button>
+        </div>
+        <div className="mt-3 grid max-h-[min(50dvh,22rem)] grid-cols-1 gap-3 overflow-hidden sm:grid-cols-2">
           <div className="scroll-thin min-h-0 overflow-y-auto">
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-lab-muted">
+            <p className="text-[10px] font-semibold uppercase tracking-label text-lab-muted">
               Equations found
             </p>
             <ul className="mt-1.5 space-y-1">
@@ -334,7 +302,7 @@ export function RecipeJournal() {
             </ul>
           </div>
           <div className="scroll-thin min-h-0 overflow-y-auto">
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-lab-muted">
+            <p className="text-[10px] font-semibold uppercase tracking-label text-lab-muted">
               Badges (earned first)
             </p>
             <ul className="mt-1.5 space-y-1.5">
@@ -350,14 +318,15 @@ export function RecipeJournal() {
                     <span className="mr-1.5">{b.earnedAt ? "●" : "○"}</span>
                     {b.title}
                     <span className="ml-1 text-[10px] text-lab-muted">
-                      — {b.description}
+                      {b.description}
                     </span>
                   </li>
                 ))}
             </ul>
           </div>
         </div>
-      ) : null}
-    </div>
+      </div>
+    </div>,
+    document.body,
   );
 }

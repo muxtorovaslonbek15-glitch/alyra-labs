@@ -15,7 +15,7 @@ export type ChatAchievement =
   | "open_in_lab";
 
 const TITLES: Record<ChatAchievement, string> = {
-  plan_ready: "Plan ready",
+  plan_ready: "Plan locked",
   build_complete: "Build complete",
   solid_tin: "Solid tin cast",
   refine_done: "Refine done",
@@ -24,11 +24,11 @@ const TITLES: Record<ChatAchievement, string> = {
 };
 
 const DETAILS: Partial<Record<ChatAchievement, string>> = {
-  plan_ready: "Review the Plan, then press Build when it looks right.",
-  build_complete: "Refine in Chat or open Tutor for notes.",
+  plan_ready: "Press Build to pour on the desk.",
+  build_complete: "Refine in Chat or open Information for notes.",
   solid_tin: "Wax chassis on the tin. Heat or cool from the vessel.",
   refine_done: "Delta applied. Check the formula card.",
-  first_formula: "You composed a signature. Press Build when ready.",
+  first_formula: "You composed a signature. Lock the Plan, then Build.",
   open_in_lab: "Materials mapped onto the desk.",
 };
 

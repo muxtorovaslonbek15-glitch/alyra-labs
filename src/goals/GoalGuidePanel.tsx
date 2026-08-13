@@ -51,8 +51,8 @@ export function GoalGuidePanel() {
         title={goal.title}
         className="fixed bottom-20 left-2 z-40 max-w-[11rem] rounded-xl border border-lab-teal/35 bg-lab-ink/95 px-2.5 py-1.5 text-left text-lab-foam shadow-xl backdrop-blur md:bottom-20"
       >
-        <p className="text-[9px] font-semibold uppercase tracking-[0.14em] text-lab-glass">
-          Goal · {doneCount}/{goal.steps.length}
+        <p className="text-[9px] font-semibold uppercase tracking-label text-lab-glass">
+          Recipe · {doneCount}/{goal.steps.length}
         </p>
         <p className="truncate text-xs font-semibold">{goal.title}</p>
       </button>
@@ -63,8 +63,8 @@ export function GoalGuidePanel() {
     <aside className="pointer-events-auto flex max-h-[min(70vh,24rem)] w-full flex-col overflow-hidden rounded-xl border border-lab-line/80 bg-lab-panel/95 shadow-xl backdrop-blur-md md:max-w-[17rem]">
       <div className="flex items-start justify-between gap-2 border-b border-lab-line/50 px-2.5 py-1.5">
         <div className="min-w-0">
-          <p className="text-[9px] font-semibold uppercase tracking-[0.14em] text-lab-muted">
-            Active goal
+          <p className="text-[9px] font-semibold uppercase tracking-label text-lab-muted">
+            Active recipe
           </p>
           <h3
             className="truncate font-display text-base leading-tight text-lab-ink"
@@ -89,7 +89,7 @@ export function GoalGuidePanel() {
             type="button"
             className="rounded-md px-1.5 py-0.5 text-[11px] text-lab-muted hover:bg-red-50 hover:text-lab-hazard"
             onClick={() => abandonGoal()}
-            title="Abandon goal"
+            title="Leave recipe"
           >
             ✕
           </button>
@@ -172,7 +172,7 @@ export function GoalGuidePanel() {
 
       {done ? (
         <div className="border-t border-lab-line/50 bg-lab-teal/8 px-2.5 py-2">
-          <p className="text-xs font-semibold text-lab-teal">Goal complete</p>
+          <p className="text-xs font-semibold text-lab-teal">Recipe complete</p>
           <p className="mt-0.5 text-[11px] leading-snug text-lab-ink/80">
             {goal.successBlurb}
           </p>
@@ -214,7 +214,7 @@ export function GoalGuidePanel() {
                       </button>
                     ) : (
                       <div className="rounded-md bg-lab-wash/80 px-2 py-1">
-                        <p className="text-[9px] font-semibold uppercase tracking-wider text-lab-muted">
+                        <p className="text-[9px] font-semibold uppercase tracking-label text-lab-muted">
                           {TIER_LABEL[h.tier]}
                         </p>
                         <p className="mt-px text-[11px] leading-snug text-lab-ink">
@@ -228,7 +228,7 @@ export function GoalGuidePanel() {
             </ul>
           ) : null}
           <p className="mt-1.5 text-[9px] text-lab-muted">
-            Highlighted items in Inventory match this goal.{" "}
+            Highlighted items in Inventory match this recipe.{" "}
             <button
               type="button"
               className="underline decoration-lab-line hover:text-lab-ink"

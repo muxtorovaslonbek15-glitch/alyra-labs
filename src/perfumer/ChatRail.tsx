@@ -4,6 +4,7 @@ import { PerfumerChat } from "@/perfumer/PerfumerChat";
 import { PlanPanel } from "@/perfumer/PlanPanel";
 import { useBuilderStore } from "@/store/builderStore";
 import { PanelResizeHandle } from "@/desk/PanelResizeHandle";
+import { RightRailShell } from "@/desk/RightRailShell";
 
 export function ChatRail({
   onBuild,
@@ -29,8 +30,6 @@ export function ChatRail({
   const mode = useBuilderStore((s) => s.mode);
   const buildStepIndex = useBuilderStore((s) => s.buildStepIndex);
   const buildSteps = useBuilderStore((s) => s.buildSteps);
-  const rightWidth = useBuilderStore((s) => s.rightWidth);
-  const setRightWidth = useBuilderStore((s) => s.setRightWidth);
   const bottomChatHeight = useBuilderStore((s) => s.bottomChatHeight);
   const setBottomChatHeight = useBuilderStore((s) => s.setBottomChatHeight);
   const building = mode === "building";
@@ -121,23 +120,13 @@ export function ChatRail({
   }
 
   return (
-    <div className="relative hidden h-full shrink-0 md:flex">
-      <PanelResizeHandle
-        side="right"
-        onResize={(dx) => setRightWidth(rightWidth + dx)}
-      />
-      <aside
-        className="flex h-full shrink-0 flex-col border-l border-lab-line/70 bg-lab-panel"
-        style={{ width: rightWidth }}
-        data-lab-right-chat
-      >
-        {body}
-      </aside>
+    <RightRailShell dataAttr="lab-right-chat">
+      {body}
       {building ? (
         <span className="sr-only">
           Building step {buildStepIndex + 1} of {buildSteps.length}
         </span>
       ) : null}
-    </div>
+    </RightRailShell>
   );
 }

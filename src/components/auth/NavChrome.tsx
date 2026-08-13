@@ -48,13 +48,6 @@ export function NavChrome({ onDark = false }: { onDark?: boolean } = {}) {
         Lab
       </Link>
       <Link
-        href="/teacher"
-        onClick={() => setMenuOpen(false)}
-        className={inMenu ? linkInMenu : linkOnBar}
-      >
-        Teacher
-      </Link>
-      <Link
         href="/market"
         onClick={() => setMenuOpen(false)}
         className={inMenu ? linkInMenu : linkOnBar}
@@ -62,7 +55,7 @@ export function NavChrome({ onDark = false }: { onDark?: boolean } = {}) {
         Market
       </Link>
       <Link
-        href="/lab?tab=chat"
+        href="/lab?audience=composer&tab=chat"
         onClick={() => setMenuOpen(false)}
         className={inMenu ? linkInMenu : linkOnBar}
       >

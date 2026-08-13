@@ -19,8 +19,8 @@ export default function GlobalError({
         style={{
           fontFamily: "system-ui, sans-serif",
           padding: "2rem",
-          background: "#d8e4df",
-          color: "#14241f",
+          background: "#ebe8e2",
+          color: "#0c0c0c",
         }}
       >
         <h1 style={{ fontSize: "1.5rem" }}>Something went wrong</h1>

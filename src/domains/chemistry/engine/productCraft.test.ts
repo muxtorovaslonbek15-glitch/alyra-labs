@@ -43,6 +43,18 @@ describe("productCraft expansions", () => {
     expect(hot?.explanationKey).toBe("product-balm");
   });
 
+  it("casts solid perfume from wax + jojoba + fragrance under heat", () => {
+    const cold = tryProductCraft(chem("beeswax", "jojoba-oil", "rose-oil"));
+    expect(cold?.ok).toBe(false);
+    expect(cold?.explanationKey).toBe("product-solid-perfume-needs-heat");
+    const hot = tryProductCraft(chem("beeswax", "jojoba-oil", "rose-oil"), {
+      hasHeat: true,
+    });
+    expect(hot?.ok).toBe(true);
+    expect(hot?.explanationKey).toBe("product-solid-perfume");
+    expect(hot?.products.some((p) => p.id === "solid-perfume")).toBe(true);
+  });
+
   it("limewater craft: CO2 + Ca(OH)2 → CaCO3", () => {
     const r = resolveChemistry(chem("co2", "caoh2"));
     expect(r.ok).toBe(true);

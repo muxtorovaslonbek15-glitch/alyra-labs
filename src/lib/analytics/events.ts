@@ -14,6 +14,7 @@ export type AnalyticsEventName =
   | "perfume_atelier_open"
   | "daily_star_claim"
   | "star_unlock"
+  | "star_milestone_mailto"
   | "invention_named"
   | "invention_improved"
   | "invention_shared"
@@ -35,7 +36,22 @@ export type AnalyticsEventName =
   | "builder_history_select"
   | "builder_history_new"
   | "builder_history_close"
-  | "builder_chat_achievement";
+  | "builder_chat_achievement"
+  | "profile_prefs_saved"
+  | "consent_personalization_changed"
+  | "consent_chat_learning_changed"
+  | "groq_key_configured"
+  | "groq_key_removed"
+  | "perfumer_chat_sent"
+  | "format_choice"
+  | "groq_key_saved"
+  | "groq_key_deleted"
+  | "consent_updated"
+  | "session_start"
+  | "audience_choose"
+  | "wear_chip"
+  | "perfumer_format_choice"
+  | "interview_slot_answered";
 
 export const ANALYTICS_EVENT_NAMES = new Set<string>([
   "page_view",
@@ -53,6 +69,7 @@ export const ANALYTICS_EVENT_NAMES = new Set<string>([
   "perfume_atelier_open",
   "daily_star_claim",
   "star_unlock",
+  "star_milestone_mailto",
   "invention_named",
   "invention_improved",
   "invention_shared",
@@ -75,4 +92,19 @@ export const ANALYTICS_EVENT_NAMES = new Set<string>([
   "builder_history_new",
   "builder_history_close",
   "builder_chat_achievement",
+  "profile_prefs_saved",
+  "consent_personalization_changed",
+  "consent_chat_learning_changed",
+  "groq_key_configured",
+  "groq_key_removed",
+  "perfumer_chat_sent",
+  "format_choice",
+  "groq_key_saved",
+  "groq_key_deleted",
+  "consent_updated",
+  "session_start",
+  "audience_choose",
+  "wear_chip",
+  "perfumer_format_choice",
+  "interview_slot_answered",
 ]);

@@ -1,8 +1,9 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useCallback, useEffect } from "react";
-import { LabSheet } from "@/desk/LabSheet";
+import { useCallback, useEffect, useState } from "react";
+import { DeskToolButtons } from "@/desk/DeskToolButtons";
+import { MobileBottomDock } from "@/desk/MobileBottomDock";
 import { useMdUp } from "@/desk/useMdUp";
 import { PlanPanel } from "@/perfumer/PlanPanel";
 import { deriveBuildSteps, runBuildQueue } from "@/perfumer/BuildQueue";
@@ -11,7 +12,7 @@ import {
   restoreDeskSnapshot,
 } from "@/perfumer/deskSnapshot";
 import { deskContentsFromBridge } from "@/perfumer/labBridge";
-import { useBuilderStore } from "@/store/builderStore";
+import { planBuildCta, useBuilderStore } from "@/store/builderStore";
 import { useDeskStore } from "@/store/deskStore";
 import { track } from "@/lib/analytics/track";
 import { showToast } from "@/gamification/ToastHost";
@@ -44,7 +45,6 @@ export function MobileBuilderChrome({
   const mdUp = useMdUp();
   const chatSheetOpen = useBuilderStore((s) => s.chatSheetOpen);
   const setChatSheetOpen = useBuilderStore((s) => s.setChatSheetOpen);
-  const setTab = useBuilderStore((s) => s.setTab);
   const mode = useBuilderStore((s) => s.mode);
   const plan = useBuilderStore((s) => s.plan);
   const structured = useBuilderStore((s) => s.structured);
@@ -56,6 +56,7 @@ export function MobileBuilderChrome({
   const finishBuild = useBuilderStore((s) => s.finishBuild);
   const stopBuild = useBuilderStore((s) => s.stopBuild);
   const undoBuild = useBuilderStore((s) => s.undoBuild);
+  const lockPlan = useBuilderStore((s) => s.lockPlan);
 
   // Chat sheet and tutor sheet are mutually exclusive on phone.
   useEffect(() => {
@@ -68,17 +69,43 @@ export function MobileBuilderChrome({
     if (tutorOpen && chatSheetOpen) setChatSheetOpen(false);
   }, [tutorOpen, chatSheetOpen, mdUp, setChatSheetOpen]);
 
-  const openChat = useCallback(() => {
-    setTab("chat");
-    onTutorOpenChange(false);
-  }, [setTab, onTutorOpenChange]);
-
   const closeChat = useCallback(() => {
     setChatSheetOpen(false);
   }, [setChatSheetOpen]);
 
+  const toggleChat = useCallback(() => {
+    setChatSheetOpen(!useBuilderStore.getState().chatSheetOpen);
+  }, [setChatSheetOpen]);
+
+  const [chatMounted, setChatMounted] = useState(false);
+  useEffect(() => {
+    if (chatSheetOpen) setChatMounted(true);
+  }, [chatSheetOpen]);
+
+  const onLock = useCallback(() => {
+    const current = useBuilderStore.getState().plan;
+    const locked = lockPlan();
+    if (!locked || !current) return;
+    track("builder_plan_ready", {
+      mapped: current.mappingReport?.mappedCount ?? 0,
+      unmapped: current.mappingReport?.unmappedCount ?? 0,
+      title: current.title,
+    });
+    celebrateChatAchievement("plan_ready", {
+      detail: current.title || undefined,
+    });
+  }, [lockPlan]);
+
   const onBuild = useCallback(() => {
-    const bridge = useBuilderStore.getState().plan;
+    const state = useBuilderStore.getState();
+    if (
+      state.mode !== "plan_ready" &&
+      state.mode !== "stopped" &&
+      state.mode !== "built"
+    ) {
+      return;
+    }
+    const bridge = state.plan;
     if (!bridge?.lines?.length) return;
     const steps = deriveBuildSteps(bridge);
     const snap = captureDeskSnapshot();
@@ -122,7 +149,15 @@ export function MobileBuilderChrome({
   }, [undoBuild]);
 
   const onInstant = useCallback(() => {
-    const bridge = useBuilderStore.getState().plan;
+    const state = useBuilderStore.getState();
+    if (
+      state.mode !== "plan_ready" &&
+      state.mode !== "stopped" &&
+      state.mode !== "built"
+    ) {
+      return;
+    }
+    const bridge = state.plan;
     if (!bridge) return;
     const contents = deskContentsFromBridge(bridge);
     if (!contents.length) {
@@ -156,7 +191,7 @@ export function MobileBuilderChrome({
         <div className="pointer-events-none absolute inset-x-0 top-2 z-50 flex justify-center px-3 md:hidden">
           <div className="pointer-events-auto flex max-w-sm items-center gap-2 rounded-xl border border-lab-line/70 bg-lab-panel/95 px-3 py-2 shadow-lg backdrop-blur-md">
             <div className="min-w-0 flex-1">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-lab-muted">
+              <p className="text-[10px] font-semibold uppercase tracking-label text-lab-muted">
                 Building
                 {buildSteps.length
                   ? ` · ${Math.min(buildStepIndex + 1, buildSteps.length)}/${buildSteps.length}`
@@ -177,46 +212,92 @@ export function MobileBuilderChrome({
         </div>
       ) : null}
 
-      {/* Plan-ready chip when sheet closed */}
-      {!building && mode === "plan_ready" && plan && !chatSheetOpen ? (
+      {!building && mode === "planning" && plan && !chatSheetOpen ? (
         <div className="pointer-events-none absolute inset-x-0 top-2 z-50 flex justify-center px-3 md:hidden">
-          <button
-            type="button"
-            onClick={openChat}
-            className="pointer-events-auto max-w-sm truncate rounded-xl border border-lab-line/70 bg-lab-panel/95 px-4 py-2.5 text-left text-sm font-medium text-lab-ink shadow-lg backdrop-blur-md"
-          >
-            Plan ready — open Chat to Build
-          </button>
+          <div className="pointer-events-auto flex max-w-sm items-center gap-2 rounded-xl border border-lab-line/70 bg-lab-panel/95 px-2 py-2 shadow-lg backdrop-blur-md">
+            <p className="min-w-0 flex-1 truncate px-2 text-sm font-medium text-lab-ink">
+              {plan.title}
+            </p>
+            <button
+              type="button"
+              onClick={onLock}
+              className="min-h-11 rounded-lg bg-lab-ink px-3.5 text-xs font-semibold text-lab-foam transition hover:bg-black"
+            >
+              Lock
+            </button>
+          </div>
         </div>
       ) : null}
 
-      <LabSheet
+      {!building &&
+      planBuildCta(mode) === "build" &&
+      plan &&
+      !chatSheetOpen ? (
+        <div className="pointer-events-none absolute inset-x-0 top-2 z-50 flex justify-center px-3 md:hidden">
+          <div className="pointer-events-auto flex max-w-sm items-center gap-2 rounded-xl border border-lab-line/70 bg-lab-panel/95 px-2 py-2 shadow-lg backdrop-blur-md">
+            <p className="min-w-0 flex-1 truncate px-2 text-sm font-medium text-lab-ink">
+              {plan.title}
+            </p>
+            <button
+              type="button"
+              onClick={onBuild}
+              disabled={(plan.mappingReport?.mappedCount ?? 0) === 0}
+              className="lab-build-cta lab-build-cta-ready min-h-11 rounded-lg bg-lab-ink px-3.5 text-xs font-semibold text-lab-foam transition hover:bg-black disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              Build
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      <MobileBottomDock
         open={chatSheetOpen}
         onClose={closeChat}
-        title="Perfumer"
+        title="Chat"
         labelledBy="mobile-chat-sheet-title"
-        maxHeightClass="max-h-[92dvh]"
-        footer={
-          <div className="scroll-thin max-h-[40dvh] overflow-y-auto">
-            <PlanPanel
-              bridge={plan}
-              structured={structured}
-              mode={mode}
-              buildStepIndex={buildStepIndex}
-              buildTotal={buildSteps.length}
-              onBuild={onBuild}
-              onStop={onStop}
-              onUndo={onUndo}
-              onInstant={onInstant}
-              compact
-            />
-          </div>
+        nav={
+          <>
+            <button
+              type="button"
+              onClick={toggleChat}
+              aria-pressed={chatSheetOpen}
+              className={`min-h-11 shrink-0 rounded-lg px-2.5 text-[10px] font-semibold whitespace-nowrap transition ${
+                chatSheetOpen
+                  ? "bg-lab-foam text-lab-ink"
+                  : "bg-white/10 text-lab-foam hover:bg-white/20"
+              }`}
+            >
+              Chat
+            </button>
+            <span className="mx-1 h-5 w-px shrink-0 bg-white/15" aria-hidden />
+            <DeskToolButtons layout="phone" />
+          </>
         }
       >
-        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-          <PerfumerChat variant="shell" onCloseSheet={closeChat} />
-        </div>
-      </LabSheet>
+        {chatMounted ? (
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+            <PerfumerChat variant="shell" />
+            <div className="scroll-thin max-h-[36%] shrink-0 overflow-y-auto border-t border-lab-line/60">
+              <PlanPanel
+                bridge={plan}
+                structured={structured}
+                mode={mode}
+                buildStepIndex={buildStepIndex}
+                buildTotal={buildSteps.length}
+                onBuild={onBuild}
+                onStop={onStop}
+                onUndo={onUndo}
+                onInstant={onInstant}
+                compact
+              />
+            </div>
+          </div>
+        ) : (
+          <div className="flex flex-1 items-center justify-center px-4 text-sm text-lab-muted">
+            Opening chat…
+          </div>
+        )}
+      </MobileBottomDock>
     </>
   );
 }

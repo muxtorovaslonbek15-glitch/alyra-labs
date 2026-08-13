@@ -177,7 +177,7 @@ export function FormulaInspector({ preview }: { preview: LiveVesselPreview }) {
 
   return (
     <div className="mb-2 space-y-1.5 rounded-lg border border-lab-line/50 bg-lab-wash/60 px-2 py-1.5">
-      <p className="font-display text-[9px] uppercase tracking-[0.16em] text-lab-teal">
+      <p className="text-[9px] font-semibold uppercase tracking-label text-lab-muted">
         Formula inspector
       </p>
 
@@ -309,7 +309,7 @@ export function FormulaInspector({ preview }: { preview: LiveVesselPreview }) {
 
       {hasOils ? (
         <div className="space-y-1.5 border-t border-lab-line/40 pt-1.5">
-          <p className="text-[9px] font-semibold uppercase tracking-wider text-lab-muted">
+          <p className="text-[9px] font-semibold uppercase tracking-label text-lab-muted">
             Market
           </p>
           {!publishedId ? (

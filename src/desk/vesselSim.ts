@@ -272,14 +272,18 @@ export function tickVesselSim(
   if (heatOn) {
     heatElapsedMs += rawDtMs;
     coolElapsedMs = 0;
+    // Thermal mass: aqueous warms slower so convection reads before simmer.
     const rise = solid
-      ? 0.11 + mat.waxFrac * 0.04
-      : 0.09 + mat.ethanolFrac * 0.05 + mat.aqueousFrac * 0.03;
+      ? 0.1 + mat.waxFrac * 0.03
+      : 0.055 + mat.ethanolFrac * 0.048 + mat.aqueousFrac * 0.022;
     temperature = clamp01(temperature + rise * dt);
     frost = clamp01(frost - 0.35 * dt);
     if (solid) {
-      // Melt chassis — never evaporate wax like water
-      meltFraction = clamp01(meltFraction + (0.14 + temperature * 0.1) * dt);
+      // Melt after softening — never evaporate wax like water
+      if (temperature > 0.56) {
+        const meltRate = 0.08 + (temperature - 0.56) * 0.32;
+        meltFraction = clamp01(meltFraction + meltRate * dt);
+      }
       viscosity = clamp01(0.55 - meltFraction * 0.4);
     } else {
       viscosity = clamp01(viscosity - 0.12 * dt);
@@ -287,19 +291,31 @@ export function tickVesselSim(
   } else if (coolOn) {
     coolElapsedMs += rawDtMs;
     heatElapsedMs = 0;
-    const fall = solid ? 0.1 : 0.08 + mat.aqueousFrac * 0.04;
+    const fall = solid ? 0.1 : 0.055 + mat.aqueousFrac * 0.028;
     temperature = clamp01(temperature - fall * dt);
-    frost = clamp01(frost + (0.12 + (1 - temperature) * 0.08) * dt);
+    // Condensation first, then frost, then ice — ease toward time-gated targets (no pop).
+    const condProgress = clamp01(coolElapsedMs / 2_800);
+    const slushProgress = clamp01(coolElapsedMs / SLUSH_MS);
+    const freezeProgress = clamp01(coolElapsedMs / ICE_MS);
+    const aqueousGate = 0.35 + mat.aqueousFrac * 0.65;
+    const frostTarget = clamp01(
+      condProgress * 0.22 +
+        Math.max(0, slushProgress - 0.22) * 0.4 +
+        Math.max(0, freezeProgress - SLUSH_MS / ICE_MS) * 0.52 * aqueousGate,
+    );
+    frost = easeToward(frost, frostTarget, reduced ? 2.6 : 0.78, dt);
     if (solid) {
       meltFraction = clamp01(meltFraction - (0.12 + frost * 0.08) * dt);
       viscosity = clamp01(0.35 + (1 - meltFraction) * 0.5);
     } else {
-      // Gradual thicken toward slush/ice — frost climbs over SLUSH_MS / ICE_MS
-      const freezeGate = clamp01(coolElapsedMs / ICE_MS);
-      viscosity = clamp01(
-        viscosity +
-          (0.05 + frost * 0.08 + mat.aqueousFrac * 0.06 + freezeGate * 0.04) * dt,
+      const viscTarget = clamp01(
+        0.16 +
+          condProgress * 0.08 +
+          slushProgress * 0.22 * mat.aqueousFrac +
+          freezeProgress * 0.54 * mat.aqueousFrac +
+          frost * 0.1,
       );
+      viscosity = easeToward(viscosity, viscTarget, reduced ? 2.2 : 0.82, dt);
     }
   } else {
     const toward = AMBIENT_TEMP - temperature;
@@ -328,13 +344,15 @@ export function tickVesselSim(
     mat.volatility > 0.05
   ) {
     const boilFactor = clamp01((temperature - 0.62) / 0.38);
+    // Simmer kick: vapor loss climbs once nucleation starts
+    const simmerKick = temperature >= 0.72 ? 1.18 : 0.82;
     const phaseFactor =
       frost > 0.85 ? 0.08 : frost > 0.5 ? 0.35 : 1;
     // Prefer species-weighted loss so ethanol drains faster than water than oils
     const next = contents.map((c) => {
       const vol = volatilityOf(c.chemicalId);
       if (vol < 0.01) return { ...c };
-      const rate = vol * 0.42 * boilFactor * phaseFactor;
+      const rate = vol * 0.42 * boilFactor * simmerKick * phaseFactor;
       const loss = rate * dt;
       return {
         chemicalId: c.chemicalId,

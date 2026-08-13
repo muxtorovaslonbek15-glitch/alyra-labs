@@ -201,7 +201,7 @@ export function ChatDockDropZones({
             : "border-lab-line/90 bg-lab-panel/50"
         }`}
       >
-        <p className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-[11px] font-semibold uppercase tracking-[0.14em] text-lab-ink/70">
+        <p className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-[11px] font-semibold uppercase tracking-label text-lab-ink/70">
           Right{chatDock === "right" ? " · current" : ""}
         </p>
       </div>
@@ -213,7 +213,7 @@ export function ChatDockDropZones({
             : "border-lab-line/90 bg-lab-panel/50"
         }`}
       >
-        <p className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-center text-[11px] font-semibold uppercase tracking-[0.14em] text-lab-ink/70">
+        <p className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-center text-[11px] font-semibold uppercase tracking-label text-lab-ink/70">
           Bottom panel
           {chatDock === "bottom" ? " · current" : ""}
         </p>

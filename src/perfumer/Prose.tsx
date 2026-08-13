@@ -1,5 +1,7 @@
 "use client";
 
+import { stripCostCopy } from "./hideCost";
+
 /** Light prose renderer: paragraphs, bold/italic, lists. No ATX heading chrome. */
 export function Prose({ text }: { text: string }) {
   if (!text) return null;
@@ -8,13 +10,15 @@ export function Prose({ text }: { text: string }) {
   return (
     <div className="space-y-2.5 text-[13px] leading-relaxed text-lab-ink">
       {blocks.map((block, i) => {
-        const lines = block.split("\n").map((l) => l.trimEnd());
+        const stripped = stripCostCopy(block);
+        if (!stripped) return null;
+        const lines = stripped.split("\n").map((l) => l.trimEnd());
         const isList = lines.every(
           (l) => !l.trim() || /^[-*•]\s+/.test(l.trim()) || /^\d+\.\s+/.test(l.trim()),
         );
         const labelOnly =
           lines.length === 1 &&
-          /^(Accord|Formula|Explanation|Improvements|Cost|Sources)\s*:?\s*$/i.test(
+          /^(Accord|Formula|Explanation|Improvements|Sources)\s*:?\s*$/i.test(
             lines[0].trim(),
           );
 
@@ -22,7 +26,7 @@ export function Prose({ text }: { text: string }) {
           return (
             <p
               key={i}
-              className="pt-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-lab-muted"
+              className="pt-1 text-[11px] font-semibold uppercase tracking-label text-lab-muted"
             >
               {lines[0].replace(/:$/, "")}
             </p>

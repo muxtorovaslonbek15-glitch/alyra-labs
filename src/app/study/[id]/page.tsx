@@ -37,7 +37,7 @@ function AggregateStrip({ aggregate }: { aggregate: StudyAggregate }) {
           key={a.key}
           className="rounded-lg border border-lab-line/50 bg-lab-panel/80 px-2.5 py-2"
         >
-          <p className="text-[9px] uppercase tracking-wider text-lab-muted">
+          <p className="text-[9px] uppercase tracking-label text-lab-muted">
             {a.label}
           </p>
           <p className="font-display text-xl text-lab-teal">
@@ -46,7 +46,7 @@ function AggregateStrip({ aggregate }: { aggregate: StudyAggregate }) {
         </div>
       ))}
       <div className="rounded-lg border border-lab-line/50 bg-lab-panel/80 px-2.5 py-2">
-        <p className="text-[9px] uppercase tracking-wider text-lab-muted">
+        <p className="text-[9px] uppercase tracking-label text-lab-muted">
           Panel size
         </p>
         <p className="font-display text-xl text-lab-ink">{aggregate.count}</p>
@@ -146,7 +146,7 @@ export default function StudyPage() {
           </div>
         ) : (
           <>
-            <p className="font-display text-[10px] uppercase tracking-[0.2em] text-lab-teal">
+            <p className="text-[10px] font-semibold uppercase tracking-label text-lab-muted">
               Panel study · {study.mode}
             </p>
             <h1 className="mt-1 font-display text-3xl text-lab-ink">

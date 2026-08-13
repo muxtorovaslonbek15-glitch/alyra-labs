@@ -1,22 +1,37 @@
 import type { Metadata, Viewport } from "next";
-import { Cormorant_Garamond, DM_Sans, JetBrains_Mono } from "next/font/google";
+import { Cormorant_Garamond, JetBrains_Mono, Source_Sans_3 } from "next/font/google";
 import { AuthProvider } from "@/components/auth/AuthProvider";
 import "./globals.css";
 
+/** House pairing: docs/alyra-typography.md — Next vendors at build (no runtime Google CDN). */
 const display = Cormorant_Garamond({
   variable: "--font-display",
-  subsets: ["latin"],
-  weight: ["500", "600", "700"],
+  subsets: ["latin", "latin-ext"],
+  weight: ["400", "500", "600", "700"],
+  style: ["normal", "italic"],
+  display: "swap",
+  fallback: ["Georgia", "Times New Roman", "serif"],
+  adjustFontFallback: true,
 });
 
-const sans = DM_Sans({
+/** Humanist UI — labels, buttons, body. Not Inter / DM Sans / Poppins. */
+const sans = Source_Sans_3({
   variable: "--font-sans",
-  subsets: ["latin"],
+  subsets: ["latin", "latin-ext"],
+  weight: ["400", "500", "600", "700"],
+  style: ["normal", "italic"],
+  display: "swap",
+  fallback: ["system-ui", "sans-serif"],
+  adjustFontFallback: true,
 });
 
 const mono = JetBrains_Mono({
   variable: "--font-mono",
   subsets: ["latin"],
+  weight: ["400", "500"],
+  display: "swap",
+  fallback: ["ui-monospace", "monospace"],
+  adjustFontFallback: true,
 });
 
 export const metadata: Metadata = {

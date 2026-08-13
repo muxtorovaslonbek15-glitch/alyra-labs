@@ -104,7 +104,7 @@ function ProfileFormFields({
   return (
     <form onSubmit={onSubmit} className="mx-auto w-full max-w-md space-y-3">
       <div className="rounded-xl border border-lab-line bg-white/70 px-3 py-2">
-        <p className="text-[10px] uppercase tracking-wider text-lab-muted">XP</p>
+        <p className="text-[10px] uppercase tracking-label text-lab-muted">XP</p>
         <p className="font-display text-2xl text-lab-ink">{xp}</p>
         <p className="truncate text-xs text-lab-muted">{email}</p>
         {(hasName || hasPhone) && onboarding ? (
@@ -116,7 +116,7 @@ function ProfileFormFields({
 
       {showNameField ? (
         <div>
-          <label className="text-[10px] font-semibold uppercase tracking-wider text-lab-muted">
+          <label className="text-[10px] font-semibold uppercase tracking-label text-lab-muted">
             Name
           </label>
           <input
@@ -130,7 +130,7 @@ function ProfileFormFields({
 
       {showPhoneField ? (
         <div>
-          <label className="text-[10px] font-semibold uppercase tracking-wider text-lab-muted">
+          <label className="text-[10px] font-semibold uppercase tracking-label text-lab-muted">
             Phone number
           </label>
           <input
@@ -145,7 +145,7 @@ function ProfileFormFields({
       ) : null}
 
       <div>
-        <label className="text-[10px] font-semibold uppercase tracking-wider text-lab-muted">
+        <label className="text-[10px] font-semibold uppercase tracking-label text-lab-muted">
           Gender
         </label>
         <select
@@ -166,7 +166,7 @@ function ProfileFormFields({
       </div>
 
       <div>
-        <label className="text-[10px] font-semibold uppercase tracking-wider text-lab-muted">
+        <label className="text-[10px] font-semibold uppercase tracking-label text-lab-muted">
           Date of birth
         </label>
         <input
@@ -182,7 +182,7 @@ function ProfileFormFields({
       </div>
 
       <div>
-        <label className="text-[10px] font-semibold uppercase tracking-wider text-lab-muted">
+        <label className="text-[10px] font-semibold uppercase tracking-label text-lab-muted">
           Address {onboarding ? "(optional)" : ""}
         </label>
         <textarea
@@ -194,7 +194,7 @@ function ProfileFormFields({
       </div>
 
       <div>
-        <label className="text-[10px] font-semibold uppercase tracking-wider text-lab-muted">
+        <label className="text-[10px] font-semibold uppercase tracking-label text-lab-muted">
           Pincode {onboarding ? "(optional)" : ""}
         </label>
         <input

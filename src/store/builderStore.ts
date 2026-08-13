@@ -21,6 +21,18 @@ export type BuilderMode =
   | "built"
   | "stopped";
 
+/** PlanPanel CTA: Lock while drafting; Build only after lock. */
+export function planBuildCta(
+  mode: BuilderMode,
+): "lock" | "build" | "stop" | null {
+  if (mode === "planning") return "lock";
+  if (mode === "building") return "stop";
+  if (mode === "plan_ready" || mode === "stopped" || mode === "built") {
+    return "build";
+  }
+  return null;
+}
+
 export interface NarrationLine {
   id: string;
   text: string;
@@ -32,9 +44,11 @@ export interface PanelPrefs {
   leftOpen: boolean;
   rightOpen: boolean;
   leftWidth: number;
+  /** Shared Information / Chat / Wear rail. One key so mode switches do not jump. */
   rightWidth: number;
 }
 
+/** Inventory + right-rail prefs. `rightWidth` is the single rail width. */
 const PANEL_PREFS_KEY = "alyra.builder.panels.v1";
 const CHAT_MODE_KEY = "alyra.builder.chatMode.v1";
 const CHAT_DOCK_KEY = "alyra.builder.chatDock.v1";
@@ -216,6 +230,8 @@ interface BuilderState {
     bridge: LabBridgeFormula | null,
   ) => void;
   setPlan: (bridge: LabBridgeFormula | null) => void;
+  /** Lock a drafted plan so Build can appear. No-op mid-build. */
+  lockPlan: () => boolean;
   beginBuilding: (steps: BuildStep[], snapshot: DeskSnapshot, ac: AbortController) => void;
   reportStep: (step: BuildStep, index: number) => void;
   finishBuild: (result: "done" | "stopped" | "failed") => void;
@@ -372,13 +388,18 @@ export const useBuilderStore = create<BuilderState>((set, get) => ({
 
   setPlanFromStructured: (structured, bridge) => {
     if (!bridge?.lines?.length) {
-      set({ structured, plan: null, mode: "planning" });
+      const mode = get().mode === "building" ? "building" : "planning";
+      set({ structured, plan: null, mode });
+      return;
+    }
+    if (get().mode === "building") {
+      set({ structured, plan: bridge });
       return;
     }
     set({
       structured,
       plan: bridge,
-      mode: "plan_ready",
+      mode: "planning",
       rightSlot: "chat",
       rightOpen: true,
     });
@@ -389,12 +410,24 @@ export const useBuilderStore = create<BuilderState>((set, get) => ({
       set({ plan: null, mode: get().mode === "building" ? get().mode : "idle" });
       return;
     }
+    if (get().mode === "building") {
+      set({ plan: bridge });
+      return;
+    }
     set({
       plan: bridge,
-      mode: "plan_ready",
+      mode: "planning",
       rightSlot: "chat",
       rightOpen: true,
     });
+  },
+
+  lockPlan: () => {
+    const s = get();
+    if (!s.plan?.lines?.length || s.mode === "building") return false;
+    if (s.mode === "plan_ready") return false;
+    set({ mode: "plan_ready" });
+    return true;
   },
 
   beginBuilding: (steps, snapshot, ac) => {

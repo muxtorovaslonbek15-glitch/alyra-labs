@@ -37,6 +37,41 @@ export interface GroqKeyStatus {
   requireUserGroq?: boolean;
 }
 
+export type AgeBand =
+  | "u18"
+  | "18_24"
+  | "25_34"
+  | "35_44"
+  | "45_plus"
+  | "unspecified";
+
+export interface PerfumerProfile {
+  uid: string;
+  locale?: string | null;
+  indiaCity?: string | null;
+  climateHint?: string | null;
+  scentFamiliesLiked?: string[];
+  scentFamiliesDisliked?: string[];
+  notesMentioned?: string[];
+  skinSensitivity?: string | null;
+  budgetBand?: string | null;
+  occasionDefaults?: string[];
+  ageBand?: AgeBand | string | null;
+  formatPreference?: string | null;
+  intensityPreference?: string | null;
+  timeOfDayDefaults?: string[];
+  consentAnalytics?: boolean;
+  consentPersonalization?: boolean;
+  consentChatLearning?: boolean;
+  consentMarketing?: boolean;
+  profileCompleteness?: number;
+  groqConfigured?: boolean;
+  explicitKeys?: string[];
+  learnedSources?: Record<string, string>;
+  createdAt?: string | null;
+  updatedAt?: string | null;
+}
+
 export interface FormulaLine {
   id: string;
   name: string;
@@ -237,6 +272,7 @@ export interface ChatMessage {
   toolTrace?: ToolTraceItem[];
   clientMessageId?: string;
   createdAt?: string;
+  reveal?: import("./interview/types").RevealCardPayload;
 }
 
 export interface ChatSession {
@@ -247,7 +283,11 @@ export interface ChatSession {
   createdAt: string;
   updatedAt: string;
   messages: ChatMessage[];
+  /** Solid vs liquid — set once per brief, drives tin/cup vs beaker Mix. */
+  formatChoice?: PerfumeFormatChoice | null;
 }
+
+export type PerfumeFormatChoice = "Solid" | "EDP" | "Oil";
 
 export interface ChatListItem {
   id: string;

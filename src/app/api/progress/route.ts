@@ -1,4 +1,4 @@
-import { getAdminDb } from "@/lib/server/firebaseAdmin";
+import { getAdminDb, isFirebaseAdminConfigured } from "@/lib/server/firebaseAdmin";
 import {
   enforceRateLimit,
   requireFirebaseUser,
@@ -10,8 +10,87 @@ import {
   sanitizeProgressInput,
   type SanitizedInvention,
 } from "@/lib/server/progressValidate";
+import {
+  isPerfumerLabConfigured,
+  perfumerLab,
+  type LabProfile,
+} from "@/lib/server/perfumerLab";
+import {
+  dualWriteFirestore,
+  firestoreUserToLab,
+  labToFirestorePatch,
+} from "@/lib/server/labMirror";
 
 export const maxDuration = 15;
+
+type ProgressFields = {
+  xp: number;
+  discoveredIds: string[];
+  badgeIds: string[];
+  completedPerfumeIds: string[];
+  stars: number;
+  lastDailyStarAt: number;
+  unlockedShopItemIds: string[];
+  inventions: SanitizedInvention[];
+};
+
+function fromLab(p: LabProfile | null): ProgressFields | null {
+  if (!p) return null;
+  return {
+    xp: p.xp ?? 0,
+    discoveredIds: p.discoveredIds ?? [],
+    badgeIds: p.badgeIds ?? [],
+    completedPerfumeIds: p.completedPerfumeIds ?? [],
+    stars: p.stars ?? 0,
+    lastDailyStarAt: p.lastDailyStarAt ?? 0,
+    unlockedShopItemIds: p.unlockedShopItemIds ?? [],
+    inventions: Array.isArray(p.inventions)
+      ? (p.inventions as SanitizedInvention[])
+      : [],
+  };
+}
+
+async function loadExisting(
+  req: Request,
+  uid: string,
+): Promise<ProgressFields | null> {
+  if (isPerfumerLabConfigured()) {
+    const remote = await perfumerLab<{
+      xp?: number;
+      discoveredIds?: string[];
+      badgeIds?: string[];
+      completedPerfumeIds?: string[];
+      stars?: number;
+      lastDailyStarAt?: number;
+      unlockedShopItemIds?: string[];
+      inventions?: unknown[];
+      profile?: LabProfile;
+    }>(req, "/lab/progress");
+    if (remote.ok) {
+      const p = remote.json.profile ?? remote.json;
+      return fromLab(p);
+    }
+    if (remote.status === 404) {
+      if (!isFirebaseAdminConfigured()) return null;
+      const snap = await getAdminDb().collection("users").doc(uid).get();
+      if (!snap.exists) return null;
+      const fs = fromLab(firestoreUserToLab(uid, snap.data() ?? {}));
+      if (fs) {
+        await perfumerLab(req, "/lab/account", {
+          method: "POST",
+          body: JSON.stringify(firestoreUserToLab(uid, snap.data() ?? {})),
+        });
+      }
+      return fs;
+    }
+    if (!remote.unavailable) return null;
+  }
+
+  if (!isFirebaseAdminConfigured()) return null;
+  const snap = await getAdminDb().collection("users").doc(uid).get();
+  if (!snap.exists) return null;
+  return fromLab(firestoreUserToLab(uid, snap.data() ?? {}));
+}
 
 export async function POST(req: Request) {
   const auth = await requireFirebaseUser(req);
@@ -53,74 +132,100 @@ export async function POST(req: Request) {
     return Response.json({ error: inventionsSanitized.error }, { status: 400 });
   }
 
-  const ref = getAdminDb().collection("users").doc(auth.uid);
-  const snap = await ref.get();
-  if (!snap.exists) {
+  const existing = await loadExisting(req, auth.uid);
+  if (!existing) {
     return Response.json(
       { error: "Profile not found. Complete signup first." },
       { status: 404 },
     );
   }
 
-  const data = snap.data() ?? {};
-  const existing = {
-    xp: typeof data.xp === "number" ? data.xp : 0,
-    discoveredIds: Array.isArray(data.discoveredIds)
-      ? (data.discoveredIds as string[])
-      : [],
-    badgeIds: Array.isArray(data.badgeIds) ? (data.badgeIds as string[]) : [],
-    completedPerfumeIds: Array.isArray(data.completedPerfumeIds)
-      ? (data.completedPerfumeIds as string[])
-      : [],
-    stars: typeof data.stars === "number" ? data.stars : 0,
-  };
-
-  const existingInventions = Array.isArray(data.inventions)
-    ? (data.inventions as SanitizedInvention[])
-    : [];
-
   const { inventions, improveStarEligible } = mergeInventions(
-    existingInventions,
+    existing.inventions,
     inventionsSanitized,
   );
 
   const merged = mergeProgress(existing, sanitized, {
-    improveStarEligible: inventionsOnly ? improveStarEligible : improveStarEligible,
+    improveStarEligible,
   });
+
+  const next: ProgressFields = inventionsOnly
+    ? {
+        ...existing,
+        stars: merged.stars,
+        inventions,
+      }
+    : {
+        ...existing,
+        xp: merged.xp,
+        discoveredIds: merged.discoveredIds,
+        badgeIds: merged.badgeIds,
+        completedPerfumeIds: merged.completedPerfumeIds,
+        stars: merged.stars,
+        inventions:
+          inventionsSanitized.length > 0 ? inventions : existing.inventions,
+      };
+
+  if (isPerfumerLabConfigured()) {
+    const remote = await perfumerLab(req, "/lab/progress", {
+      method: "POST",
+      body: JSON.stringify(next),
+    });
+    if (remote.ok) {
+      const saved = fromLab(remote.json) ?? next;
+      await dualWriteFirestore(auth.uid, labToFirestorePatch(saved));
+      return Response.json({
+        xp: inventionsOnly ? existing.xp : saved.xp,
+        discoveredIds: inventionsOnly
+          ? existing.discoveredIds
+          : saved.discoveredIds,
+        badgeIds: inventionsOnly ? existing.badgeIds : saved.badgeIds,
+        completedPerfumeIds: inventionsOnly
+          ? existing.completedPerfumeIds
+          : saved.completedPerfumeIds,
+        stars: saved.stars,
+        starsGranted: merged.starsGranted,
+        inventions: saved.inventions,
+      });
+    }
+    if (!remote.unavailable) {
+      return Response.json(
+        { error: "Could not save progress" },
+        { status: remote.status || 502 },
+      );
+    }
+  }
+
+  if (!isFirebaseAdminConfigured()) {
+    return Response.json({ error: "Progress store unavailable" }, { status: 503 });
+  }
 
   const update: Record<string, unknown> = {
     updatedAt: Date.now(),
     lastSeenAt: Date.now(),
+    stars: next.stars,
+    inventions: next.inventions,
   };
-
-  if (inventionsOnly) {
-    update.inventions = inventions;
-    update.stars = merged.stars;
-  } else {
-    update.xp = merged.xp;
-    update.discoveredIds = merged.discoveredIds;
-    update.badgeIds = merged.badgeIds;
-    update.completedPerfumeIds = merged.completedPerfumeIds;
-    update.stars = merged.stars;
-    if (inventionsSanitized.length > 0) {
-      update.inventions = inventions;
-    }
+  if (!inventionsOnly) {
+    update.xp = next.xp;
+    update.discoveredIds = next.discoveredIds;
+    update.badgeIds = next.badgeIds;
+    update.completedPerfumeIds = next.completedPerfumeIds;
   }
-
-  await ref.update(update);
+  await getAdminDb().collection("users").doc(auth.uid).update(update);
 
   return Response.json({
-    xp: inventionsOnly ? existing.xp : merged.xp,
+    xp: inventionsOnly ? existing.xp : next.xp,
     discoveredIds: inventionsOnly
       ? existing.discoveredIds
-      : merged.discoveredIds,
-    badgeIds: inventionsOnly ? existing.badgeIds : merged.badgeIds,
+      : next.discoveredIds,
+    badgeIds: inventionsOnly ? existing.badgeIds : next.badgeIds,
     completedPerfumeIds: inventionsOnly
       ? existing.completedPerfumeIds
-      : merged.completedPerfumeIds,
-    stars: merged.stars,
+      : next.completedPerfumeIds,
+    stars: next.stars,
     starsGranted: merged.starsGranted,
-    inventions,
+    inventions: next.inventions,
   });
 }
 
@@ -128,19 +233,18 @@ export async function GET(req: Request) {
   const auth = await requireFirebaseUser(req);
   if ("response" in auth) return auth.response;
 
-  const snap = await getAdminDb().collection("users").doc(auth.uid).get();
-  if (!snap.exists) {
+  const existing = await loadExisting(req, auth.uid);
+  if (!existing) {
     return Response.json({ error: "Not found" }, { status: 404 });
   }
-  const data = snap.data() ?? {};
   return Response.json({
-    xp: data.xp ?? 0,
-    discoveredIds: data.discoveredIds ?? [],
-    badgeIds: data.badgeIds ?? [],
-    completedPerfumeIds: data.completedPerfumeIds ?? [],
-    stars: data.stars ?? 0,
-    lastDailyStarAt: data.lastDailyStarAt ?? 0,
-    unlockedShopItemIds: data.unlockedShopItemIds ?? [],
-    inventions: data.inventions ?? [],
+    xp: existing.xp,
+    discoveredIds: existing.discoveredIds,
+    badgeIds: existing.badgeIds,
+    completedPerfumeIds: existing.completedPerfumeIds,
+    stars: existing.stars,
+    lastDailyStarAt: existing.lastDailyStarAt,
+    unlockedShopItemIds: existing.unlockedShopItemIds,
+    inventions: existing.inventions,
   });
 }

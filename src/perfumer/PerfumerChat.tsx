@@ -8,18 +8,25 @@ import {
   createServerChat,
   deleteServerChat,
   fetchGroqKeyStatus,
+  fetchPerfumerProfile,
   fetchServerChat,
   listServerChats,
   renameServerChat,
+  savePerfumerProfile,
   streamChat,
 } from "./api";
 import { ErrorBanner, WarningBanner } from "./ErrorBanner";
+import { PersonalizeBanner } from "./PersonalizeBanner";
 import {
   GroqKeyOnboarding,
   GroqKeySettingsCard,
 } from "./onboarding/GroqKeyOnboarding";
 import type { GroqOnboardingMode } from "./onboarding/groqSteps";
 import { FormulaCard } from "./FormulaCard";
+import { inferFormatFromText } from "./formatFork";
+import { mergeSignalTexts } from "./profileSignals";
+import { markSolidSession } from "./solidDetect";
+import { useDeskStore } from "@/store/deskStore";
 import {
   ChatModeToggle,
   PlanModeNudge,
@@ -34,6 +41,25 @@ import {
 } from "./storage";
 
 const GROQ_ONBOARD_DISMISS_KEY = "alyra.groqOnboard.dismissed";
+const CONSENT_PROMPT_KEY = "alyra.profile.consentPrompt";
+
+function readConsentPromptDismissed(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    return localStorage.getItem(CONSENT_PROMPT_KEY) === "dismissed";
+  } catch {
+    return false;
+  }
+}
+
+function writeConsentPromptDismissed() {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(CONSENT_PROMPT_KEY, "dismissed");
+  } catch {
+    /* private mode */
+  }
+}
 
 function readGroqOnboardDismissed(): boolean {
   if (typeof window === "undefined") return false;
@@ -70,17 +96,37 @@ import {
   type StreamConnectionState,
 } from "./thoughtTimeline";
 import { useBuilderStore } from "@/store/builderStore";
+import { useWearStore } from "@/wear/wearStore";
 import { useChatSessionsStore } from "@/perfumer/chatSessionsStore";
 import { ChatDockHandle } from "@/desk/ChatDockDrag";
 import { track } from "@/lib/analytics/track";
+import {
+  bindInterviewProfile,
+  buildCannedReveal,
+  buildLiveBrief,
+  InterviewChips,
+  RevealCard,
+  useInterviewStore,
+} from "@/perfumer/interview";
+import { copyLooksLikeCraft } from "@/wear/cannedCopy";
+import { SeeTheCraft } from "@/wear/WearReplyCard";
 import type {
   ChatMessage,
   ChatSession,
   GroqKeyStatus,
   LabBridgeFormula,
   PerfumerApiError,
+  PerfumerProfile,
+  PerfumeFormatChoice,
   ToolTraceItem,
 } from "./types";
+
+function applyFormatChoiceToDesk(format: PerfumeFormatChoice) {
+  if (format === "Solid") markSolidSession();
+  const desk = useDeskStore.getState();
+  if (desk.vessels.length > 0) return;
+  desk.placeEquipment(format === "Solid" ? "tin" : "beaker");
+}
 
 function formatChatTime(iso: string) {
   try {
@@ -127,6 +173,11 @@ export function PerfumerChat({
   const toggleChatHistory = useBuilderStore((s) => s.toggleChatHistory);
   const closeChatHistory = useBuilderStore((s) => s.closeChatHistory);
   const builderMode = useBuilderStore((s) => s.mode);
+  const wearAudience = useWearStore((s) => s.audience === "owner");
+  const ivAct = useInterviewStore((s) => s.act);
+  const ivMessages = useInterviewStore((s) => s.messages);
+  const ivTurn = useInterviewStore((s) => s.currentTurn);
+  const ivReveal = useInterviewStore((s) => s.reveal);
   const buildStepIndex = useBuilderStore((s) => s.buildStepIndex);
   const buildSteps = useBuilderStore((s) => s.buildSteps);
   const publishSessions = useChatSessionsStore((s) => s.publish);
@@ -151,6 +202,11 @@ export function PerfumerChat({
     null,
   );
   const [groqKeyChecked, setGroqKeyChecked] = useState(false);
+  const [perfumerProfile, setPerfumerProfile] =
+    useState<PerfumerProfile | null>(null);
+  const [consentPromptDismissed, setConsentPromptDismissed] = useState(
+    readConsentPromptDismissed,
+  );
   const [keyGuideOpen, setKeyGuideOpen] = useState(false);
   const [keyGuideMode, setKeyGuideMode] =
     useState<GroqOnboardingMode>("onboard");
@@ -168,7 +224,6 @@ export function PerfumerChat({
     typeof navigator !== "undefined" ? !navigator.onLine : false,
   );
   const activeIdRef = useRef<string | null>(null);
-  const planTracked = useRef<string | null>(null);
   const building = builderMode === "building";
   const inputWords = wordCount(input);
 
@@ -256,19 +311,11 @@ export function PerfumerChat({
       const bridge =
         structured.lab_bridge || buildLabBridgeFromStructured(structured);
       if (!bridge?.lines?.length) return;
-      setPlanFromStructured(structured, bridge);
-      const key = `${bridge.title}:${bridge.mappingReport?.mappedCount}:${bridge.lines.length}`;
-      if (planTracked.current !== key) {
-        planTracked.current = key;
-        track("builder_plan_ready", {
-          mapped: bridge.mappingReport?.mappedCount ?? 0,
-          unmapped: bridge.mappingReport?.unmappedCount ?? 0,
-          title: bridge.title,
-        });
-        celebrateChatAchievement("plan_ready", {
-          detail: bridge.title || undefined,
-        });
-      }
+      // Never Zustand-set synchronously from a setChats updater: React re-runs
+      // those during render, which would update MobileBuilderChrome mid-render.
+      queueMicrotask(() => {
+        setPlanFromStructured(structured, bridge);
+      });
     },
     [shell, setPlanFromStructured],
   );
@@ -276,15 +323,6 @@ export function PerfumerChat({
   const onUseInPlan = useCallback(
     (bridge: LabBridgeFormula) => {
       setPlan(bridge);
-      track("builder_plan_ready", {
-        mapped: bridge.mappingReport?.mappedCount ?? 0,
-        unmapped: bridge.mappingReport?.unmappedCount ?? 0,
-        title: bridge.title,
-        from: "formula_card",
-      });
-      celebrateChatAchievement("plan_ready", {
-        detail: bridge.title || undefined,
-      });
     },
     [setPlan],
   );
@@ -446,7 +484,8 @@ export function PerfumerChat({
     if (
       !res.configured &&
       res.requireUserGroq &&
-      !keyOnboardDismissed.current
+      !keyOnboardDismissed.current &&
+      useWearStore.getState().audience !== "owner"
     ) {
       setKeyGuideMode("onboard");
       setKeyGuideOpen(true);
@@ -457,6 +496,47 @@ export function PerfumerChat({
     if (!authReady || !user || !hydrated) return;
     void refreshGroqKeyStatus();
   }, [authReady, user, hydrated, refreshGroqKeyStatus]);
+
+  useEffect(() => {
+    if (!authReady || !user) {
+      setPerfumerProfile(null);
+      return;
+    }
+    let cancelled = false;
+    void fetchPerfumerProfile().then((res) => {
+      if (cancelled || !res.ok) return;
+      setPerfumerProfile(res.profile);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [authReady, user]);
+
+  useEffect(() => {
+    bindInterviewProfile(perfumerProfile, user?.uid ?? null);
+  }, [perfumerProfile, user?.uid]);
+
+  useEffect(() => {
+    if (wearAudience) return;
+    useInterviewStore.getState().ensureStarted({
+      surface: "compose",
+      uid: user?.uid ?? null,
+      profile: perfumerProfile,
+    });
+  }, [wearAudience, user?.uid, perfumerProfile]);
+
+  useEffect(() => {
+    bindInterviewProfile(perfumerProfile, user?.uid ?? null);
+  }, [perfumerProfile, user?.uid]);
+
+  useEffect(() => {
+    if (wearAudience) return;
+    useInterviewStore.getState().ensureStarted({
+      surface: "compose",
+      uid: user?.uid ?? null,
+      profile: perfumerProfile,
+    });
+  }, [wearAudience, user?.uid, perfumerProfile]);
 
   // Server chat list only when signed in (API is auth-gated).
   useEffect(() => {
@@ -608,6 +688,31 @@ export function PerfumerChat({
     if (shell) closeChatHistory();
   }
 
+  function chooseFormat(choice: PerfumeFormatChoice) {
+    const id = activeIdRef.current;
+    if (!id) return;
+    applyFormatChoiceToDesk(choice);
+    updateChats((prev) =>
+      prev.map((c) =>
+        c.id === id
+          ? { ...c, formatChoice: choice, updatedAt: new Date().toISOString() }
+          : c,
+      ),
+    );
+    track("format_choice", { format: choice, source: "fork" });
+    if (
+      perfumerProfile?.consentPersonalization &&
+      perfumerProfile?.consentChatLearning
+    ) {
+      void savePerfumerProfile({
+        formatPreference:
+          choice === "Solid" ? "solid" : choice === "Oil" ? "oil" : "liquid",
+      }).then((res) => {
+        if (res.ok) setPerfumerProfile(res.profile);
+      });
+    }
+  }
+
   function renameChatById(id: string, title: string) {
     const nextTitle = title.trim().slice(0, 120) || "New chat";
     const target = chatsRef.current.find((c) => c.id === id);
@@ -710,6 +815,16 @@ export function PerfumerChat({
       return;
     }
 
+    const inferred =
+      inferFormatFromText(text) ?? current.formatChoice ?? null;
+
+    track("perfumer_chat_sent", {
+      hasConsent: Boolean(perfumerProfile?.consentPersonalization),
+    });
+    if (inferred && inferred !== current.formatChoice) {
+      track("format_choice", { format: inferred, source: "inferred" });
+    }
+
     setBanner(null);
     setBusy(true);
     setInput("");
@@ -741,6 +856,7 @@ export function PerfumerChat({
           ...c,
           title,
           updatedAt: now,
+          formatChoice: inferred ?? c.formatChoice,
           messages: [
             ...c.messages,
             userMsg,
@@ -775,6 +891,10 @@ export function PerfumerChat({
       );
     };
 
+    if (inferred && current.formatChoice !== inferred) {
+      applyFormatChoiceToDesk(inferred);
+    }
+
     const serverId = await ensureServerId(current);
     const historyForApi = current.messages
       .filter((m) => m.role === "user" || m.role === "assistant")
@@ -787,9 +907,21 @@ export function PerfumerChat({
         message: text,
         clientMessageId,
         mode: chatAgentMode,
+        surface: wearAudience ? "wear" : "compose",
         messages: serverId
           ? undefined
           : [...historyForApi, { role: "user", content: text }],
+        brief: inferred
+          ? {
+              goal: text.slice(0, 200),
+              type: inferred,
+              inspiration: "",
+              targetVibe: "",
+              notes: "",
+              issues: "",
+              constraints: "",
+            }
+          : undefined,
       },
       {
         onMeta: ({ chatId, toolTrace }) => {
@@ -868,17 +1000,19 @@ export function PerfumerChat({
         },
         onLabBridge: (payload) => {
           markStreamActivity();
+          let nextStructured: ChatMessage["structured"] | undefined;
           patchAssistant((m) => {
-            const nextStructured = {
+            nextStructured = {
               ...(m.structured || {}),
               lab_bridge: payload,
             };
-            publishPlan(nextStructured);
             return {
               ...m,
               structured: nextStructured,
             };
           });
+          // Publish after the chat patch — not inside the mapper (see publishPlan).
+          publishPlan(nextStructured);
         },
         onDone: (reply, sections, structured, chatId) => {
           streamStartedAtRef.current = null;
@@ -957,7 +1091,94 @@ export function PerfumerChat({
     );
   }
 
+  async function finishComposeInterview() {
+    const iv = useInterviewStore.getState();
+    const canned = buildCannedReveal({
+      answers: iv.answers,
+      skuId: null,
+      seed: iv.seed,
+    });
+    const live = Boolean(user && groqKeyStatus?.configured);
+    if (!live) {
+      iv.setReveal(canned);
+      return;
+    }
+    setBusy(true);
+    await streamChat(
+      {
+        message: buildLiveBrief({
+          answers: iv.answers,
+          surface: "compose",
+        }),
+        mode: chatAgentMode,
+        surface: "compose",
+      },
+      {
+        onStructured: (structured) => {
+          publishPlan(structured);
+        },
+        onDone: (reply, sections, structured) => {
+          const vibe =
+            reply &&
+            !copyLooksLikeCraft(reply) &&
+            !/₹|galaxolide|hhcb|ifra/i.test(reply)
+              ? reply.slice(0, 480)
+              : canned.vibe;
+          const reveal = { ...canned, vibe };
+          iv.setReveal(reveal);
+          const current = chatsRef.current.find((c) => c.id === activeIdRef.current);
+          if (current) {
+            const now = new Date().toISOString();
+            updateChats((prev) =>
+              prev.map((c) =>
+                c.id === current.id
+                  ? {
+                      ...c,
+                      updatedAt: now,
+                      messages: [
+                        ...c.messages,
+                        {
+                          id: `iv-${now}`,
+                          role: "assistant" as const,
+                          content: "",
+                          reveal,
+                          structured,
+                          sections,
+                          status: "ok" as const,
+                          createdAt: now,
+                        },
+                      ],
+                    }
+                  : c,
+              ),
+            );
+          }
+          publishPlan(structured);
+          setBusy(false);
+        },
+        onError: () => {
+          iv.setReveal(canned);
+          setBusy(false);
+        },
+      },
+    );
+  }
+
   async function onSend() {
+    const iv = useInterviewStore.getState();
+    if (
+      !wearAudience &&
+      (iv.act === "interview" || iv.act === "welcome" || iv.act === "idle")
+    ) {
+      const text = input.trim();
+      if (!text || busy) return;
+      setInput("");
+      const next = iv.answerText(text);
+      if (next === "compose") {
+        void finishComposeInterview();
+      }
+      return;
+    }
     await sendText(input);
   }
 
@@ -971,6 +1192,57 @@ export function PerfumerChat({
 
   const messages = active?.messages || [];
   const empty = messages.length === 0 && loadingChatId !== active?.id;
+  const userTexts = messages
+    .filter((m) => m.role === "user")
+    .map((m) => m.content);
+  const showInterviewThread =
+    empty && !wearAudience && ivMessages.length > 0 && ivAct !== "idle";
+
+  const showPersonalize =
+    Boolean(user) &&
+    !wearAudience &&
+    groqKeyChecked &&
+    Boolean(groqKeyStatus?.configured) &&
+    perfumerProfile != null &&
+    !perfumerProfile.consentPersonalization &&
+    !consentPromptDismissed &&
+    (userTexts.length >= 1 || ivMessages.some((m) => m.role === "user"));
+
+  async function acceptPersonalize() {
+    const signals = mergeSignalTexts(userTexts, active?.formatChoice);
+    const iv = useInterviewStore.getState().answers;
+    const res = await savePerfumerProfile({
+      consentPersonalization: true,
+      consentChatLearning: true,
+      ...signals,
+      indiaCity: iv.indiaCity ?? undefined,
+      climateHint: iv.climateHint,
+      occasionDefaults: iv.occasion
+        ? [iv.occasion === "skin" ? "daily" : iv.occasion]
+        : undefined,
+      scentFamiliesLiked: iv.scentFamiliesLiked,
+      scentFamiliesDisliked: iv.scentFamiliesDisliked,
+      notesMentioned: iv.notesMentioned,
+      formatPreference: iv.formatPreference,
+      intensityPreference: iv.intensityPreference,
+      timeOfDayDefaults: iv.timeOfDayDefaults,
+      skinSensitivity: iv.skinSensitivity,
+    });
+    if (!res.ok) return;
+    setPerfumerProfile(res.profile);
+    track("consent_personalization_changed", { on: true });
+    track("consent_chat_learning_changed", { on: true });
+    track("profile_prefs_saved", {
+      completeness: res.profile.profileCompleteness ?? 0,
+      hasCity: Boolean(res.profile.indiaCity),
+      likeCount: (res.profile.scentFamiliesLiked || []).length,
+    });
+  }
+
+  function dismissPersonalize() {
+    writeConsentPromptDismissed();
+    setConsentPromptDismissed(true);
+  }
 
   return (
     <div
@@ -996,6 +1268,7 @@ export function PerfumerChat({
       ) : null}
 
       {user &&
+      !wearAudience &&
       groqKeyChecked &&
       groqKeyStatus &&
       !groqKeyStatus.configured &&
@@ -1020,6 +1293,7 @@ export function PerfumerChat({
       ) : null}
 
       {health &&
+      !wearAudience &&
       !health.groqConfigured &&
       !health.requireUserGroq &&
       groqKeyStatus &&
@@ -1037,6 +1311,15 @@ export function PerfumerChat({
               setKeyGuideMode("onboard");
               setKeyGuideOpen(true);
             }}
+          />
+        </div>
+      ) : null}
+
+      {showPersonalize ? (
+        <div className={shell ? "px-2 pt-2" : "px-3 md:px-0"}>
+          <PersonalizeBanner
+            onAccept={() => void acceptPersonalize()}
+            onDismiss={dismissPersonalize}
           />
         </div>
       ) : null}
@@ -1197,7 +1480,7 @@ export function PerfumerChat({
                     Perfumer
                   </span>
                   {building ? (
-                    <span className="ml-1 rounded-md px-1 py-0.5 text-[9px] font-semibold uppercase leading-none tracking-[0.1em] text-lab-amber">
+                    <span className="ml-1 rounded-md px-1 py-0.5 text-[9px] font-semibold uppercase leading-none tracking-label text-lab-amber">
                       {buildSteps.length
                         ? `${Math.min(buildStepIndex + 1, buildSteps.length)}/${buildSteps.length}`
                         : "Build"}
@@ -1220,7 +1503,7 @@ export function PerfumerChat({
                         ? "Build queue running on the desk"
                         : chatAgentMode === "plan"
                           ? "Plan mode: propose only, no desk pours"
-                          : "Agent mode: tools on, Build still explicit"
+                          : "Agent mode: tools on, lock then Build"
                     }
                   >
                     {building
@@ -1350,7 +1633,7 @@ export function PerfumerChat({
               >
                 Chats
               </button>
-              <h2 className="min-w-0 flex-1 truncate font-display text-base text-lab-ink md:text-lg">
+              <h2 className="min-w-0 flex-1 truncate font-display text-base tracking-display text-lab-ink md:text-lg">
                 {active?.title || "Master Perfumer"}
               </h2>
               {user ? (
@@ -1395,12 +1678,17 @@ export function PerfumerChat({
               <p className="py-8 text-center text-sm text-lab-muted">
                 Loading conversation…
               </p>
-            ) : empty && !narration.length ? (
-              <EmptyState
-                compact={shell}
-                dense={bottomDock}
-                chatAgentMode={chatAgentMode}
+            ) : showInterviewThread ? (
+              <InterviewThread
+                messages={ivMessages}
+                currentSlot={ivTurn?.slot}
+                onChip={(chip) => {
+                  const next = useInterviewStore.getState().answerChip(chip);
+                  if (next === "compose") void finishComposeInterview();
+                }}
               />
+            ) : empty && !narration.length ? (
+              <EmptyState compact={shell} dense={bottomDock} />
             ) : (
               <>
                 {messages.map((m) => (
@@ -1409,6 +1697,7 @@ export function PerfumerChat({
                     message={m}
                     onBuild={shell ? onUseInPlan : undefined}
                     hideLabCta={shell}
+                    presentation={wearAudience ? "wear" : "composer"}
                     connectionState={
                       m.status === "streaming" ? connectionState : "working"
                     }
@@ -1427,7 +1716,7 @@ export function PerfumerChat({
                     key={n.id}
                     className="flex items-baseline gap-2 px-0.5 py-0.5 font-mono text-[11px] text-lab-muted"
                   >
-                    <span className="rounded bg-lab-amber/12 px-1.5 py-px text-[9px] font-semibold uppercase tracking-[0.08em] text-lab-amber">
+                    <span className="rounded bg-lab-amber/12 px-1.5 py-px text-[9px] font-semibold uppercase tracking-label text-lab-amber">
                       build
                     </span>
                     <span className="min-w-0 text-[12px] leading-snug text-lab-ink/85">
@@ -1484,8 +1773,8 @@ export function PerfumerChat({
                 />
                 <p className="truncate text-[10px] text-lab-muted">
                   {chatAgentMode === "plan"
-                    ? "Propose only · Build is explicit"
-                    : "Tools on · Build still explicit"}
+                    ? "Propose only · lock, then Build"
+                    : "Tools on · lock, then Build"}
                 </p>
               </div>
             ) : null}
@@ -1524,13 +1813,9 @@ export function PerfumerChat({
                 }}
                 rows={1}
                 placeholder={
-                  user
-                    ? shell
-                      ? chatAgentMode === "plan"
-                        ? "Plan a brief: vibe, occasion, format…"
-                        : "Brief a vibe, occasion, format…"
-                      : "Brief me: goal, type, vibe…"
-                    : "Sign in to brief the Perfumer…"
+                  ivReveal
+                    ? "Too close? Too sweet? Another hour?"
+                    : "Office, monsoon, close to skin…"
                 }
                 className={
                   shell
@@ -1546,13 +1831,17 @@ export function PerfumerChat({
               <button
                 type="button"
                 onClick={() => {
-                  if (!user) {
+                  const interviewing =
+                    ivAct === "interview" ||
+                    ivAct === "welcome" ||
+                    ivAct === "idle";
+                  if (!user && !interviewing) {
                     openAuthGate();
                     return;
                   }
                   void onSend();
                 }}
-                disabled={busy || building || (!user ? false : !input.trim())}
+                disabled={busy || building || !input.trim()}
                 className={
                   shell
                     ? `shrink-0 self-end rounded-lg bg-lab-ink font-semibold leading-none text-lab-foam transition hover:bg-black disabled:opacity-40 ${
@@ -1563,7 +1852,7 @@ export function PerfumerChat({
                     : "h-12 w-16 shrink-0 self-end rounded-xl bg-lab-ink text-sm font-semibold text-lab-foam transition-opacity hover:bg-black disabled:opacity-50 md:h-11 md:w-auto md:rounded-lg md:px-4"
                 }
               >
-                {user ? "Send" : "Sign in"}
+                Send
               </button>
             </div>
           </div>
@@ -1571,7 +1860,7 @@ export function PerfumerChat({
       </div>
 
       <GroqKeyOnboarding
-        open={keyGuideOpen}
+        open={keyGuideOpen && !wearAudience}
         mode={keyGuideMode}
         onClose={() => {
           keyOnboardDismissed.current = true;
@@ -1598,14 +1887,50 @@ export function PerfumerChat({
   );
 }
 
+function InterviewThread({
+  messages,
+  currentSlot,
+  onChip,
+}: {
+  messages: import("@/perfumer/interview").InterviewMessage[];
+  currentSlot?: import("@/perfumer/interview").InterviewSlot;
+  onChip: (chip: import("@/perfumer/interview").InterviewChip) => void;
+}) {
+  return (
+    <div className="space-y-4">
+      {messages.map((m) =>
+        m.role === "user" ? (
+          <div key={m.id} className="flex justify-end">
+            <p className="max-w-[min(42rem,100%)] rounded-2xl bg-lab-ink px-3 py-2 text-[13px] leading-relaxed text-lab-foam">
+              {m.content}
+            </p>
+          </div>
+        ) : m.reveal ? (
+          <div key={m.id} className="space-y-3">
+            <RevealCard card={m.reveal} />
+            <p className="text-[12px] leading-relaxed text-lab-muted">
+              Build on the desk when the Plan looks right. Nothing silent-pours.
+            </p>
+          </div>
+        ) : (
+          <div key={m.id} className="w-full">
+            <p className="text-sm leading-relaxed text-lab-ink">{m.content}</p>
+            {m.act === "interview" && m.chips && currentSlot === m.slot ? (
+              <InterviewChips chips={m.chips} onPick={onChip} />
+            ) : null}
+          </div>
+        ),
+      )}
+    </div>
+  );
+}
+
 function EmptyState({
   compact,
   dense,
-  chatAgentMode,
 }: {
   compact?: boolean;
   dense?: boolean;
-  chatAgentMode?: "plan" | "agent";
 } = {}) {
   if (compact) {
     return (
@@ -1619,9 +1944,8 @@ function EmptyState({
             dense ? "text-xs" : "text-sm"
           }`}
         >
-          {chatAgentMode === "plan"
-            ? "Plan mode: structure a formula first. Build pours only when you press Build."
-            : "Brief a vibe. Agent drafts a formula; Build pours on the desk when you say so."}
+          I’m the house perfumer. Occasion, climate, skin, then I compose. Not a
+          formula sheet first.
         </p>
       </div>
     );
@@ -1629,14 +1953,11 @@ function EmptyState({
   return (
     <div className="mx-auto flex max-w-md flex-col items-center px-2 py-10 text-center md:py-16">
       <AlyraMark size="md" href={null} className="justify-center" />
-      <p className="mt-6 font-display text-2xl leading-snug tracking-tight text-lab-ink">
-        Hey, welcome to Alyra Labs
+      <p className="mt-6 font-display text-2xl leading-snug tracking-display text-lab-ink">
+        The house perfumer
       </p>
       <p className="mt-3 text-sm leading-relaxed text-lab-muted">
-        I&apos;m your Master Perfumer for Indian makers. Brief me like a client:
-        solid, oil, or EDP, occasion and vibe, and we&apos;ll compose for heat,
-        with materials, IFRA caution, and cost in ₹. Nothing silent-pours.
-        Press Build when the Plan looks right.
+        Occasion, climate, skin, then I compose. Not a formula sheet first.
       </p>
     </div>
   );
@@ -1646,6 +1967,7 @@ function MessageBubble({
   message,
   onBuild,
   hideLabCta,
+  presentation = "composer",
   connectionState = "working",
   onAddKey,
   onRotateKey,
@@ -1653,6 +1975,7 @@ function MessageBubble({
   message: ChatMessage;
   onBuild?: (bridge: LabBridgeFormula) => void;
   hideLabCta?: boolean;
+  presentation?: "composer" | "wear";
   connectionState?: StreamConnectionState;
   onAddKey?: () => void;
   onRotateKey?: () => void;
@@ -1695,16 +2018,6 @@ function MessageBubble({
                 message={w.message}
               />
             ))}
-            {(message.structured?.ifraFlags || []).some(
-              (f) => f.severity === "blocked" || f.severity === "warning",
-            ) ? (
-              <WarningBanner
-                title="IFRA caution"
-                message={(message.structured?.ifraFlags || [])
-                  .map((f) => `${f.name}: ${f.ifraNotes || f.severity}`)
-                  .join(" · ")}
-              />
-            ) : null}
 
             {message.thoughtTimeline ? (
               <AgentTimeline
@@ -1721,9 +2034,9 @@ function MessageBubble({
                     {
                       id: "fallback",
                       kind: "thought",
-                      summary: "Thinking",
+                      summary: "Warming the heart",
                       notes: [
-                        message.thinkingLabel || "Listening to the brief",
+                        message.thinkingLabel || "Making this for you",
                       ],
                       startedAt: Date.now(),
                     },
@@ -1734,7 +2047,9 @@ function MessageBubble({
               />
             ) : null}
 
-            {message.content ? (
+            {message.reveal ? <RevealCard card={message.reveal} /> : null}
+
+            {message.content && !message.reveal ? (
               <div>
                 <Prose text={message.content} />
                 {message.status === "streaming" ? (
@@ -1743,12 +2058,29 @@ function MessageBubble({
               </div>
             ) : null}
 
-            <FormulaCard
-              structured={message.structured}
-              sections={message.sections}
-              onBuild={onBuild}
-              hideLabCta={hideLabCta}
-            />
+            {presentation !== "wear" &&
+            (message.structured?.formula?.formula?.length ||
+              message.sections?.formula) ? (
+              <SeeTheCraft>
+                {(message.structured?.ifraFlags || []).some(
+                  (f) => f.severity === "blocked" || f.severity === "warning",
+                ) ? (
+                  <WarningBanner
+                    title="IFRA caution"
+                    message={(message.structured?.ifraFlags || [])
+                      .map((f) => `${f.name}: ${f.ifraNotes || f.severity}`)
+                      .join(" · ")}
+                  />
+                ) : null}
+                <FormulaCard
+                  structured={message.structured}
+                  sections={message.sections}
+                  onBuild={onBuild}
+                  hideLabCta={hideLabCta}
+                  presentation="craft"
+                />
+              </SeeTheCraft>
+            ) : null}
           </>
         )}
       </div>

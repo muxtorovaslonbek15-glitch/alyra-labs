@@ -21,6 +21,8 @@ import {
   GamificationBar,
   RecipeJournal,
 } from "@/gamification/GamificationBar";
+import { GuestCapBanner } from "@/gamification/GuestCapBanner";
+import { StarMilestoneNotice } from "@/gamification/StarMilestoneNotice";
 import { ToastHost, showToast } from "@/gamification/ToastHost";
 import { useDeskStore } from "@/store/deskStore";
 import { useProgressStore } from "@/store/progressStore";
@@ -35,11 +37,11 @@ import { GoalRewardOverlay } from "@/goals/GoalRewardOverlay";
 import { AuthGateModal } from "@/components/auth/AuthGateModal";
 import { useAuthStore } from "@/store/authStore";
 import { labCopy } from "@/lab/labCopy";
-import { VESSEL_CARD } from "@/desk/vesselLayout";
+import { currentVesselCard, SLOT_ORIGIN_WEAR_PHONE } from "@/desk/vesselLayout";
+import { useMdUp } from "@/desk/useMdUp";
 import { track } from "@/lib/analytics/track";
 import { PerfumeAtelier } from "@/perfume/PerfumeAtelier";
 import { MarketPanel } from "@/perfume/MarketPanel";
-import { StarShopModal } from "@/perfume/StarShopModal";
 import { FreeformPerfumeBuilder } from "@/perfume/FreeformPerfumeBuilder";
 import { getPerfumeRecipe } from "@/domains/chemistry/perfume";
 import { InventionShelf } from "@/invention/InventionShelf";
@@ -63,15 +65,30 @@ import {
   useChatDockDragState,
 } from "@/desk/ChatDockDrag";
 import {
-  LabModeToggle,
   LabOverflowMenu,
   type LabOverflowAction,
 } from "@/desk/LabOverflowMenu";
 import { ChatHistoryCanvas } from "@/perfumer/ChatHistoryCanvas";
 import { useBuilderStore, type BuilderTab } from "@/store/builderStore";
 import { useGoalStore } from "@/store/goalStore";
-import { useDeferredSwap } from "@/animation/usePresence";
+import { STAR_MILESTONE_COUNT } from "@/lib/stars/milestone";
+import {
+  CostumeLayer,
+  costumeLayoutClass,
+  costumeLeftWidthVar,
+} from "@/animation/CostumeLayer";
+import { MOTION_MS } from "@/animation/motion";
+import { useDeferredSwap, usePresence } from "@/animation/usePresence";
 import type { User } from "firebase/auth";
+import {
+  AudienceChooser,
+  ExperienceToggle,
+  WearChrome,
+  WearDeskOverlay,
+  replyToWearChip,
+  useWearStore,
+} from "@/wear";
+import type { OccasionChip } from "@/wear/houseSkus";
 
 const ScanWorkbench = dynamic(
   () => import("@/scan/ScanWorkbench").then((m) => m.ScanWorkbench),
@@ -106,14 +123,15 @@ export function LabShell() {
   const [activeDrag, setActiveDrag] = useState<DragPayload | null>(null);
   const [hydrated, setHydrated] = useState(false);
   const [atelierOpen, setAtelierOpen] = useState(false);
-  const [shopOpen, setShopOpen] = useState(false);
+  const [milestoneForce, setMilestoneForce] = useState(false);
   const [marketOpen, setMarketOpen] = useState(false);
   const [freeformOpen, setFreeformOpen] = useState(false);
   const [tutorOpen, setTutorOpen] = useState(false);
+  const [journalOpen, setJournalOpen] = useState(false);
   const lastRecorded = useRef<string | null>(null);
+  const lastInfoMix = useRef<number | null>(null);
   const deskPointer = useRef<{ x: number; y: number } | null>(null);
 
-  const builderTab = useBuilderStore((s) => s.tab);
   const setBuilderTab = useBuilderStore((s) => s.setTab);
   const leftOpen = useBuilderStore((s) => s.leftOpen);
   const setLeftOpen = useBuilderStore((s) => s.setLeftOpen);
@@ -137,9 +155,63 @@ export function LabShell() {
         ? "lab-dock-fade-in"
         : "";
 
+  const mdUp = useMdUp();
+  const audience = useWearStore((s) => s.audience);
+  const wearHydrated = useWearStore((s) => s.hydrated);
+  const chooserOpen = useWearStore((s) => s.chooserOpen);
+  const skuChooserNeeded = useWearStore((s) => s.skuChooserNeeded);
+  const hydrateWear = useWearStore((s) => s.hydrateFromWindow);
+  const setAudience = useWearStore((s) => s.setAudience);
+  const isWear = audience === "owner";
+  const wearCostume = usePresence(isWear, MOTION_MS.crossfade);
+  const composeCostume = usePresence(!isWear, MOTION_MS.crossfade);
+  const stars = useProgressStore((s) => s.stars);
+  const signedIn = useAuthStore((s) => s.user);
+  const showMilestoneAction =
+    Boolean(signedIn) && stars >= STAR_MILESTONE_COUNT;
+
   useEffect(() => {
     hydratePanelPrefs();
   }, [hydratePanelPrefs]);
+
+  useEffect(() => {
+    hydrateWear();
+  }, [hydrateWear]);
+
+  useEffect(() => {
+    if (!isWear) return;
+    useAuthStore.getState().closeAuthGate();
+    const goals = useGoalStore.getState();
+    goals.setPickerOpen(false);
+    goals.setGuideOpen(false);
+    goals.dismissReward();
+    setJournalOpen(false);
+  }, [isWear]);
+  useEffect(() => {
+    if (!hydrated || !wearHydrated || !isWear) return;
+    if (skuChooserNeeded) return;
+    const desk = useDeskStore.getState();
+    if (!desk.vessels.some((v) => v.equipmentId === "tin")) {
+      desk.placeEquipment(
+        "tin",
+        mdUp ? undefined : { ...SLOT_ORIGIN_WEAR_PHONE },
+      );
+    }
+    const tin = useDeskStore
+      .getState()
+      .vessels.find((v) => v.equipmentId === "tin");
+    if (tin) {
+      if (!mdUp) {
+        desk.moveVessel(tin.instanceId, { ...SLOT_ORIGIN_WEAR_PHONE });
+      }
+      desk.setActiveVessel(tin.instanceId);
+    }
+  }, [hydrated, wearHydrated, isWear, skuChooserNeeded, mdUp]);
+
+  useEffect(() => {
+    if (!hydrated) return;
+    useDeskStore.getState().nudgeOverlappingVessels();
+  }, [hydrated, wearHydrated, isWear, mdUp]);
 
   /** ⌘B / Ctrl+B inventory · ⌘T / Ctrl+T chat|tutor (steal new-tab while in Lab). */
   useEffect(() => {
@@ -162,6 +234,7 @@ export function LabShell() {
       e.preventDefault();
       e.stopPropagation();
       if (key === "b") {
+        if (useWearStore.getState().audience === "owner") return;
         setLeftOpen(!useBuilderStore.getState().leftOpen);
         return;
       }
@@ -214,19 +287,21 @@ export function LabShell() {
       return;
     }
     setPlan(bridge);
+    useBuilderStore.getState().lockPlan();
     storeLabSession(bridge);
-    track("builder_plan_ready", {
-      mapped: bridge.mappingReport?.mappedCount ?? 0,
-      unmapped: bridge.mappingReport?.unmappedCount ?? 0,
-      title: bridge.title,
-      from: "bridge",
-    });
+    useWearStore.getState().setAudience("composer");
     setBuilderTab("chat");
 
     if (!instant) {
       showToast({
-        title: "Plan ready",
-        detail: "Review the plan, then hit Build to pour on the desk.",
+        title: "Plan locked",
+        detail: "Press Build to pour on the desk.",
+      });
+      track("builder_plan_ready", {
+        mapped: bridge.mappingReport?.mappedCount ?? 0,
+        unmapped: bridge.mappingReport?.unmappedCount ?? 0,
+        title: bridge.title,
+        from: "bridge",
       });
       track("perfumer_lab_bridge", {
         mapped: bridge.mappingReport?.mappedCount ?? 0,
@@ -328,24 +403,36 @@ export function LabShell() {
     });
   }
 
-  function onBuilderTab(tab: BuilderTab) {
-    setBuilderTab(tab);
-    if (tab === "tutor") {
-      setTutorOpen(true);
-      track("tutor_open");
+  function onAudienceChange(next: "owner" | "composer") {
+    setAudience(next);
+    track("audience_choose", { audience: next });
+    useWearStore.getState().setSheetOpen(false);
+    if (next === "composer") {
+      setLeftOpen(true);
+      setRightOpen(true);
     } else {
       setTutorOpen(false);
+      setJournalOpen(false);
     }
+    useDeskStore.getState().nudgeOverlappingVessels();
   }
 
-  /** Deep-link: /lab?tab=chat|tutor (legacy ?tab=lab → Chat). Once only. */
+  function onWearChip(chip: OccasionChip) {
+    replyToWearChip(chip);
+    useWearStore.getState().setSheetOpen(true);
+    track("wear_chip", { chip });
+  }
+
+  /** Deep-link: /lab?tab=chat|tutor|information (legacy ?tab=lab → Chat). Once only. */
   useEffect(() => {
     if (typeof window === "undefined" || tabDeepLinkApplied.current) return;
     const params = new URLSearchParams(window.location.search);
     const tab = params.get("tab");
-    if (tab !== "chat" && tab !== "tutor" && tab !== "lab") return;
+    if (tab !== "chat" && tab !== "tutor" && tab !== "lab" && tab !== "information")
+      return;
     tabDeepLinkApplied.current = true;
-    const next: BuilderTab = tab === "tutor" ? "tutor" : "chat";
+    const next: BuilderTab =
+      tab === "tutor" || tab === "information" ? "tutor" : "chat";
     setBuilderTab(next);
     if (next === "tutor") setTutorOpen(true);
     else setTutorOpen(false);
@@ -444,19 +531,27 @@ export function LabShell() {
     const v = vessels.find((x) => x.instanceId === lastExplanationVesselId);
     const result = v?.lastResult;
     if (!result?.discoveryId) return;
+    const mixAt = v?.fx.mixAt ?? 0;
+    if (
+      !isWear &&
+      mixAt > 0 &&
+      mixAt !== lastInfoMix.current &&
+      Date.now() - mixAt < 8000
+    ) {
+      lastInfoMix.current = mixAt;
+      setBuilderTab("tutor");
+      setTutorOpen(true);
+    }
     if (lastRecorded.current === result.discoveryId) return;
     lastRecorded.current = result.discoveryId;
-    const { isNew, xpGained, newBadges, questCompleted } =
-      recordDiscovery(result);
+    const { isNew, newBadges, questCompleted } = recordDiscovery(result);
       track("desk_mix", {
         discoveryId: result.discoveryId,
         ok: result.ok,
       });
     if (isNew) {
       showToast({
-        title: result.ok
-          ? `+${xpGained} XP · Discovery`
-          : `+${xpGained} XP · Hazard noted`,
+        title: result.ok ? "Discovery" : "Hazard noted",
         detail: result.label ?? result.explanationKey,
       });
       for (const badge of newBadges) {
@@ -467,7 +562,7 @@ export function LabShell() {
       }
       if (questCompleted) {
         showToast({
-          title: `Quest complete · +${questCompleted.xpGained} XP`,
+          title: "Quest complete",
           detail: questCompleted.prompt,
         });
       }
@@ -475,12 +570,12 @@ export function LabShell() {
       const quest = useProgressStore.getState().advanceQuestIfNeeded(result);
       if (quest.completed && quest.prompt) {
         showToast({
-          title: `Quest complete · +${quest.xpGained} XP`,
+          title: "Quest complete",
           detail: quest.prompt,
         });
       }
     }
-  }, [vessels, lastExplanationVesselId, recordDiscovery]);
+  }, [vessels, lastExplanationVesselId, recordDiscovery, isWear, setBuilderTab]);
 
   function onDragStart(event: DragStartEvent) {
     const data = event.active.data.current as DragPayload | undefined;
@@ -537,7 +632,10 @@ export function LabShell() {
         if (dropPos && deskEl) {
           const rect = deskEl.getBoundingClientRect();
           position = {
-            x: Math.max(8, dropPos.x - rect.left - VESSEL_CARD.width / 2),
+            x: Math.max(
+              8,
+              dropPos.x - rect.left - currentVesselCard().width / 2,
+            ),
             y: Math.max(8, dropPos.y - rect.top - 40),
           };
         }
@@ -608,6 +706,21 @@ export function LabShell() {
       onDragEnd={onDragEnd}
     >
       <div className="lab-app flex h-dvh flex-col overflow-hidden bg-lab-wash">
+        <CostumeLayer
+          mounted={composeCostume.mounted}
+          visible={composeCostume.visible}
+          className={
+            isWear
+              ? "pointer-events-none absolute inset-x-0 top-0 z-[1]"
+              : undefined
+          }
+        >
+          <GuestCapBanner />
+        </CostumeLayer>
+        <StarMilestoneNotice
+          forceOpen={milestoneForce}
+          onClose={() => setMilestoneForce(false)}
+        />
         <header className="flex shrink-0 items-center justify-between gap-2 border-b border-white/10 bg-lab-ink px-3 py-1.5 md:gap-3 md:px-4">
           <div className="min-w-0 shrink-0">
             <h1 className="leading-none">
@@ -622,71 +735,87 @@ export function LabShell() {
           </div>
           <div className="flex min-w-0 items-center gap-1.5 md:gap-2">
             {mode === "desk" ? (
-              <LabModeToggle
-                value={builderTab}
-                onChange={onBuilderTab}
+              <ExperienceToggle
+                value={audience}
+                onChange={onAudienceChange}
               />
             ) : (
               <button
                 type="button"
                 onClick={() => setMode("desk")}
-                className="flex h-8 items-center rounded-lg bg-lab-foam px-3 text-[10px] font-semibold leading-none text-lab-ink"
+                className="flex h-8 min-h-8 items-center rounded-lg bg-lab-foam px-3 text-xs font-semibold leading-none text-lab-ink outline-none focus-visible:ring-1 focus-visible:ring-white/35"
               >
                 Back to desk
               </button>
             )}
-            <GamificationBar
-              onOpenAtelier={() => {
-                setShopOpen(false);
-                setMarketOpen(false);
-                setFreeformOpen(false);
-                useInventionStore.getState().setShelfOpen(false);
-                setAtelierOpen(true);
-              }}
-              onOpenShop={() => {
-                setAtelierOpen(false);
-                setMarketOpen(false);
-                setFreeformOpen(false);
-                useInventionStore.getState().setShelfOpen(false);
-                setShopOpen(true);
-              }}
-              onOpenMarket={() => {
-                setAtelierOpen(false);
-                setShopOpen(false);
-                setFreeformOpen(false);
-                useInventionStore.getState().setShelfOpen(false);
-                setMarketOpen(true);
-                track("market_open", { from: "bar" });
-              }}
-              onOpenShelf={() => {
-                setAtelierOpen(false);
-                setShopOpen(false);
-                setMarketOpen(false);
-                setFreeformOpen(false);
-                useInventionStore.getState().setShelfOpen(true);
-                track("shelf_open", { from: "bar" });
-              }}
-            />
+            <GamificationBar />
             <LabOverflowMenu
               actions={
-                [
+                (isWear
+                  ? [
+                      {
+                        id: "guide",
+                        label: "How it works",
+                        href: "/lab/guide",
+                      },
+                      {
+                        id: "refill",
+                        label: "Refill on alyra.in",
+                        onClick: () =>
+                          window.open(
+                            "https://www.alyra.in/",
+                            "_blank",
+                            "noopener,noreferrer",
+                          ),
+                      },
+                      ...(showMilestoneAction
+                        ? [
+                            {
+                              id: "milestone",
+                              label: "Write Neil · 30★",
+                              onClick: () => setMilestoneForce(true),
+                              dividerBefore: true,
+                            } satisfies LabOverflowAction,
+                          ]
+                        : []),
+                      {
+                        id: "profile",
+                        label: "Profile",
+                        href: "/profile",
+                        dividerBefore: true,
+                      },
+                    ]
+                  : [
                   {
                     id: "guide",
                     label: "How it works",
                     href: "/lab/guide",
                   },
                   {
+                    id: "information",
+                    label: "Information",
+                    onClick: () => {
+                      setBuilderTab("tutor");
+                      setTutorOpen(true);
+                      track("tutor_open");
+                    },
+                    dividerBefore: true,
+                  },
+                  {
+                    id: "journal",
+                    label: "Recipe log",
+                    onClick: () => setJournalOpen(true),
+                  },
+                  {
                     id: "scan",
                     label: mode === "scan" ? "Back to desk" : "Scan formula",
                     onClick: () =>
                       setMode(mode === "scan" ? "desk" : "scan"),
-                    dividerBefore: true,
                   },
                   {
                     id: "perfume",
                     label: "Perfume Atelier",
                     onClick: () => {
-                      setShopOpen(false);
                       setMarketOpen(false);
                       setFreeformOpen(false);
                       useInventionStore.getState().setShelfOpen(false);
@@ -694,22 +823,10 @@ export function LabShell() {
                     },
                   },
                   {
-                    id: "shop",
-                    label: "Shop",
-                    onClick: () => {
-                      setAtelierOpen(false);
-                      setMarketOpen(false);
-                      setFreeformOpen(false);
-                      useInventionStore.getState().setShelfOpen(false);
-                      setShopOpen(true);
-                    },
-                  },
-                  {
                     id: "market",
                     label: "Market",
                     onClick: () => {
                       setAtelierOpen(false);
-                      setShopOpen(false);
                       setFreeformOpen(false);
                       useInventionStore.getState().setShelfOpen(false);
                       setMarketOpen(true);
@@ -721,7 +838,6 @@ export function LabShell() {
                     label: "Invention Shelf",
                     onClick: () => {
                       setAtelierOpen(false);
-                      setShopOpen(false);
                       setMarketOpen(false);
                       setFreeformOpen(false);
                       useInventionStore.getState().setShelfOpen(true);
@@ -730,21 +846,25 @@ export function LabShell() {
                   },
                   {
                     id: "goals",
-                    label: "Goals",
+                    label: "Recipes",
                     onClick: () => useGoalStore.getState().setPickerOpen(true),
                   },
-                  {
-                    id: "teacher",
-                    label: "Teacher",
-                    href: "/teacher",
-                    dividerBefore: true,
-                  },
+                  ...(showMilestoneAction
+                    ? [
+                        {
+                          id: "milestone",
+                          label: "Write Neil · 30★",
+                          onClick: () => setMilestoneForce(true),
+                        } satisfies LabOverflowAction,
+                      ]
+                    : []),
                   {
                     id: "profile",
                     label: "Profile",
                     href: "/profile",
+                    dividerBefore: true,
                   },
-                ] satisfies LabOverflowAction[]
+                ]) satisfies LabOverflowAction[]
               }
             />
           </div>
@@ -819,6 +939,16 @@ export function LabShell() {
           </div>
         ) : (
           <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden md:flex-row">
+            <CostumeLayer
+              mounted={mdUp || composeCostume.mounted}
+              visible={composeCostume.visible}
+              className={costumeLayoutClass(
+                !isWear,
+                "left",
+                isWear || leftOpen ? "md:overflow-hidden" : "",
+              )}
+              style={costumeLeftWidthVar(!isWear, leftOpen, leftWidth)}
+            >
             <ItemPanel
               desktopOpen={leftOpen}
               desktopWidth={leftWidth}
@@ -828,12 +958,8 @@ export function LabShell() {
                 setBuilderTab("chat");
                 setTutorOpen(false);
               }}
-              onOpenTutor={() => {
-                setBuilderTab("tutor");
-                setTutorOpen(true);
-                track("tutor_open");
-              }}
             />
+            </CostumeLayer>
             <div
               className={`relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden ${
                 dockDisplayed === "bottom" && rightSlot === "chat" && rightOpen
@@ -851,21 +977,35 @@ export function LabShell() {
                 >
                   <DeskSimTicker />
                   <DeskWorkspace
+                    hideTools={wearCostume.mounted}
                     flushBottom={
                       !historyOpen &&
+                      !isWear &&
                       dockDisplayed === "bottom" &&
                       rightSlot === "chat" &&
                       rightOpen
                     }
                     onOpenAtelier={() => {
-                      setShopOpen(false);
                       setMarketOpen(false);
                       setFreeformOpen(false);
                       useInventionStore.getState().setShelfOpen(false);
                       setAtelierOpen(true);
                     }}
                   />
-                  {!historyOpen ? (
+                  <CostumeLayer
+                    mounted={wearCostume.mounted && !historyOpen}
+                    visible={wearCostume.visible}
+                    className="pointer-events-none absolute inset-0 z-30"
+                  >
+                    <WearDeskOverlay
+                      onChip={onWearChip}
+                      onCompose={() => onAudienceChange("composer")}
+                    />
+                  </CostumeLayer>
+                  <CostumeLayer
+                    mounted={composeCostume.mounted && !historyOpen}
+                    visible={composeCostume.visible}
+                  >
                     <div
                       className={`pointer-events-none absolute left-3 right-3 z-30 flex flex-col items-start gap-2 md:left-3 md:right-auto ${
                         dockDisplayed === "bottom" &&
@@ -893,63 +1033,104 @@ export function LabShell() {
                         <GoalGuidePanel />
                       </div>
                     </div>
-                  ) : null}
+                  </CostumeLayer>
                 </div>
-                <ChatHistoryCanvas />
+                {composeCostume.mounted ? <ChatHistoryCanvas /> : null}
               </div>
               {/* Desktop bottom dock — flush under wood; phone keeps sheets */}
-              {dockDisplayed === "bottom" ? (
-                <div className={dockMotionClass}>
-                  <DesktopBuilderChrome dock="bottom" />
-                </div>
-              ) : null}
+              <CostumeLayer
+                mounted={composeCostume.mounted && dockDisplayed === "bottom"}
+                visible={composeCostume.visible}
+                className={`${dockMotionClass}${
+                  isWear
+                    ? " pointer-events-none absolute inset-x-0 bottom-0 z-[1]"
+                    : ""
+                }`}
+              >
+                <DesktopBuilderChrome dock="bottom" />
+              </CostumeLayer>
             </div>
-            <ExplanationPanel
-              mobileOpen={tutorOpen}
-              onMobileOpenChange={(open) => {
-                setTutorOpen(open);
-                if (open) setBuilderTab("tutor");
-              }}
-              desktopOpen={rightSlot === "tutor" && rightOpen}
-              onToggleDesktop={() => {
-                if (rightSlot === "tutor" && rightOpen) {
-                  setRightOpen(false);
-                } else {
-                  setBuilderTab("tutor");
-                }
-              }}
-            />
-            {dockDisplayed === "right" ? (
-              <div className={dockMotionClass}>
-                <DesktopBuilderChrome dock="right" />
-              </div>
-            ) : null}
-            {/* Phone-only Chat/Plan/Build sheets — desktop uses DesktopBuilderChrome */}
+            <div className="contents md:relative md:flex md:h-full md:shrink-0">
+              <CostumeLayer
+                mounted={wearCostume.mounted}
+                visible={wearCostume.visible}
+                className={costumeLayoutClass(isWear, "right")}
+              >
+                <WearChrome
+                  placement="rail"
+                  onAskCompose={() => onAudienceChange("composer")}
+                />
+              </CostumeLayer>
+              <CostumeLayer
+                mounted={composeCostume.mounted}
+                visible={composeCostume.visible}
+                className={costumeLayoutClass(!isWear, "right")}
+              >
+                <ExplanationPanel
+                  mobileOpen={tutorOpen}
+                  onMobileOpenChange={(open) => {
+                    setTutorOpen(open);
+                    if (open) setBuilderTab("tutor");
+                  }}
+                  desktopOpen={rightSlot === "tutor" && rightOpen}
+                  onToggleDesktop={() => {
+                    if (rightSlot === "tutor" && rightOpen) {
+                      setRightOpen(false);
+                    } else {
+                      setBuilderTab("tutor");
+                    }
+                  }}
+                />
+                {dockDisplayed === "right" ? (
+                  <div className={dockMotionClass}>
+                    <DesktopBuilderChrome dock="right" />
+                  </div>
+                ) : null}
+              </CostumeLayer>
+            </div>
+            <CostumeLayer
+              mounted={wearCostume.mounted}
+              visible={wearCostume.visible}
+            >
+              <WearChrome
+                placement="phone"
+                onAskCompose={() => onAudienceChange("composer")}
+              />
+            </CostumeLayer>
+            <CostumeLayer
+              mounted={composeCostume.mounted}
+              visible={composeCostume.visible}
+            >
             <MobileBuilderChrome
               tutorOpen={tutorOpen}
               onTutorOpenChange={setTutorOpen}
             />
+            </CostumeLayer>
+            {composeCostume.mounted ? (
             <ChatDockDropZones
               active={dockDrag.active}
               hover={dockDrag.hover}
               chatDock={chatDock}
             />
+            ) : null}
           </div>
         )}
 
-        <div className="hidden md:block">
-          <RecipeJournal />
-        </div>
-        <ToastHost />
-        <GoalPicker
-          onOpenAtelier={() => {
-            setShopOpen(false);
-            setMarketOpen(false);
-            setFreeformOpen(false);
-            useInventionStore.getState().setShelfOpen(false);
-            setAtelierOpen(true);
-          }}
+        <RecipeJournal
+          open={journalOpen}
+          onClose={() => setJournalOpen(false)}
         />
+        <ToastHost />
+        {composeCostume.mounted ? (
+          <GoalPicker
+            onOpenAtelier={() => {
+              setMarketOpen(false);
+              setFreeformOpen(false);
+              useInventionStore.getState().setShelfOpen(false);
+              setAtelierOpen(true);
+            }}
+          />
+        ) : null}
         <PerfumeAtelier
           open={atelierOpen}
           onClose={() => setAtelierOpen(false)}
@@ -962,13 +1143,18 @@ export function LabShell() {
           open={freeformOpen}
           onClose={() => setFreeformOpen(false)}
         />
-        <StarShopModal open={shopOpen} onClose={() => setShopOpen(false)} />
         <MarketPanel open={marketOpen} onClose={() => setMarketOpen(false)} />
         <InventionShelf />
         <GoalRewardOverlay />
         <GoalProgressWatcher />
         <InventionRemixWatcher />
         <AuthGateModal />
+        {chooserOpen ? (
+          <AudienceChooser
+            onChooseWear={() => onAudienceChange("owner")}
+            onChooseCompose={() => onAudienceChange("composer")}
+          />
+        ) : null}
       </div>
 
       <DragOverlay dropAnimation={null}>

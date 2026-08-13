@@ -60,15 +60,15 @@ export function LabSheet({
       >
         <div className="mx-auto mt-2 h-1 w-9 shrink-0 rounded-full bg-lab-line" />
         <div className="flex items-center justify-between gap-3 border-b border-lab-line/50 px-4 py-3">
-          <div className="min-w-0">
+          <div className="min-w-0 flex-1 pr-2">
             {eyebrow ? (
-              <p className="font-display text-[10px] uppercase tracking-[0.2em] text-lab-muted">
+              <p className="text-[10px] font-semibold uppercase tracking-label text-lab-muted">
                 {eyebrow}
               </p>
             ) : null}
             <h2
               id={titleId}
-              className="font-display text-lg leading-tight text-lab-ink"
+              className="truncate font-display text-lg leading-tight tracking-display text-lab-ink"
             >
               {title}
             </h2>
@@ -76,7 +76,7 @@ export function LabSheet({
           <button
             type="button"
             onClick={onClose}
-            className="min-h-11 shrink-0 rounded-lg bg-lab-ink px-3 text-xs font-semibold text-lab-foam"
+            className="min-h-11 shrink-0 rounded-lg bg-lab-ink px-3 text-xs font-semibold text-lab-foam outline-none focus-visible:ring-1 focus-visible:ring-lab-line"
           >
             Done
           </button>

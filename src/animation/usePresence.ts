@@ -13,7 +13,7 @@ export function usePresence(
   durationMs: number = MOTION_MS.crossfade,
 ): { mounted: boolean; visible: boolean } {
   const reduced = usePrefersReducedMotion();
-  const ms = reduced ? 0 : durationMs;
+  const ms = reduced ? MOTION_MS.reduced : durationMs;
   const [mounted, setMounted] = useState(open);
   const [visible, setVisible] = useState(open);
 
@@ -26,10 +26,6 @@ export function usePresence(
       return () => window.cancelAnimationFrame(id);
     }
     setVisible(false);
-    if (ms <= 0) {
-      setMounted(false);
-      return;
-    }
     const t = window.setTimeout(() => setMounted(false), ms);
     return () => window.clearTimeout(t);
   }, [open, ms]);

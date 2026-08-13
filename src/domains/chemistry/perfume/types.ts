@@ -112,7 +112,7 @@ export interface DailyStarClaimResponse {
   granted: boolean;
   stars: number;
   lastDailyStarAt: number;
-  /** ms until next claim is allowed (0 if grantable now) */
+  /** ms until next IST calendar day (0 if grantable now) */
   nextClaimInMs: number;
   message: string;
 }

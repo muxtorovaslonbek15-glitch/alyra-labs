@@ -133,4 +133,70 @@ describe("livePreviewToFluidState", () => {
     expect(blast?.strength).toBe(1);
     expect(blast?.at).toBe(mixAt);
   });
+
+  it("keeps ice path for watery cool (no wax)", () => {
+    const state = livePreviewToFluidState(preview(), {
+      fx: {},
+      heatAttached: false,
+      coolAttached: true,
+      stirLevel: 0,
+      simViscosity: 0.18,
+    });
+    expect(state.wax).toBe(0);
+    expect(state.cool).toBeGreaterThan(0.5);
+    expect(state.stillWater).toBe(false);
+  });
+
+  it("sets wax from tin / high visc / melt, not from freeze-thick water", () => {
+    const tin = livePreviewToFluidState(preview(), {
+      fx: {},
+      heatAttached: false,
+      stirLevel: 0,
+      isSolidVessel: true,
+      simViscosity: 0.7,
+    });
+    expect(tin.wax).toBeGreaterThan(0.8);
+
+    const oil = livePreviewToFluidState(preview(), {
+      fx: {},
+      heatAttached: false,
+      stirLevel: 0,
+      simViscosity: 0.8,
+    });
+    expect(oil.wax).toBeGreaterThan(0.4);
+
+    const iceWater = livePreviewToFluidState(
+      preview({ effects: [{ kind: "solidify", intensity: "high" }] }),
+      { fx: {}, heatAttached: false, stirLevel: 0, simViscosity: 0.18 },
+    );
+    expect(iceWater.wax).toBe(0);
+    expect(iceWater.solidify).toBeGreaterThan(0.5);
+  });
+
+  it("lengthens viscous stir impulses and marks still water", () => {
+    const watery = livePreviewToFluidState(preview(), {
+      fx: { stirAt: 1_700_000_000_000 },
+      heatAttached: false,
+      stirLevel: 0,
+      simViscosity: 0.12,
+    });
+    const thick = livePreviewToFluidState(preview(), {
+      fx: { stirAt: 1_700_000_000_000 },
+      heatAttached: false,
+      stirLevel: 0,
+      simViscosity: 0.88,
+    });
+    const wStir = watery.impulses.find((i) => i.kind === "stir")!;
+    const tStir = thick.impulses.find((i) => i.kind === "stir")!;
+    expect(wStir.strength).toBeGreaterThan(tStir.strength);
+    expect(tStir.durationMs).toBeGreaterThan(wStir.durationMs);
+
+    const still = livePreviewToFluidState(preview(), {
+      fx: {},
+      heatAttached: false,
+      stirLevel: 0,
+      reducedMotion: true,
+    });
+    expect(still.stillWater).toBe(true);
+  });
 });

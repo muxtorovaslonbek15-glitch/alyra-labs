@@ -22,11 +22,11 @@ export function ScentProfileDetails({
       }`}
     >
       <div className="flex flex-wrap items-center gap-1.5">
-        <span className="rounded-full bg-lab-teal/15 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-lab-teal">
+        <span className="rounded-full bg-lab-teal/15 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-label text-lab-teal">
           {familyLabel(String(profile.family))}
         </span>
         {conc ? (
-          <span className="rounded-full border border-lab-line/60 bg-white px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-lab-muted">
+          <span className="rounded-full border border-lab-line/60 bg-white px-2 py-0.5 text-[9px] font-semibold uppercase tracking-label text-lab-muted">
             {conc}
           </span>
         ) : null}
@@ -53,7 +53,7 @@ export function ScentProfileDetails({
             .filter((n) => n.names.length > 0)
             .map((n) => (
               <div key={n.role}>
-                <p className="text-[9px] font-semibold uppercase tracking-wider text-lab-muted">
+                <p className="text-[9px] font-semibold uppercase tracking-label text-lab-muted">
                   {n.label}
                 </p>
                 <p className="text-[11px] text-lab-ink/90">{n.names.join(" · ")}</p>
@@ -64,7 +64,7 @@ export function ScentProfileDetails({
 
       {profile.ingredients.length > 0 ? (
         <div className="mt-2 border-t border-lab-line/40 pt-2">
-          <p className="text-[9px] font-semibold uppercase tracking-wider text-lab-muted">
+          <p className="text-[9px] font-semibold uppercase tracking-label text-lab-muted">
             Ingredients
           </p>
           <ul className={`mt-1 space-y-1 ${compact ? "" : ""}`}>
@@ -85,7 +85,7 @@ export function ScentProfileDetails({
                   ) : null}
                 </span>
                 {ing.role ? (
-                  <span className="shrink-0 rounded bg-white/80 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-lab-teal">
+                  <span className="shrink-0 rounded bg-white/80 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-label text-lab-teal">
                     {ing.role}
                   </span>
                 ) : null}

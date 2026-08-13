@@ -36,6 +36,7 @@ export const RATE_LIMITS = {
   explain: { limit: 30, windowMs: 60_000 },
   ocr: { limit: 10, windowMs: 60_000 },
   progress: { limit: 60, windowMs: 60_000 },
+  profile: { limit: 30, windowMs: 60_000 },
   "daily-star": { limit: 20, windowMs: 60_000 },
   "stars-unlock": { limit: 30, windowMs: 60_000 },
   "study-rate": { limit: 20, windowMs: 60_000 },

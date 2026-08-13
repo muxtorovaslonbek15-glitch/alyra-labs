@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   getGoal,
   type GoalVisualKind,
@@ -9,7 +9,11 @@ import { resolveScentProfile } from "@/domains/chemistry/perfume";
 import { ScentProfileDetails } from "@/perfume/ScentProfileDetails";
 import { useGoalStore } from "@/store/goalStore";
 import { useInventionStore } from "@/store/inventionStore";
+import { useWearStore } from "@/wear/wearStore";
 import { track } from "@/lib/analytics/track";
+import { composeOverlayOpen, costumeFadeClass } from "@/animation/CostumeLayer";
+import { MOTION_MS } from "@/animation/motion";
+import { usePresence } from "@/animation/usePresence";
 
 function SoapVisual({ caption }: { caption: string }) {
   return (
@@ -30,10 +34,10 @@ function SoapVisual({ caption }: { caption: string }) {
       <div className="reward-soap relative z-10">
         <div className="reward-soap-bar relative h-16 w-28 rounded-[1.1rem] bg-gradient-to-br from-[#f4e7c8] via-[#e8d4a8] to-[#d4b87a] shadow-[0_10px_20px_rgba(20,36,31,0.28),inset_0_2px_0_rgba(255,255,255,0.55)]">
           <div className="absolute inset-x-3 top-2.5 rounded-md border border-[#c9a86a]/55 bg-[#c9a86a]/15 px-1 py-0.5 text-center">
-            <p className="font-display text-[11px] font-bold tracking-[0.18em] text-[#6b4e1f]">
+            <p className="text-[11px] font-semibold uppercase tracking-label text-[#6b4e1f]">
               REACTO
             </p>
-            <p className="text-[7px] font-semibold uppercase tracking-[0.22em] text-[#8a6a2f]/90">
+            <p className="text-[7px] font-semibold uppercase tracking-label text-[#8a6a2f]/90">
               Alyra Labs
             </p>
           </div>
@@ -82,7 +86,7 @@ function BottleVisual({
           }}
         >
           <div className="absolute inset-x-2 bottom-2 top-6 rounded-b-xl bg-lab-teal/20" />
-          <p className="absolute inset-x-0 top-1 text-center font-display text-[8px] font-bold tracking-wider text-lab-teal">
+          <p className="absolute inset-x-0 top-1 text-center text-[8px] font-semibold uppercase tracking-label text-lab-teal">
             {label}
           </p>
         </div>
@@ -250,8 +254,8 @@ function ProductVisual({
 }
 
 export function GoalRewardOverlay() {
+  const isWear = useWearStore((s) => s.audience === "owner");
   const rewardGoalId = useGoalStore((s) => s.rewardGoalId);
-  const rewardXp = useGoalStore((s) => s.rewardXp);
   const rewardStars = useGoalStore((s) => s.rewardStars);
   const dismissReward = useGoalStore((s) => s.dismissReward);
   const setPickerOpen = useGoalStore((s) => s.setPickerOpen);
@@ -309,7 +313,13 @@ export function GoalRewardOverlay() {
     return () => window.removeEventListener("keydown", onKey);
   }, [rewardGoalId, dismissReward, skipNaming]);
 
-  if (!rewardGoalId || !goal) return null;
+  const live = composeOverlayOpen(isWear, Boolean(rewardGoalId && goal));
+  const { mounted, visible } = usePresence(live, MOTION_MS.crossfade);
+  const paintedGoal = useRef(goal);
+  if (goal) paintedGoal.current = goal;
+  const shown = goal ?? paintedGoal.current;
+
+  if (!mounted || !shown) return null;
 
   function saveToShelf() {
     const inv = confirmName(name.trim() || suggested);
@@ -340,7 +350,10 @@ export function GoalRewardOverlay() {
 
   return (
     <div
-      className="fixed inset-0 z-[60] flex items-center justify-center bg-lab-ink/55 p-4 backdrop-blur-[3px]"
+      className={costumeFadeClass(
+        visible,
+        "fixed inset-0 z-[60] flex items-center justify-center bg-lab-ink/55 p-4 backdrop-blur-[3px]",
+      )}
       role="dialog"
       aria-modal="true"
       aria-label="Goal reward"
@@ -354,31 +367,23 @@ export function GoalRewardOverlay() {
         onClick={(e) => e.stopPropagation()}
       >
         <div className="shrink-0 border-b border-lab-line/50 bg-gradient-to-br from-lab-teal/15 via-lab-panel to-lab-amber/10 px-4 pb-3 pt-4 text-center">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-lab-teal">
+          <p className="text-[10px] font-semibold uppercase tracking-label text-lab-teal">
             {phase === "named" ? "On your Shelf" : "You made it"}
           </p>
-          <h2 className="mt-1 font-display text-2xl tracking-tight text-lab-ink">
+          <h2 className="mt-1 font-display text-2xl tracking-display text-lab-ink">
             {phase === "named"
               ? `“${name.trim() || suggested}”`
-              : `${goal.icon} You made it!`}
+              : `${shown.icon} You made it!`}
           </h2>
           <p className="mt-1 text-sm font-semibold text-lab-ink/90">
             {phase === "named"
               ? "This is yours — remix it anytime."
-              : `${goal.title.replace(/^Make /i, "")} — the real deal`}
+              : `${shown.title.replace(/^Make /i, "")} — the real deal`}
           </p>
           <div className="mt-2 flex flex-wrap items-center justify-center gap-2">
-            <div className="inline-flex items-baseline gap-1.5 rounded-full bg-lab-ink px-3 py-1 text-lab-foam">
-              <span className="text-[10px] uppercase tracking-wider text-lab-glass">
-                XP
-              </span>
-              <span className="font-display text-lg leading-none">
-                +{rewardXp}
-              </span>
-            </div>
             {rewardStars > 0 ? (
               <div className="inline-flex items-baseline gap-1.5 rounded-full bg-lab-amber px-3 py-1 text-lab-ink">
-                <span className="text-[10px] uppercase tracking-wider">★</span>
+                <span className="text-[10px] uppercase tracking-label">★</span>
                 <span className="font-display text-lg leading-none">
                   +{rewardStars}
                 </span>
@@ -386,7 +391,7 @@ export function GoalRewardOverlay() {
             ) : null}
             {namingPending ? (
               <div className="inline-flex items-baseline gap-1.5 rounded-full border border-lab-teal/40 bg-white px-3 py-1 text-lab-teal">
-                <span className="text-[10px] uppercase tracking-wider">
+                <span className="text-[10px] uppercase tracking-label">
                   Score
                 </span>
                 <span className="font-display text-lg leading-none">
@@ -399,17 +404,17 @@ export function GoalRewardOverlay() {
 
         <div className="scroll-thin min-h-0 flex-1 overflow-y-auto px-4 py-4">
           <ProductVisual
-            kind={goal.visualKind}
-            caption={goal.rewardCaption}
-            title={goal.title}
+            kind={shown.visualKind}
+            caption={shown.rewardCaption}
+            title={shown.title}
           />
           <p className="mt-3 text-center text-[12px] leading-snug text-lab-ink/85">
-            {goal.successBlurb}
+            {shown.successBlurb}
           </p>
 
           {scentProfile ? (
             <div className="mt-3">
-              <p className="mb-1.5 text-center text-[10px] font-semibold uppercase tracking-[0.18em] text-lab-muted">
+              <p className="mb-1.5 text-center text-[10px] font-semibold uppercase tracking-label text-lab-muted">
                 Perfume dossier
               </p>
               <ScentProfileDetails profile={scentProfile} />
@@ -419,7 +424,7 @@ export function GoalRewardOverlay() {
           {phase === "celebrate" ? (
             <div className="mt-3">
               <label className="block text-center">
-                <span className="text-[10px] font-semibold uppercase tracking-wider text-lab-muted">
+                <span className="text-[10px] font-semibold uppercase tracking-label text-lab-muted">
                   Name your creation
                 </span>
                 <input

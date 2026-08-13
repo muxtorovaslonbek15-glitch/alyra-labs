@@ -149,7 +149,7 @@ function ChipStrip({ chips }: { chips: string[] }) {
       {chips.map((c) => (
         <span
           key={c}
-          className="rounded border border-lab-line/70 bg-lab-panel px-1.5 py-px font-mono text-[9px] uppercase tracking-[0.08em] text-lab-muted"
+          className="rounded border border-lab-line/70 bg-lab-panel px-1.5 py-px font-mono text-[9px] uppercase tracking-label text-lab-muted"
         >
           {c}
         </span>

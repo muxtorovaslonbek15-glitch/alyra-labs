@@ -17,9 +17,9 @@ export interface SolidChassisRatios {
   fragranceLoadPercent: number;
 }
 
-const SOLID_BRIEF_RE =
+export const SOLID_BRIEF_RE =
   /\b(solid|balm|wax|tin|compact|puck|beeswax|candelilla|press[- ]to[- ]skin|alcohol[- ]free)\b/i;
-const LIQUID_BRIEF_RE =
+export const LIQUID_BRIEF_RE =
   /\b(edp|eau\b|spray|mist|ethanol|alcohol\s+spray|juice|parfum\b|edt\b)\b/i;
 
 const ALYRA_SOLID_SKUS = new Set([

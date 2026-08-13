@@ -23,7 +23,7 @@ function ProfilePageInner() {
     <div className="flex min-h-dvh flex-col bg-lab-wash">
       <AppHeader subtitle="Your account and lab profile." />
       <div className="mx-auto w-full max-w-md flex-1 px-4 py-8">
-        <h1 className="font-display text-3xl text-lab-ink">
+        <h1 className="font-display text-3xl tracking-display text-lab-ink">
           {onboarding ? "Personalize your lab" : "Profile"}
         </h1>
         <p className="mt-1 text-sm text-lab-muted">

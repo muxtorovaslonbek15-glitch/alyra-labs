@@ -56,7 +56,7 @@ function CtaRow({
         Open Lab
       </Link>
       <Link
-        href="/lab?tab=chat"
+        href="/lab?audience=composer&tab=chat"
         className={
           dark
             ? "inline-flex min-h-11 items-center justify-center rounded-xl border border-white/25 px-5 text-sm font-semibold text-lab-foam transition hover:bg-white/10"
@@ -85,10 +85,10 @@ export default function LabGuidePage() {
         <div className="relative mx-auto flex max-w-4xl flex-col gap-8 px-5 py-14 md:px-8 md:py-20">
           <AlyraMark size="md" href="/lab" onDark />
           <div className="space-y-4">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-lab-glass">
+            <p className="text-[11px] font-semibold uppercase tracking-label text-lab-glass">
               Lab guide
             </p>
-            <h1 className="max-w-2xl font-display text-4xl leading-[1.1] tracking-tight md:text-5xl">
+            <h1 className="max-w-2xl font-display text-4xl leading-[1.1] tracking-display md:text-5xl">
               Paste this. Get that.
             </h1>
             <p className="max-w-xl text-base leading-relaxed text-lab-foam/75 md:text-lg">
@@ -119,7 +119,7 @@ export default function LabGuidePage() {
 
       <div className="mx-auto max-w-4xl space-y-20 px-5 py-14 md:px-8 md:py-20">
         <section id="how" className="scroll-mt-24">
-          <h2 className="font-display text-3xl tracking-tight text-lab-ink md:text-4xl">
+          <h2 className="font-display text-3xl tracking-display text-lab-ink md:text-4xl">
             How it works
           </h2>
           <ol className="mt-8 grid gap-4 sm:grid-cols-3">
@@ -132,7 +132,7 @@ export default function LabGuidePage() {
               {
                 n: "2",
                 t: "Paste into Chat",
-                d: "Open Chat (Tutor | Chat toggle). Send the brief.",
+                d: "Open Chat (Information | Chat toggle). Send the brief.",
               },
               {
                 n: "3",
@@ -171,7 +171,7 @@ export default function LabGuidePage() {
               className="scroll-mt-24 space-y-8"
             >
               <div>
-                <h2 className="font-display text-3xl tracking-tight text-lab-ink md:text-4xl">
+                <h2 className="font-display text-3xl tracking-display text-lab-ink md:text-4xl">
                   {intro.title}
                 </h2>
                 <p className="mt-3 max-w-2xl text-base leading-relaxed text-lab-muted">
@@ -188,7 +188,7 @@ export default function LabGuidePage() {
         })}
 
         <section id="tips" className="scroll-mt-24">
-          <h2 className="font-display text-3xl tracking-tight text-lab-ink md:text-4xl">
+          <h2 className="font-display text-3xl tracking-display text-lab-ink md:text-4xl">
             Quick tips
           </h2>
           <ul className="mt-8 space-y-4">
@@ -198,8 +198,8 @@ export default function LabGuidePage() {
                 d: "Chat proposes materials, %, mapping, and ₹. Nothing pours until you press Build.",
               },
               {
-                t: "Tutor | Chat only",
-                d: "The right slot toggles Tutor or Chat. There is no Lab tab. Deep-link with /lab?tab=chat.",
+                t: "Wear | Compose",
+                d: "Bare /lab is the chemist bench. Wear is a companion for the compact you already own — first-run chooser, persisted preference, or /lab?audience=owner.",
               },
               {
                 t: "Shortcuts on desktop",

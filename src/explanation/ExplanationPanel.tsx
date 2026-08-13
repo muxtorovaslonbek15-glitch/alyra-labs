@@ -16,7 +16,7 @@ import { useProgressStore } from "@/store/progressStore";
 import { useAuthStore } from "@/store/authStore";
 import { getAuthHeaders } from "@/lib/client/authHeaders";
 import { labCopy } from "@/lab/labCopy";
-import { track } from "@/lib/analytics/track";
+import { RightRailShell } from "@/desk/RightRailShell";
 
 type StreamError = "auth" | "rate" | "other";
 
@@ -258,81 +258,82 @@ export function ExplanationPanel({
           <button
             type="button"
             onClick={onToggleDesktop}
-            aria-label="Show tutor"
-            title="Show tutor"
-            className="absolute right-0 top-1/2 z-20 flex h-16 w-5 -translate-y-1/2 items-center justify-center rounded-l-md border border-r-0 border-lab-line/70 bg-lab-panel/95 text-lab-muted shadow-sm hover:text-lab-ink"
+            aria-label="Show information"
+            title="Show information"
+            className="absolute right-0 top-1/2 z-20 flex h-16 w-5 -translate-y-1/2 items-center justify-center rounded-l-md border border-r-0 border-lab-line/70 bg-lab-panel/95 text-lab-muted shadow-sm outline-none hover:text-lab-ink focus-visible:ring-1 focus-visible:ring-lab-line"
           >
             ‹
           </button>
         </div>
       ) : null}
-      {/* Desktop tutor rail — `hidden` baseline; `md:flex` only when open */}
-      <aside
-        className={`panel-glass relative hidden w-full shrink-0 flex-col md:h-full md:w-[13.5rem] md:border-l md:border-lab-line/60 xl:w-[15rem] ${
-          desktopOpen ? "md:flex" : "md:hidden"
-        }`}
-      >
-        <div className="flex w-full items-center justify-between border-b border-lab-line/50 px-2.5 py-2 text-left">
-          <div>
-            <p className="font-display text-[10px] uppercase tracking-[0.2em] text-lab-teal">
-              Lab tutor
-            </p>
-            <h2 className="mt-0.5 font-display text-base leading-tight text-lab-ink">
-              What happened
-            </h2>
+      {/* Desktop Information rail — `hidden` baseline; RightRailShell is md+ only */}
+      {desktopOpen ? (
+        <RightRailShell
+          asideClassName="panel-glass border-lab-line/60"
+          dataAttr="lab-right-info"
+        >
+          <div className="flex w-full items-center justify-between border-b border-lab-line/50 px-2.5 py-2 text-left">
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-label text-lab-muted">
+                Information
+              </p>
+              <h2 className="mt-0.5 font-display text-base leading-tight tracking-display text-lab-ink">
+                What happened
+              </h2>
+            </div>
+            {onToggleDesktop ? (
+              <button
+                type="button"
+                onClick={onToggleDesktop}
+                aria-label="Hide information"
+                className="flex h-7 w-7 items-center justify-center rounded-md text-lab-muted outline-none hover:bg-lab-wash hover:text-lab-ink focus-visible:ring-1 focus-visible:ring-lab-line"
+              >
+                ›
+              </button>
+            ) : null}
           </div>
-          {onToggleDesktop ? (
-            <button
-              type="button"
-              onClick={onToggleDesktop}
-              aria-label="Hide tutor"
-              className="flex h-7 w-7 items-center justify-center rounded-md text-lab-muted hover:bg-lab-wash hover:text-lab-ink"
-            >
-              ›
-            </button>
-          ) : null}
-        </div>
-        <div className="scroll-thin flex-1 overflow-y-auto px-2.5 py-2 text-xs leading-snug text-lab-ink/90">
-          <TutorBody
-            result={result}
-            livePreview={livePreview}
-            user={user}
-            authReady={authReady}
-            waiting={waiting}
-            banner={banner}
-            showSignInBanner={showSignInBanner}
-            text={text}
-            source={source ?? undefined}
-            scentProfile={scentProfile}
-            retrying={retrying}
-            onRetry={() => void retry()}
-          />
-        </div>
-      </aside>
+          <div className="scroll-thin flex-1 overflow-y-auto px-2.5 py-2 text-xs leading-snug text-lab-ink/90">
+            <TutorBody
+              result={result}
+              livePreview={livePreview}
+              user={user}
+              authReady={authReady}
+              waiting={waiting}
+              banner={banner}
+              showSignInBanner={showSignInBanner}
+              text={text}
+              source={source ?? undefined}
+              scentProfile={scentProfile}
+              retrying={retrying}
+              onRetry={() => void retry()}
+            />
+          </div>
+        </RightRailShell>
+      ) : null}
 
       {expanded ? (
         <div
           className="fixed inset-0 z-[280] flex flex-col justify-end md:hidden"
           role="dialog"
           aria-modal="true"
-          aria-labelledby="tutor-sheet-title"
+          aria-labelledby="info-sheet-title"
         >
           <button
             type="button"
             className="absolute inset-0 bg-lab-ink/45"
-            aria-label="Close tutor"
+            aria-label="Close information"
             onClick={() => setExpanded(false)}
           />
           <div className="relative flex max-h-[72dvh] flex-col rounded-t-2xl border border-lab-line bg-lab-panel pb-[env(safe-area-inset-bottom,0px)] shadow-2xl">
             <div className="mx-auto mt-2 h-1 w-9 shrink-0 rounded-full bg-lab-line" />
             <div className="flex items-center justify-between gap-3 border-b border-lab-line/50 px-4 py-3">
               <div className="min-w-0">
-                <p className="font-display text-[10px] uppercase tracking-[0.2em] text-lab-muted">
-                  Lab tutor
+                <p className="text-[10px] font-semibold uppercase tracking-label text-lab-muted">
+                  Information
                 </p>
                 <h2
-                  id="tutor-sheet-title"
-                  className="font-display text-lg leading-tight text-lab-ink"
+                  id="info-sheet-title"
+                  className="font-display text-lg leading-tight tracking-display text-lab-ink"
                 >
                   What happened
                 </h2>
@@ -408,7 +409,7 @@ function TutorBody({
               <Link href="/login" className="font-semibold underline">
                 Sign in
               </Link>{" "}
-              to unlock the live lab tutor after Mix.
+              to unlock live notes after Mix.
             </p>
           ) : null}
         </div>
@@ -423,7 +424,7 @@ function TutorBody({
             </p>
           ) : waiting ? (
             <p className="text-lab-muted motion-safe:animate-pulse">
-              Consulting the lab tutor…
+              Looking up what happened…
             </p>
           ) : (
             <>
@@ -474,7 +475,7 @@ function TutorBody({
                   {retrying ? "…" : "Explain again"}
                 </button>
                 {source ? (
-                  <p className="text-[9px] uppercase tracking-wider text-lab-muted">
+                  <p className="text-[9px] uppercase tracking-label text-lab-muted">
                     {source === "tutor"
                       ? labCopy.tutorLive
                       : source === "saved"

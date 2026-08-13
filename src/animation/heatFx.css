@@ -1,0 +1,176 @@
+/* Heat / melt / boil — scoped under .lab-heat-fx. DESIGN.md: presence, lab-amber. */
+
+.lab-heat-well {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(
+    ellipse at 50% 92%,
+    rgba(184, 149, 108, 0.22),
+    transparent 64%
+  );
+}
+
+.lab-heat-fx .lab-heat-exo {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(
+    ellipse at 50% 88%,
+    rgba(184, 149, 108, 0.26),
+    transparent 68%
+  );
+  animation: heat-well-breathe 1.6s ease-in-out infinite;
+}
+
+@keyframes heat-well-breathe {
+  0%,
+  100% {
+    opacity: 0.85;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@keyframes heat-shimmer {
+  0%,
+  100% {
+    transform: translateY(0) scaleX(1);
+    filter: blur(5px);
+    opacity: 0.22;
+  }
+  50% {
+    transform: translateY(-5px) scaleX(1.04);
+    filter: blur(7px);
+    opacity: 0.48;
+  }
+}
+
+.lab-heat-shimmer {
+  background: linear-gradient(
+    180deg,
+    rgba(184, 149, 108, 0.2),
+    transparent 78%
+  );
+  animation: heat-shimmer 1.45s ease-in-out infinite;
+  pointer-events: none;
+}
+
+@keyframes heat-band {
+  0% {
+    transform: translateY(8px) scaleX(0.88);
+    opacity: 0.08;
+  }
+  45% {
+    transform: translateY(-6px) scaleX(1.06);
+    opacity: 0.42;
+  }
+  100% {
+    transform: translateY(-18px) scaleX(0.94);
+    opacity: 0;
+  }
+}
+
+.lab-heat-band {
+  background: linear-gradient(
+    180deg,
+    transparent,
+    rgba(184, 149, 108, 0.22) 45%,
+    transparent
+  );
+  animation: heat-band 1.9s ease-out infinite;
+}
+
+@keyframes heat-flash {
+  0% {
+    opacity: 0;
+    transform: scaleY(0.35);
+  }
+  28% {
+    opacity: 0.85;
+    transform: scaleY(1);
+  }
+  100% {
+    opacity: 0;
+    transform: scaleY(1.12);
+  }
+}
+
+.lab-heat-flash {
+  background: radial-gradient(
+    ellipse at center bottom,
+    rgba(184, 149, 108, 0.55),
+    rgba(196, 180, 154, 0.18) 48%,
+    transparent 74%
+  );
+  transform-origin: bottom;
+  animation: heat-flash 0.55s ease-out forwards;
+}
+
+@keyframes melt-chunk-sag {
+  0% {
+    transform: translateY(0) scale(1);
+    opacity: 0.78;
+  }
+  62% {
+    transform: translateY(16px) scale(0.82, 0.68);
+    opacity: 0.4;
+  }
+  100% {
+    transform: translateY(26px) scale(0.48, 0.32);
+    opacity: 0;
+  }
+}
+
+.lab-melt-chunk {
+  animation: melt-chunk-sag 1.7s ease-in infinite;
+  box-shadow: 0 1px 2px rgba(20, 16, 12, 0.18);
+}
+
+@keyframes melt-pool-breathe {
+  0%,
+  100% {
+    transform: scaleX(1);
+  }
+  50% {
+    transform: scaleX(1.035);
+  }
+}
+
+.lab-melt-pool {
+  animation: melt-pool-breathe 2.4s ease-in-out infinite;
+  box-shadow: inset 0 1px 0 rgba(255, 248, 230, 0.32);
+  transform-origin: bottom center;
+}
+
+.lab-heat-fx .lab-melt-drip {
+  animation: melt-drip 1.15s ease-in infinite;
+  transform-origin: top center;
+}
+
+.lab-heat-fx .lab-boil-bubble {
+  box-shadow:
+    inset 0 0 2px rgba(255, 255, 255, 0.75),
+    0 0 4px rgba(255, 255, 255, 0.28);
+}
+
+.lab-heat-fx .lab-boil-roil {
+  animation: boil-roil 0.55s ease-in-out infinite;
+}
+
+.lab-heat-fx .lab-boil-steam {
+  animation: steam-rise 1.35s ease-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lab-heat-shimmer,
+  .lab-heat-band,
+  .lab-heat-flash,
+  .lab-melt-chunk,
+  .lab-melt-pool,
+  .lab-heat-fx .lab-heat-exo,
+  .lab-heat-fx .lab-melt-drip,
+  .lab-heat-fx .lab-boil-roil,
+  .lab-heat-fx .lab-boil-steam {
+    animation: none !important;
+  }
+}

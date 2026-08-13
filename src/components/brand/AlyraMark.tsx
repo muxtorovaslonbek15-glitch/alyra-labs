@@ -47,7 +47,7 @@ export function AlyraMark({
       />
       {showWordmark ? (
         <span
-          className={`font-display leading-none tracking-tight ${s.text} ${
+          className={`font-display font-semibold leading-display tracking-display ${s.text} ${
             onDark ? "text-white" : "text-lab-ink"
           } ${wordmarkClassName}`}
         >

@@ -5,13 +5,13 @@ import { MarketBrowser } from "@/perfume/MarketPanel";
 
 export default function MarketPage() {
   return (
-    <div className="flex min-h-dvh flex-col bg-gradient-to-b from-lab-wash via-[#e4efe9] to-lab-wash">
+    <div className="flex min-h-dvh flex-col bg-lab-wash">
       <AppHeader subtitle="Browse and remix shared perfume formulas." />
       <div className="mx-auto w-full max-w-2xl flex-1 px-4 py-8">
-        <p className="font-display text-[10px] uppercase tracking-[0.2em] text-lab-teal">
+        <p className="text-[10px] font-semibold uppercase tracking-label text-lab-muted">
           Atelier Market
         </p>
-        <h1 className="mt-1 font-display text-3xl text-lab-ink">
+        <h1 className="mt-1 font-display text-3xl tracking-display text-lab-ink">
           Shared formulas
         </h1>
         <p className="mt-1 text-sm text-lab-muted">

@@ -5,6 +5,7 @@ import type {
   ChatSession,
   GroqKeyStatus,
   PerfumerApiError,
+  PerfumerProfile,
   StructuredPayload,
   ChatSections,
   LabBridgeFormula,
@@ -516,6 +517,69 @@ export async function deleteGroqKey(): Promise<
   }
 }
 
+export async function fetchPerfumerProfile(): Promise<
+  | { ok: true; profile: PerfumerProfile }
+  | { ok: false; error: PerfumerApiError }
+> {
+  const auth = await authHeadersOrError();
+  if (!auth.ok) return auth;
+  try {
+    const res = await fetch(`${baseUrl()}/profile`, {
+      headers: auth.headers,
+    });
+    const data = await parseJson(res);
+    if (!res.ok || data.ok === false) {
+      return { ok: false, error: normalizeError(data, res.status) };
+    }
+    return { ok: true, profile: (data.profile || {}) as PerfumerProfile };
+  } catch {
+    return {
+      ok: false,
+      error: {
+        code: "network",
+        title: "Network error",
+        message: "Could not load profile prefs.",
+      },
+    };
+  }
+}
+
+export async function savePerfumerProfile(
+  patch: Partial<PerfumerProfile>,
+): Promise<
+  | { ok: true; profile: PerfumerProfile }
+  | { ok: false; error: PerfumerApiError }
+> {
+  const auth = await authHeadersOrError();
+  if (!auth.ok) return auth;
+  const body = { ...patch };
+  delete (body as { groqConfigured?: boolean }).groqConfigured;
+  try {
+    const res = await fetch(`${baseUrl()}/profile`, {
+      method: "PUT",
+      headers: {
+        ...auth.headers,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body),
+    });
+    const data = await parseJson(res);
+    if (!res.ok || data.ok === false) {
+      return { ok: false, error: normalizeError(data, res.status) };
+    }
+    return { ok: true, profile: (data.profile || {}) as PerfumerProfile };
+  } catch {
+    return {
+      ok: false,
+      error: {
+        code: "network",
+        title: "Network error",
+        message: "Could not save profile prefs.",
+      },
+    };
+  }
+}
+
 /** SSE streaming chat — falls back to non-stream on failure */
 export async function streamChat(
   body: {
@@ -525,6 +589,7 @@ export async function streamChat(
     clientMessageId?: string;
     brief?: BriefFields;
     mode?: "plan" | "agent";
+    surface?: "wear" | "compose";
   },
   handlers: {
     onMeta?: (meta: {
@@ -563,6 +628,9 @@ export async function streamChat(
   };
   if (body.mode === "plan" || body.mode === "agent") {
     payload.mode = body.mode;
+  }
+  if (body.surface === "wear" || body.surface === "compose") {
+    payload.surface = body.surface;
   }
   if (body.brief) {
     Object.assign(payload, {

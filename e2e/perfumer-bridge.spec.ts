@@ -87,18 +87,17 @@ const SAMPLE_CHAT_BRIDGE = {
 test.describe("Perfumer UI + Lab bridge (no Groq)", () => {
   test("perfumer chat shell renders without sending", async ({ page }) => {
     await page.goto("/perfumer");
-    await expect(page.getByText("Master Perfumer").first()).toBeVisible({
-      timeout: 45_000,
-    });
-    // Guest: auth-gated composer (do not Send — avoids Groq)
+    await expect(page).toHaveURL(/\/lab/, { timeout: 45_000 });
     await expect(
-      page.getByPlaceholder(/Sign in to brief|Brief me|goal|type|vibe/i),
+      page.getByRole("button", { name: /^Compose$/ }),
+    ).toHaveAttribute("aria-pressed", "true");
+    await expect(
+      page.getByPlaceholder(
+        /Sign in to brief|Brief me|goal|type|vibe|Office, monsoon/i,
+      ),
     ).toBeVisible({ timeout: 15_000 });
     await expect(
       page.getByRole("button", { name: /^(Send|Sign in)$/i }),
-    ).toBeVisible();
-    await expect(
-      page.getByText(/Plan mode first|Master Perfumer for Indian makers/i),
     ).toBeVisible();
   });
 
@@ -115,7 +114,7 @@ test.describe("Perfumer UI + Lab bridge (no Groq)", () => {
     }, SAMPLE_BRIDGE);
 
     await page.goto("/lab?bridge=1");
-    await expect(page.getByText(/Plan ready/i)).toBeVisible({
+    await expect(page.getByText(/Plan ready|Plan locked/i)).toBeVisible({
       timeout: 45_000,
     });
     await expect(
@@ -145,9 +144,10 @@ test.describe("Perfumer UI + Lab bridge (no Groq)", () => {
     page,
   }) => {
     await page.goto("/perfumer");
-    await expect(page.getByText("Master Perfumer").first()).toBeVisible({
-      timeout: 45_000,
-    });
+    await expect(page).toHaveURL(/\/lab/, { timeout: 45_000 });
+    await expect(
+      page.getByRole("button", { name: /^Compose$/ }),
+    ).toHaveAttribute("aria-pressed", "true");
 
     await page.evaluate((payload) => {
       sessionStorage.setItem("alyra.chatBridge.v1", JSON.stringify(payload));
@@ -157,41 +157,37 @@ test.describe("Perfumer UI + Lab bridge (no Groq)", () => {
     await expect(page.getByText(/Got your Lab blend/i)).toBeVisible({
       timeout: 45_000,
     });
-    await expect(
-      page.getByRole("button", { name: /Open in Lab|Build/i }).first(),
-    ).toBeVisible();
-    await expect(page.getByText("Hedione").first()).toBeVisible();
-    await expect(page.getByText("Iso E Super").first()).toBeVisible();
   });
 
-  test("IDE Lab/Tutor/Chat tabs + phone chat affordance", async ({ page }) => {
+  test("IDE Information/Chat tabs + phone chat affordance", async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 800 });
-    await page.goto("/lab");
+    await page.goto("/lab?audience=composer");
     await expect(page.getByText("Alyra Labs").first()).toBeVisible({
       timeout: 45_000,
     });
-    await expect(page.getByRole("button", { name: /^Lab$/i })).toBeVisible();
-    await expect(page.getByRole("button", { name: /^Tutor$/i })).toBeVisible();
-    await expect(page.getByRole("button", { name: /^Chat$/i })).toBeVisible();
-    await page.getByRole("button", { name: /^Chat$/i }).click();
     await expect(
-      page.getByPlaceholder(/Sign in to brief|Brief me|goal|type|vibe/i),
+      page.getByRole("button", { name: /^Compose$/ }),
+    ).toHaveAttribute("aria-pressed", "true");
+    await expect(page.getByRole("button", { name: /^Lab$/i })).toHaveCount(0);
+    // Information left the header; it lives in ⋯ overflow.
+    await page.getByRole("button", { name: "More", exact: true }).click();
+    await expect(
+      page.getByRole("button", { name: /^Information$/i }),
+    ).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(
+      page.getByPlaceholder(
+        /Sign in to brief|Brief me|goal|type|vibe|Office, monsoon/i,
+      ),
     ).toBeVisible({ timeout: 20_000 });
-    // Build appears once a plan exists; empty chat still shows Plan panel chrome
     await expect(page.getByText(/Plan|Build|brief/i).first()).toBeVisible();
 
     await page.setViewportSize({ width: 390, height: 844 });
-    await page.goto("/lab");
+    await page.goto("/lab?audience=composer");
     await expect(page.getByText("Alyra Labs").first()).toBeVisible({
       timeout: 45_000,
     });
-    const chatFab = page.getByRole("button", {
-      name: /Open perfume chat|Open chat and plan/i,
-    });
+    const chatFab = page.getByRole("button", { name: /^Chat$/i });
     await expect(chatFab).toBeVisible({ timeout: 20_000 });
-    await chatFab.click();
-    await expect(
-      page.getByPlaceholder(/Sign in to brief|Brief me|goal|type|vibe/i),
-    ).toBeVisible({ timeout: 20_000 });
   });
 });

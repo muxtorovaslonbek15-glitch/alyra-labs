@@ -3,7 +3,6 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import type {
-  CostBreakdown,
   FormulaDiff,
   FormulaLine,
   LabBridgeFormula,
@@ -15,6 +14,8 @@ import {
   isSolidIntent,
 } from "./solidDetect";
 import { celebrateChatAchievement } from "./chatAchievements";
+import { SeeTheCraft } from "@/wear/WearReplyCard";
+import { stripCostCopy } from "./hideCost";
 
 function AccordionRow({
   label,
@@ -26,7 +27,7 @@ function AccordionRow({
   if (!notes?.length) return null;
   return (
     <div className="flex gap-3 text-sm">
-      <p className="w-12 shrink-0 text-[11px] font-medium uppercase tracking-[0.12em] text-lab-muted">
+      <p className="w-12 shrink-0 text-[11px] font-medium uppercase tracking-label text-lab-muted">
         {label}
       </p>
       <p className="font-mono text-[12px] leading-relaxed text-lab-ink/85">
@@ -41,6 +42,7 @@ export function FormulaCard({
   sections,
   onBuild,
   hideLabCta,
+  presentation = "composer",
 }: {
   structured?: StructuredPayload;
   sections?: {
@@ -53,6 +55,8 @@ export function FormulaCard({
   onBuild?: (bridge: LabBridgeFormula) => void;
   /** Shell shows PlanPanel Build — hide duplicate CTA on the card. */
   hideLabCta?: boolean;
+  /** Wear parks % / IFRA behind See the craft. Craft = accordion body only. */
+  presentation?: "composer" | "wear" | "craft";
 }) {
   const router = useRouter();
   const [opening, setOpening] = useState(false);
@@ -61,7 +65,6 @@ export function FormulaCard({
   const gen = structured?.formula;
   const lines: FormulaLine[] = gen?.formula || [];
   const accord = gen?.accord;
-  const cost: CostBreakdown | null | undefined = structured?.cost || gen?.cost;
   const dupe = structured?.dupe;
   const diff: FormulaDiff | null | undefined =
     structured?.formulaDiff ||
@@ -86,7 +89,22 @@ export function FormulaCard({
     chassis &&
     chassis.waxPercent + chassis.oilPercent + chassis.fragranceLoadPercent > 0;
 
-  if (!lines.length && !sections?.formula && !sections?.accord) {
+  const india = structured?.indiaContext;
+  const wearGoals = structured?.wearGoals;
+  const hasWearHero = Boolean(
+    accord ||
+      sections?.accord ||
+      wearGoals ||
+      india?.wearAdvice ||
+      india?.occasion ||
+      india?.climate ||
+      brief?.occasion ||
+      brief?.goal,
+  );
+  const wearMode = presentation === "wear";
+  const craftOnly = presentation === "craft";
+
+  if (!lines.length && !sections?.formula && !sections?.accord && !hasWearHero) {
     return null;
   }
 
@@ -130,21 +148,64 @@ export function FormulaCard({
     } else {
       setMapNote(null);
     }
-    // Deep-link: Lab opens Chat + plan_ready (not silent pour). Instant via Apply in Plan.
+    // Deep-link: Lab opens Chat + planning. Lock, then Build. Instant via Apply in Plan.
     router.push("/lab?bridge=1&tab=chat");
   }
 
-  return (
-    <div className="mt-1 space-y-4 border-t border-lab-line/60 pt-4">
+  const wearHero = (
+    <>
+      {india?.wearAdvice || india?.occasion || india?.climate || wearGoals ? (
+        <div>
+          <p className="text-[11px] font-semibold uppercase tracking-label text-lab-muted">
+            Wear
+          </p>
+          <p className="mt-1.5 text-sm leading-relaxed text-lab-ink/90">
+            {[
+              india?.climate,
+              india?.occasion || brief?.occasion,
+              india?.wearAdvice,
+              wearGoals?.longevityHours
+                ? `${wearGoals.longevityHours}+ hours`
+                : null,
+              wearGoals?.projection,
+            ]
+              .filter(Boolean)
+              .join(" · ")}
+          </p>
+        </div>
+      ) : null}
+      {accord ? (
+        <div className="space-y-2">
+          <p className="text-[11px] font-semibold uppercase tracking-label text-lab-muted">
+            Notes
+          </p>
+          <AccordionRow label="Brightness" notes={accord.top} />
+          <AccordionRow label="Heart" notes={accord.heart} />
+          <AccordionRow label="Skin" notes={accord.base} />
+        </div>
+      ) : sections?.accord ? (
+        <Section title="Notes" body={sections.accord} />
+      ) : null}
+    </>
+  );
+
+  const craftBody = (
+    <>
+      {brief?.name ? (
+        <p className="font-display text-xl leading-snug tracking-display text-lab-ink">
+          {brief.name}
+        </p>
+      ) : null}
+
       {dupe?.disclaimer ? (
         <p className="text-[12px] leading-relaxed text-lab-muted">
           {dupe.disclaimer}
         </p>
       ) : null}
 
-      {brief?.goal || brief?.constraints?.longevityHours ? (
+      {!wearMode && (brief?.goal || brief?.constraints?.longevityHours) ? (
         <div>
-          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-lab-muted">
+          <p className="text-[11px] font-semibold uppercase tracking-label text-lab-muted">
             Brief
           </p>
           <p className="mt-1.5 text-sm leading-relaxed text-lab-ink/85">
@@ -165,16 +226,16 @@ export function FormulaCard({
         </div>
       ) : null}
 
-      {accord ? (
+      {!wearMode && accord ? (
         <div className="space-y-2">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-lab-muted">
+          <p className="text-[11px] font-semibold uppercase tracking-label text-lab-muted">
             Accord
           </p>
           <AccordionRow label="Top" notes={accord.top} />
           <AccordionRow label="Heart" notes={accord.heart} />
           <AccordionRow label="Base" notes={accord.base} />
         </div>
-      ) : sections?.accord ? (
+      ) : !wearMode && sections?.accord ? (
         <Section title="Accord" body={sections.accord} />
       ) : null}
 
@@ -182,7 +243,7 @@ export function FormulaCard({
 
       {showChassis && chassis ? (
         <div>
-          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-lab-muted">
+          <p className="text-[11px] font-semibold uppercase tracking-label text-lab-muted">
             Chassis
           </p>
           <p className="mt-1.5 font-mono text-[12px] leading-relaxed text-lab-ink/90">
@@ -200,7 +261,7 @@ export function FormulaCard({
 
       {lines.length ? (
         <div>
-          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-lab-muted">
+          <p className="text-[11px] font-semibold uppercase tracking-label text-lab-muted">
             Formula
           </p>
           <ul className="mt-2 space-y-1.5">
@@ -228,8 +289,6 @@ export function FormulaCard({
         <Section title="Formula" body={sections.formula} mono />
       ) : null}
 
-      {cost?.ok ? <CostBreakdownView cost={cost} /> : null}
-
       {sections?.explanation ? (
         <Section title="Explanation" body={sections.explanation} />
       ) : gen?.explanation ? (
@@ -247,7 +306,7 @@ export function FormulaCard({
 
       {(structured?.citations || []).length ? (
         <div>
-          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-lab-muted">
+          <p className="text-[11px] font-semibold uppercase tracking-label text-lab-muted">
             Sources
           </p>
           <ul className="mt-1.5 space-y-1">
@@ -267,7 +326,7 @@ export function FormulaCard({
         </div>
       ) : null}
 
-      {lines.length && !hideLabCta ? (
+      {lines.length && !hideLabCta && !wearMode ? (
         <div className="space-y-2 pt-1">
           <button
             type="button"
@@ -290,7 +349,7 @@ export function FormulaCard({
               {bridge.mappingReport.unmappedCount > 0
                 ? `; ${bridge.mappingReport.unmappedCount} not in Lab inventory yet`
                 : ""}
-              . Proxies are teaching stand-ins. Build from the Plan panel to pour
+              . Proxies are teaching stand-ins. Lock the Plan, then Build to pour
               step by step.
             </p>
           ) : null}
@@ -299,6 +358,30 @@ export function FormulaCard({
           ) : null}
         </div>
       ) : null}
+    </>
+  );
+
+  const hasCraft =
+    lines.length > 0 ||
+    Boolean(sections?.formula) ||
+    Boolean(sections?.improvements) ||
+    Boolean(gen?.improvements?.length) ||
+    Boolean(showChassis) ||
+    Boolean(diff?.changes?.length);
+
+  if (craftOnly) {
+    if (!hasCraft && !lines.length && !sections?.formula) return null;
+    return <div className="space-y-4">{craftBody}</div>;
+  }
+
+  return (
+    <div className="mt-1 space-y-4 border-t border-lab-line/60 pt-4">
+      {wearMode ? wearHero : null}
+      {wearMode && hasCraft ? (
+        <SeeTheCraft>{craftBody}</SeeTheCraft>
+      ) : wearMode ? null : (
+        craftBody
+      )}
     </div>
   );
 }
@@ -306,7 +389,7 @@ export function FormulaCard({
 function DiffView({ diff }: { diff: FormulaDiff }) {
   return (
     <div>
-      <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-lab-muted">
+      <p className="text-[11px] font-semibold uppercase tracking-label text-lab-muted">
         Changes
       </p>
       {diff.summary ? (
@@ -365,9 +448,11 @@ function Section({
   body: string;
   mono?: boolean;
 }) {
+  const cleaned = stripCostCopy(body);
+  if (!cleaned) return null;
   return (
     <div>
-      <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-lab-muted">
+      <p className="text-[11px] font-semibold uppercase tracking-label text-lab-muted">
         {title}
       </p>
       <p
@@ -375,33 +460,9 @@ function Section({
           mono ? "font-mono text-[12px]" : ""
         }`}
       >
-        {body}
+        {cleaned}
       </p>
     </div>
   );
 }
 
-function CostBreakdownView({ cost }: { cost: CostBreakdown }) {
-  const total =
-    cost.totalCostInr ??
-    (typeof cost.totalCostUsd === "number" ? cost.totalCostUsd : null);
-  if (total == null) return null;
-  return (
-    <div>
-      <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-lab-muted">
-        Cost estimate
-      </p>
-      <p className="mt-1 font-display text-xl text-lab-ink">
-        ₹{Math.round(total).toLocaleString("en-IN")}
-        <span className="ml-2 font-sans text-xs font-normal text-lab-muted">
-          / {cost.batchGrams || 100}g batch
-        </span>
-      </p>
-      {cost.summary ? (
-        <p className="mt-1 text-[11px] leading-relaxed text-lab-muted">
-          {cost.summary}
-        </p>
-      ) : null}
-    </div>
-  );
-}

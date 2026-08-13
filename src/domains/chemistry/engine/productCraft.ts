@@ -139,6 +139,34 @@ export function tryProductCraft(
     };
   }
 
+  // Solid perfume tin: wax + carrier + fragrance oil, needs heat to melt
+  const hasWax = chemicals.some((c) => c.id === "beeswax");
+  const hasCarrier = chemicals.some(
+    (c) => c.id === "jojoba-oil" || c.id === "cct" || c.id === "plant-oil",
+  );
+  const hasFragranceOil = chemicals.some((c) => c.subcategory === "fragrance");
+  if (hasWax && hasCarrier && hasFragranceOil) {
+    if (!opts.hasHeat) {
+      return {
+        ok: false,
+        products: [],
+        balancedEquation:
+          "beeswax + carrier + fragrance → needs heat to melt into solid perfume",
+        explanationKey: "product-solid-perfume-needs-heat",
+        reactionType: "product-craft",
+      };
+    }
+    const solid = getChemical("solid-perfume")!;
+    return {
+      ok: true,
+      products: [solid],
+      balancedEquation: "beeswax + carrier + fragrance oil → solid perfume balm",
+      colorChange: "#e8d5b5",
+      explanationKey: "product-solid-perfume",
+      reactionType: "product-craft",
+    };
+  }
+
   // Menthol-style balm: oil + beeswax, needs heat to melt/blend
   if (hasIds(chemicals, ["plant-oil", "beeswax"])) {
     if (!opts.hasHeat) {

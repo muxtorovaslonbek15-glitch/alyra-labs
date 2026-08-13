@@ -87,7 +87,7 @@ export default function FormulaDeepLinkPage() {
           </div>
         ) : (
           <>
-            <p className="font-display text-[10px] uppercase tracking-[0.2em] text-lab-teal">
+            <p className="text-[10px] font-semibold uppercase tracking-label text-lab-muted">
               Shared formula
             </p>
             <div className="mt-2 flex items-start gap-3">
@@ -105,7 +105,7 @@ export default function FormulaDeepLinkPage() {
                   by {formula.authorName}
                 </p>
                 <span
-                  className={`mt-2 inline-block rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider ${
+                  className={`mt-2 inline-block rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-label ${
                     formula.badge === "screened"
                       ? "bg-lab-teal/15 text-lab-teal"
                       : "bg-lab-amber/15 text-lab-amber"

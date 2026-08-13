@@ -43,7 +43,7 @@ export default function JoinClient() {
       return;
     }
     setStatus("ok");
-    setMessage("You’re in — open the lab or Teacher if you’re staff.");
+    setMessage("You're in. Open the lab.");
   }
 
   return (

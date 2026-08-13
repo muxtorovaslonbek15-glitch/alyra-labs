@@ -3,7 +3,8 @@
  * Vessel liquid FX stay in fxIntensity.ts — solid agent owns vessel silhouettes.
  */
 
-import { POUR_WINDOW_MS } from "@/animation/fxIntensity";
+import { CUP_SET_WINDOW_MS } from "@/animation/cupSet/timeline";
+import { MIX_WINDOW_MS, POUR_WINDOW_MS } from "@/animation/fxIntensity";
 import { EQUIPMENT_BY_ID } from "@/domains/chemistry/data/equipment";
 import type { LabBridgeFormula } from "@/perfumer/types";
 
@@ -23,13 +24,38 @@ export type MotionBuildStepKind =
 /** DESIGN.md chrome motion: 150–250ms; dock a touch longer. */
 export const MOTION_MS = {
   chrome: 200,
+  /** ★ check-in ledger open/close; quiet 160–200ms, no bounce. */
+  checkIn: 180,
   crossfade: 220,
   dockOut: 140,
   dockIn: 260,
+  /** Phone bottom-nav + Chat sheet — one family, 200–260ms. */
+  phoneDock: 240,
   ctaPress: 160,
   emptyStagger: 55,
   emptyPresence: 5200,
   reduced: 40,
+} as const;
+
+/**
+ * House decelerate for chrome / costume / overlays.
+ * CSS `--lab-ease` in globals.css must stay identical.
+ */
+export const LAB_EASE = "cubic-bezier(0.22, 1, 0.36, 1)";
+/** Time-reverse of LAB_EASE — inventory sheet close. CSS `--lab-ease-exit`. */
+export const LAB_EASE_EXIT = "cubic-bezier(0.64, 0, 0.78, 0)";
+
+/** Alias — phone dock, chooser, vessel FLIP all share LAB_EASE. */
+export const PHONE_DOCK_EASE = LAB_EASE;
+
+/**
+ * Phone Oils / inventory sheet (ItemPanel expanded). Not LabSheet / Chat.
+ * Enter = house decelerate; exit = time-reverse so close mirrors open.
+ * CSS: `.lab-inventory-sheet` — keep in sync (MOTION_MS.chrome = 200ms).
+ */
+export const INVENTORY_SHEET_EASE = {
+  enter: LAB_EASE,
+  exit: LAB_EASE_EXIT,
 } as const;
 
 export function prefersReducedMotion(): boolean {
@@ -104,10 +130,11 @@ export function buildStepDelayMs(
     case "mapping_gap":
       return 400;
     case "stir":
-      return solid ? 1100 : 980;
+      // Two full rod arcs (~0.85s) plus a dwell so the stir reads before Mix.
+      return solid ? 1680 : 1780;
     case "mix":
-      // Cast / Mix payoff
-      return solid ? 1600 : 1700;
+      // Solid Cast: wait for pour-to-cup set. Liquid Mix waits for bloom settle.
+      return solid ? CUP_SET_WINDOW_MS + 120 : MIX_WINDOW_MS + 80;
     case "notes":
       return 520;
     case "done":

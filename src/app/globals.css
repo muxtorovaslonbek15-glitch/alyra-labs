@@ -13,6 +13,21 @@
   --lab-glass: #c4b49a; /* champagne glass tint */
   --lab-amber: #b8956c; /* warm gold heat / reward */
   --lab-hazard: #b42318;
+  --tracking-display: -0.022em;
+  --tracking-label: 0.12em;
+  --leading-display: 1.12;
+  --leading-ui: 1.5;
+  --leading-mono: 1.5;
+  /* src/animation/motion.ts — keep values in lockstep */
+  --lab-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --lab-ease-exit: cubic-bezier(0.64, 0, 0.78, 0);
+  --lab-chrome-ms: 200ms;
+  --lab-crossfade-ms: 220ms;
+  --lab-checkin-ms: 180ms;
+  --lab-phone-dock-ms: 240ms;
+  --lab-dock-out-ms: 140ms;
+  --lab-dock-in-ms: 260ms;
+  --lab-reduced-ms: 40ms;
 }
 
 @theme inline {
@@ -30,11 +45,19 @@
   --font-sans: var(--font-sans);
   --font-display: var(--font-display);
   --font-mono: var(--font-mono);
+  --tracking-display: -0.022em;
+  --tracking-label: 0.12em;
+  --leading-display: 1.12;
+  --leading-ui: 1.5;
+  --leading-mono: 1.5;
 }
 
 body {
   color: var(--lab-ink);
-  font-family: var(--font-sans), system-ui, sans-serif;
+  font-family: var(--font-sans), "Source Sans 3", system-ui, sans-serif;
+  font-feature-settings: "kern" 1, "liga" 1;
+  letter-spacing: 0.005em;
+  line-height: var(--leading-ui);
   background: var(--lab-wash);
 }
 
@@ -69,7 +92,17 @@ body {
 }
 
 .font-display {
-  font-family: var(--font-display), Georgia, serif;
+  font-family: var(--font-display), "Cormorant Garamond", Georgia, "Palatino Linotype", Palatino, serif;
+  font-feature-settings: "kern" 1, "liga" 1;
+  letter-spacing: var(--tracking-display);
+  line-height: var(--leading-display);
+}
+
+.font-mono {
+  font-family: var(--font-mono), "JetBrains Mono", ui-monospace, monospace;
+  font-feature-settings: "ss01" 1;
+  letter-spacing: 0;
+  line-height: var(--leading-mono);
 }
 
 .lab-desk-surface {
@@ -404,19 +437,29 @@ body {
   animation: splash-drop 0.7s ease-in forwards;
 }
 
-@keyframes swirl-spin {
-  from {
-    transform: rotate(0deg) scale(0.85);
-    opacity: 0.15;
+/* Stir vortex: elliptical surface ring, not a linear HUD spinner. */
+@keyframes swirl-stir {
+  0% {
+    transform: rotate(0deg) scaleY(var(--swirl-sy, 0.45)) scaleX(0.96);
+    opacity: 0.12;
   }
-  to {
-    transform: rotate(360deg) scale(1.05);
-    opacity: 0.45;
+  45% {
+    transform: rotate(175deg) scaleY(var(--swirl-sy, 0.45)) scaleX(1.03);
+    opacity: 0.2;
+  }
+  100% {
+    transform: rotate(360deg) scaleY(var(--swirl-sy, 0.45)) scaleX(0.96);
+    opacity: 0.12;
   }
 }
 
+.lab-swirl {
+  border: 1.5px solid rgba(196, 180, 154, 0.45);
+  box-shadow: inset 0 0 6px rgba(255, 255, 255, 0.12);
+}
+
 .lab-swirl-active {
-  animation: swirl-spin 0.9s linear;
+  animation: swirl-stir 1.8s ease infinite;
 }
 
 @keyframes shockwave {
@@ -576,7 +619,7 @@ body {
     transform: scale(1);
   }
   40% {
-    transform: scale(1.05);
+    transform: scale(1.02);
   }
   100% {
     transform: scale(1);
@@ -584,7 +627,7 @@ body {
 }
 
 .lab-vessel-pop {
-  animation: vessel-pop 0.45s ease-out;
+  animation: vessel-pop 0.32s cubic-bezier(0.22, 0.8, 0.28, 1);
 }
 
 @keyframes liquid-bob {
@@ -689,10 +732,23 @@ body {
   }
 }
 
+.lab-ice-bath {
+  animation: ice-bath-in 0.28s ease-out both;
+}
+
+@keyframes ice-bath-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
 .lab-ice-cube {
   animation: ice-shimmer 1.4s ease-in-out infinite;
   box-shadow:
-    0 0 4px rgba(186, 230, 253, 0.7),
+    0 0 4px rgba(186, 230, 253, 0.45),
     inset 0 1px 0 rgba(255, 255, 255, 0.65);
 }
 
@@ -705,12 +761,12 @@ body {
     opacity: 0;
     background: radial-gradient(
       ellipse at bottom,
-      rgba(125, 211, 252, 0.5),
-      transparent 70%
+      rgba(125, 211, 252, 0.45),
+      transparent 72%
     );
   }
-  35% {
-    opacity: 1;
+  32% {
+    opacity: 0.45;
   }
   100% {
     opacity: 0;
@@ -718,7 +774,7 @@ body {
 }
 
 .lab-cool-flash {
-  animation: cool-flash 0.8s ease-out forwards;
+  animation: cool-flash 0.55s ease-out forwards;
   pointer-events: none;
 }
 
@@ -829,25 +885,93 @@ body {
   animation: rim-drip 0.55s ease-in forwards;
 }
 
+/* Glass stirring rod — champagne shaft + rounded tip. */
+.lab-stir-rod {
+  background: linear-gradient(
+    90deg,
+    rgba(196, 180, 154, 0.22) 0%,
+    rgba(255, 255, 255, 0.78) 36%,
+    rgba(196, 180, 154, 0.55) 52%,
+    rgba(255, 255, 255, 0.18) 100%
+  );
+  box-shadow: 0 0 0 0.5px rgba(255, 255, 255, 0.4);
+}
+
+.lab-stir-rod::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  width: 7px;
+  height: 7px;
+  transform: translateX(-50%);
+  border-radius: 50%;
+  background: radial-gradient(
+    circle at 35% 30%,
+    rgba(255, 255, 255, 0.9),
+    rgba(196, 180, 154, 0.72)
+  );
+  box-shadow: 0 0 0 0.5px rgba(255, 255, 255, 0.35);
+}
+
+/* Dwell at each end so the reverse doesn't read as a robotic loop. */
 @keyframes stir-rod-swing {
-  0% {
-    transform: translateX(-50%) rotate(calc(var(--stir-deg, 12deg) * -1));
+  0%,
+  14% {
+    transform: translateX(calc(-50% + var(--stir-drift, 4px)))
+      rotate(calc(var(--stir-deg, 12deg) * -1));
   }
-  50% {
-    transform: translateX(-50%) rotate(var(--stir-deg, 12deg));
+  50%,
+  64% {
+    transform: translateX(calc(-50% - var(--stir-drift, 4px)))
+      rotate(var(--stir-deg, 12deg));
   }
   100% {
-    transform: translateX(-50%) rotate(calc(var(--stir-deg, 12deg) * -1));
+    transform: translateX(calc(-50% + var(--stir-drift, 4px)))
+      rotate(calc(var(--stir-deg, 12deg) * -1));
   }
 }
 
 .lab-stir-rod-active {
-  animation: stir-rod-swing 0.55s ease-in-out 2;
+  animation: stir-rod-swing var(--stir-period, 0.85s)
+    cubic-bezier(0.45, 0.05, 0.55, 0.95) infinite;
+}
+
+/* Surface wake lags the rod — fluid inertia. */
+@keyframes stir-wake {
+  0%,
+  14% {
+    transform: translateX(calc(-50% + var(--stir-drift, 4px) * 1.55));
+    opacity: 0.08;
+  }
+  50%,
+  64% {
+    transform: translateX(calc(-50% - var(--stir-drift, 4px) * 1.55));
+    opacity: 0.2;
+  }
+  100% {
+    transform: translateX(calc(-50% + var(--stir-drift, 4px) * 1.55));
+    opacity: 0.08;
+  }
+}
+
+.lab-stir-wake {
+  background: radial-gradient(
+    ellipse at center,
+    rgba(255, 255, 255, 0.35) 0%,
+    rgba(196, 180, 154, 0.12) 55%,
+    transparent 70%
+  );
+  transform: translateX(-50%) scaleY(0.4);
+  animation: stir-wake var(--stir-period, 0.85s)
+    cubic-bezier(0.45, 0.05, 0.55, 0.95) infinite;
+  animation-delay: 0.1s;
+  pointer-events: none;
 }
 
 .lab-swirl-idle {
-  animation: swirl-spin 2.8s linear infinite;
-  opacity: 0.25;
+  animation: swirl-stir 4.2s ease infinite;
+  opacity: 0.1;
 }
 
 @keyframes color-bloom {
@@ -863,6 +987,111 @@ body {
 
 .lab-color-bloom {
   animation: color-bloom 0.8s ease-out forwards;
+}
+
+/* Liquid Mix — held homogenize, then settle. Not a scale-to-zero flash. */
+@keyframes mix-shock {
+  0% {
+    transform: scale(0.52);
+    opacity: 0.5;
+  }
+  100% {
+    transform: scale(1.16);
+    opacity: 0;
+  }
+}
+
+.lab-mix-shock {
+  animation: mix-shock 0.85s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes mix-unify {
+  0% {
+    transform: scale(0.72);
+    opacity: 0;
+    filter: blur(7px);
+  }
+  16% {
+    transform: scale(0.96);
+    opacity: 0.55;
+    filter: blur(3px);
+  }
+  48% {
+    transform: scale(1.04);
+    opacity: 0.32;
+    filter: blur(1.5px);
+  }
+  100% {
+    transform: scale(1.1);
+    opacity: 0;
+    filter: blur(5px);
+  }
+}
+
+.lab-mix-unify {
+  animation: mix-unify 1.6s cubic-bezier(0.22, 0.8, 0.28, 1) forwards;
+}
+
+@keyframes mix-bloom {
+  0% {
+    transform: scale(0.58);
+    opacity: 0;
+  }
+  12% {
+    transform: scale(0.94);
+    opacity: 0.58;
+  }
+  40% {
+    transform: scale(1.04);
+    opacity: 0.42;
+  }
+  100% {
+    transform: scale(1.1);
+    opacity: 0;
+  }
+}
+
+.lab-mix-bloom {
+  animation: mix-bloom 1.6s cubic-bezier(0.22, 0.8, 0.28, 1) forwards;
+}
+
+@keyframes mix-mote {
+  0% {
+    opacity: 0;
+    transform: translateY(3px) scale(0.55);
+  }
+  28% {
+    opacity: 0.65;
+    transform: translateY(-2px) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-9px) scale(0.4);
+  }
+}
+
+.lab-mix-mote {
+  animation: mix-mote 0.95s ease-out forwards;
+}
+
+/* Cast mix_hold — 280ms champagne wash, then cup-set. */
+@keyframes cast-cue {
+  0% {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+  38% {
+    opacity: 0.5;
+    transform: scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.04);
+  }
+}
+
+.lab-cast-cue {
+  animation: cast-cue 0.28s cubic-bezier(0.22, 0.8, 0.28, 1) forwards;
 }
 
 @keyframes heat-haze {
@@ -973,14 +1202,15 @@ body {
   animation: ppt-bed-grow 0.9s ease-out both;
 }
 
-/* Pour pose is JS-driven (tilt→hold→stream→settle→upright); classes are markers */
+/* Pour pose is JS-driven (tilt→hold→stream→settle→upright); classes are markers.
+   z-index is inline on the card so Tailwind z-10 cannot bury the source. */
 .lab-vessel-pour-source {
   transform-origin: 72% 85%;
-  z-index: 40;
+  isolation: isolate;
 }
 
 .lab-vessel-pour-receive {
-  z-index: 35;
+  isolation: isolate;
 }
 
 /* Desk camera response */
@@ -1026,7 +1256,6 @@ body {
 /* Legacy alias — prefer .lab-vessel-pour-source + JS pose */
 .lab-vessel-pour-tilt {
   transform-origin: 72% 85%;
-  z-index: 40;
 }
 
 /* ——— Goal reward celebration ——— */
@@ -1213,8 +1442,6 @@ body {
 @media (prefers-reduced-motion: reduce) {
   .bubble,
   .lab-splash,
-  .lab-swirl-active,
-  .lab-swirl-idle,
   .lab-shock,
   .lab-flake,
   .lab-heat-exo,
@@ -1227,15 +1454,21 @@ body {
   .lab-meniscus,
   .lab-flame,
   .lab-ice-cube,
+  .lab-ice-bath,
   .lab-cool-flash,
+  .lab-condensation,
   .lab-hazard-pulse,
   .lab-pour-ribbon,
   .lab-pour-drop,
   .lab-pour-bloom,
   .lab-ripple,
   .lab-rim-drip,
-  .lab-stir-rod-active,
   .lab-color-bloom,
+  .lab-mix-shock,
+  .lab-mix-unify,
+  .lab-mix-bloom,
+  .lab-mix-mote,
+  .lab-cast-cue,
   .lab-heat-haze,
   .lab-heat-convection,
   .lab-ice-vein,
@@ -1275,6 +1508,23 @@ body {
   .lab-steam,
   .lab-boil-steam {
     opacity: 0.45 !important;
+  }
+
+  /* Stir keeps a slower, smaller arc — meaning without the full dance. */
+  .lab-stir-rod-active {
+    animation: stir-rod-swing var(--stir-period, 1.7s)
+      cubic-bezier(0.45, 0.05, 0.55, 0.95) infinite;
+  }
+  .lab-stir-wake {
+    animation-duration: var(--stir-period, 1.7s);
+    opacity: 0.08;
+  }
+  .lab-swirl-active {
+    animation: swirl-stir 3.4s ease infinite;
+  }
+  .lab-swirl-idle {
+    animation: swirl-stir 5s ease infinite;
+    opacity: 0.08;
   }
 }
 
@@ -1437,68 +1687,75 @@ body {
 
 @keyframes solidify-grow {
   0% {
-    transform: scaleY(0.2);
-    opacity: 0.2;
+    opacity: 0.15;
   }
   100% {
-    transform: scaleY(1);
     opacity: 1;
   }
 }
 .lab-solidify-frost {
   transform-origin: bottom center;
-  animation: solidify-grow 0.9s ease-out forwards;
+  /* Height/opacity from live solidify — no scaleY pop */
 }
 
 @keyframes ice-vein-grow {
   0% {
     opacity: 0;
-    transform: scaleY(0.15);
   }
   100% {
     opacity: 0.7;
-    transform: scaleY(1);
   }
 }
 .lab-ice-vein {
   transform-origin: bottom center;
-  animation: ice-vein-grow 1.1s ease-out both;
   border-radius: 1px;
 }
 
 @keyframes frost-rim-pulse {
   0%,
   100% {
-    opacity: 0.55;
-    transform: scaleX(0.96);
+    filter: brightness(1);
   }
   50% {
-    opacity: 0.95;
-    transform: scaleX(1);
+    filter: brightness(1.16);
   }
 }
 .lab-frost-rim {
-  animation: frost-rim-pulse 1.6s ease-in-out infinite;
+  animation: frost-rim-pulse 2.4s ease-in-out infinite;
 }
 
 @keyframes ice-shard-grow {
   0% {
     opacity: 0;
-    transform: scale(0.3) rotate(-8deg);
-  }
-  60% {
-    opacity: 1;
-    transform: scale(1.05) rotate(4deg);
   }
   100% {
-    opacity: 0.9;
-    transform: scale(1) rotate(0deg);
+    opacity: 0.85;
   }
 }
 .lab-ice-shard {
-  animation: ice-shard-grow 0.85s ease-out both;
   border-radius: 1px 3px 1px 4px;
-  box-shadow: 0 0 5px rgba(186, 230, 253, 0.7);
+  box-shadow: 0 0 4px rgba(186, 230, 253, 0.35);
+}
+
+@keyframes condensation-bead {
+  0%,
+  100% {
+    transform: scale(1);
+    filter: brightness(1);
+  }
+  50% {
+    transform: scale(1.08);
+    filter: brightness(1.12);
+  }
+}
+.lab-condensation {
+  background: radial-gradient(
+    circle at 32% 28%,
+    rgba(255, 255, 255, 0.9),
+    rgba(125, 211, 252, 0.28) 70%
+  );
+  box-shadow: inset 0 0.5px 0 rgba(255, 255, 255, 0.8);
+  animation: condensation-bead 2.8s ease-in-out infinite;
 }
 
 @keyframes crystal-twinkle {
@@ -1555,6 +1812,7 @@ body {
   .lab-frost-rim,
   .lab-ice-shard,
   .lab-ice-vein,
+  .lab-condensation,
   .lab-liquid-flame,
   .lab-blast-whiteout {
     animation: none !important;
@@ -1577,11 +1835,119 @@ body {
 /* ——— Lab chrome motion (Build / dock / history / empty desk) ——— */
 /* Tokens: src/animation/motion.ts — intentional, not purple glow */
 
+/* Phone bottom nav + Chat sheet — tokens: MOTION_MS.phoneDock, LAB_EASE. */
+.lab-phone-dock-root {
+  --lab-phone-chat-h: min(48dvh, 26rem);
+}
+.lab-phone-dock {
+  --lab-phone-dock-y: var(--lab-phone-chat-h);
+  transform: translate3d(0, var(--lab-phone-dock-y), 0);
+  transition: transform var(--lab-phone-dock-ms) var(--lab-ease);
+  will-change: transform;
+}
+.lab-phone-dock[data-open="true"] {
+  --lab-phone-dock-y: 0px;
+}
+.lab-phone-chat {
+  height: var(--lab-phone-chat-h);
+  opacity: 0;
+  transition: opacity var(--lab-phone-dock-ms) var(--lab-ease);
+}
+.lab-phone-dock[data-open="true"] .lab-phone-chat {
+  opacity: 1;
+}
+.lab-phone-safe {
+  height: env(safe-area-inset-bottom, 0px);
+  background: var(--lab-ink);
+  transition: background-color var(--lab-phone-dock-ms) var(--lab-ease);
+}
+.lab-phone-safe[data-open="true"] {
+  background: var(--lab-panel);
+}
+
+/* Phone Oils / inventory sheet — ItemPanel expanded only. Do not attach to LabSheet / Chat.
+   Tokens: MOTION_MS.chrome, LAB_EASE / LAB_EASE_EXIT.
+   Default transform is off-screen so the first paint is never a full-bleed lab-panel flash. */
+.lab-inventory-overlay {
+  --lab-inventory-ms: var(--lab-chrome-ms);
+  --lab-inventory-ease-enter: var(--lab-ease);
+  --lab-inventory-ease-exit: var(--lab-ease-exit);
+}
+.lab-inventory-scrim {
+  opacity: 0;
+  transition: opacity var(--lab-inventory-ms) var(--lab-inventory-ease-exit);
+}
+.lab-inventory-scrim[data-open="true"] {
+  opacity: 1;
+  transition-timing-function: var(--lab-inventory-ease-enter);
+}
+.lab-inventory-sheet {
+  transform: translate3d(0, 100%, 0);
+  transition: transform var(--lab-inventory-ms) var(--lab-inventory-ease-exit);
+  will-change: transform;
+}
+.lab-inventory-sheet[data-open="true"] {
+  transform: translate3d(0, 0, 0);
+  transition-timing-function: var(--lab-inventory-ease-enter);
+}
+@media (min-width: 768px) {
+  .lab-inventory-scrim,
+  .lab-inventory-sheet {
+    transform: none;
+    opacity: 1;
+    transition: none;
+  }
+}
+
 .lab-crossfade {
   transition:
-    opacity 220ms ease,
-    transform 220ms cubic-bezier(0.22, 1, 0.36, 1);
+    opacity var(--lab-crossfade-ms) var(--lab-ease),
+    transform var(--lab-crossfade-ms) var(--lab-ease);
   will-change: opacity;
+}
+
+/* Wear ↔ Compose costume. Opacity only (MOTION_MS.crossfade). Desk does not translate. */
+.lab-costume {
+  transition: opacity var(--lab-crossfade-ms) var(--lab-ease);
+}
+.lab-costume-in {
+  opacity: 1;
+}
+.lab-costume-out {
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* Desktop Oils rail: in-flow width collapse. Phone: no width (FAB/sheet). */
+@media (min-width: 768px) {
+  .lab-costume-left {
+    width: var(--lab-costume-left-w, 0px);
+    height: 100%;
+    flex-shrink: 0;
+    transition:
+      opacity var(--lab-crossfade-ms) var(--lab-ease),
+      width var(--lab-crossfade-ms) var(--lab-ease);
+  }
+}
+
+/* Recipes overlay + ⋯ menu. Same clock as costume; slight scale, not a slide. */
+.lab-overlay-scrim {
+  opacity: 0;
+  transition: opacity var(--lab-crossfade-ms) var(--lab-ease);
+}
+.lab-overlay-scrim[data-open="true"] {
+  opacity: 1;
+}
+.lab-overlay-panel {
+  opacity: 0;
+  transform: translateY(6px) scale(0.98);
+  transition:
+    opacity var(--lab-crossfade-ms) var(--lab-ease),
+    transform var(--lab-crossfade-ms) var(--lab-ease);
+}
+.lab-overlay-panel[data-open="true"] {
+  opacity: 1;
+  transform: translateY(0) scale(1);
 }
 
 .lab-crossfade-in {
@@ -1596,11 +1962,43 @@ body {
 }
 
 .lab-dock-fade-out {
-  animation: lab-dock-out 140ms ease forwards;
+  animation: lab-dock-out var(--lab-dock-out-ms) var(--lab-ease) forwards;
 }
 
 .lab-dock-fade-in {
-  animation: lab-dock-in 260ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  animation: lab-dock-in var(--lab-dock-in-ms) var(--lab-ease) forwards;
+}
+
+/* ★ navbar check-in: MOTION_MS.checkIn. No scale, no overshoot. */
+.lab-checkin-in {
+  animation: lab-checkin-in var(--lab-checkin-ms) var(--lab-ease) both;
+}
+
+.lab-checkin-out {
+  animation: lab-checkin-out var(--lab-checkin-ms) var(--lab-ease) both;
+  pointer-events: none;
+}
+
+@keyframes lab-checkin-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes lab-checkin-out {
+  from {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
 }
 
 @keyframes lab-dock-out {
@@ -1660,7 +2058,7 @@ body {
 
 .lab-empty-desk-item {
   opacity: 0;
-  animation: lab-empty-rise 480ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  animation: lab-empty-rise 480ms var(--lab-ease) forwards;
   animation-delay: calc(var(--lab-empty-i, 0) * 55ms);
 }
 
@@ -1702,19 +2100,70 @@ body {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  :root {
+    --lab-chrome-ms: var(--lab-reduced-ms);
+    --lab-crossfade-ms: var(--lab-reduced-ms);
+    --lab-checkin-ms: var(--lab-reduced-ms);
+    --lab-phone-dock-ms: var(--lab-reduced-ms);
+    --lab-dock-out-ms: var(--lab-reduced-ms);
+    --lab-dock-in-ms: var(--lab-reduced-ms);
+  }
+
+  .lab-phone-dock {
+    transition: none;
+  }
+  .lab-phone-safe,
+  .lab-phone-chat {
+    transition-duration: var(--lab-reduced-ms);
+  }
+
+  .lab-inventory-overlay {
+    --lab-inventory-ms: var(--lab-reduced-ms);
+  }
+  .lab-inventory-sheet {
+    transition: none;
+  }
+
+  /* Opacity only — no translate/scale on chrome, costume, overlays. */
   .lab-crossfade,
+  .lab-costume,
+  .lab-costume-left,
+  .lab-overlay-scrim,
+  .lab-overlay-panel {
+    transition: opacity var(--lab-reduced-ms) var(--lab-ease) !important;
+  }
+
+  .lab-crossfade-in,
+  .lab-crossfade-out,
+  .lab-overlay-panel,
+  .lab-overlay-panel[data-open="true"] {
+    transform: none;
+  }
+
+  .lab-crossfade-in {
+    opacity: 1;
+  }
+
+  .lab-crossfade-out {
+    opacity: 0;
+  }
+
   .lab-build-progress,
   .lab-build-cta {
     transition: none !important;
   }
 
-  .lab-crossfade-in,
-  .lab-crossfade-out {
-    opacity: 1;
+  .lab-checkin-in,
+  .lab-checkin-out {
+    animation: none !important;
     transform: none;
   }
 
-  .lab-crossfade-out {
+  .lab-checkin-in {
+    opacity: 1;
+  }
+
+  .lab-checkin-out {
     opacity: 0;
   }
 

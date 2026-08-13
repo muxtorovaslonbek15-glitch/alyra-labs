@@ -157,7 +157,7 @@ export function deriveBuildSteps(bridge: LabBridgeFormula): BuildStep[] {
         kind: "notes",
         narration: solid
           ? "Ready when the puck reads matte. Press, warm, wear."
-          : "Heart and base should read on the tutor when Mix settles.",
+          : "Heart and base should read in Information when Mix settles.",
       });
     }
   }
@@ -230,6 +230,7 @@ export async function runBuildQueue(
                 fx: {
                   ...v.fx,
                   castRevealAt: Date.now(),
+                  cupSetAt: Date.now(),
                   mixAt: v.fx.mixAt ?? Date.now(),
                 },
               }

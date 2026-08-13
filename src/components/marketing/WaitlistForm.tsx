@@ -67,7 +67,7 @@ export function WaitlistForm({
       className={`flex flex-col gap-2 ${compact ? "sm:flex-row sm:items-end" : "max-w-md"}`}
     >
       {!compact ? (
-        <label className="block text-[11px] font-semibold uppercase tracking-wider text-lab-muted">
+        <label className="block text-[11px] font-semibold uppercase tracking-label text-lab-muted">
           Name (optional)
           <input
             value={name}
@@ -77,7 +77,7 @@ export function WaitlistForm({
           />
         </label>
       ) : null}
-      <label className="block min-w-0 flex-1 text-[11px] font-semibold uppercase tracking-wider text-lab-muted">
+      <label className="block min-w-0 flex-1 text-[11px] font-semibold uppercase tracking-label text-lab-muted">
         Email
         <input
           type="email"

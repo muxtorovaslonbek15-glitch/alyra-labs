@@ -9,6 +9,7 @@ export default function PerfumerPage() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const qs = new URLSearchParams();
+    qs.set("audience", "composer");
     qs.set("tab", "chat");
     if (params.get("fromLab") === "1" || params.get("bridge") === "1") {
       qs.set("fromLab", "1");

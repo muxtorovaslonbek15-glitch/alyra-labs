@@ -16,7 +16,7 @@ export function KnowledgeCardPanel({
   if (!card) {
     return (
       <div className="rounded-2xl border border-dashed border-lab-line/70 bg-lab-foam/40 px-4 py-8 text-center">
-        <p className="font-display text-sm text-lab-muted">
+        <p className="text-sm text-lab-muted">
           Hover or select a formula piece to learn more
         </p>
         <p className="mt-2 text-xs text-lab-muted/80">
@@ -40,7 +40,7 @@ export function KnowledgeCardPanel({
     <article className="equation-pop rounded-2xl border border-lab-line/60 bg-white/95 p-4 shadow-sm">
       <div className="flex items-start justify-between gap-2">
         <div>
-          <p className="font-display text-[10px] uppercase tracking-[0.2em] text-lab-teal">
+          <p className="text-[10px] font-semibold uppercase tracking-label text-lab-muted">
             {kindLabel}
           </p>
           <h3 className="mt-1 font-display text-xl text-lab-ink">{card.title}</h3>
@@ -82,7 +82,7 @@ export function KnowledgeCardPanel({
 
       {card.related.length > 0 ? (
         <div className="mt-4">
-          <p className="text-[10px] uppercase tracking-wider text-lab-muted">
+          <p className="text-[10px] uppercase tracking-label text-lab-muted">
             Related
           </p>
           <div className="mt-1.5 flex flex-wrap gap-1.5">

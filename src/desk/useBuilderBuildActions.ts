@@ -25,7 +25,15 @@ export function useBuilderBuildActions(opts?: {
   const undoBuild = useBuilderStore((s) => s.undoBuild);
 
   const onBuild = useCallback(() => {
-    const bridge = useBuilderStore.getState().plan;
+    const state = useBuilderStore.getState();
+    if (
+      state.mode !== "plan_ready" &&
+      state.mode !== "stopped" &&
+      state.mode !== "built"
+    ) {
+      return;
+    }
+    const bridge = state.plan;
     if (!bridge?.lines?.length) return;
     const steps = deriveBuildSteps(bridge);
     const snap = captureDeskSnapshot();
@@ -68,7 +76,15 @@ export function useBuilderBuildActions(opts?: {
   }, [undoBuild]);
 
   const onInstant = useCallback(() => {
-    const bridge = useBuilderStore.getState().plan;
+    const state = useBuilderStore.getState();
+    if (
+      state.mode !== "plan_ready" &&
+      state.mode !== "stopped" &&
+      state.mode !== "built"
+    ) {
+      return;
+    }
+    const bridge = state.plan;
     if (!bridge) return;
     const contents = deskContentsFromBridge(bridge);
     if (!contents.length) {

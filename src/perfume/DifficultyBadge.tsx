@@ -24,7 +24,7 @@ export function DifficultyBadge({
   const label = DIFFICULTY_REWARDS[difficulty].label;
   return (
     <span
-      className={`inline-flex items-center gap-1 rounded px-1.5 py-px text-[9px] font-semibold uppercase tracking-wider ${STYLES[difficulty]} ${className}`}
+      className={`inline-flex items-center gap-1 rounded px-1.5 py-px text-[9px] font-semibold uppercase tracking-label ${STYLES[difficulty]} ${className}`}
     >
       {label}
       {typeof steps === "number" ? (

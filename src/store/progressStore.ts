@@ -4,6 +4,7 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import type { EngineResult } from "@/types";
 import { PRODUCT_GOALS } from "@/domains/chemistry/data/goals";
+import { SOLID_PERFUME_GOALS } from "@/domains/chemistry/data/solidPerfume";
 import { PERFUME_RECIPES, getPerfumeRecipe } from "@/domains/chemistry/perfume";
 import { useAuthStore } from "@/store/authStore";
 import { syncProgressToFirestore } from "@/lib/firebase/profile";
@@ -51,12 +52,18 @@ const DISCOVERY_BADGES: Omit<Badge, "earnedAt">[] = [
   },
 ];
 
-/** Goal badges stay in sync with PRODUCT_GOALS badgeIds. */
-const GOAL_BADGES: Omit<Badge, "earnedAt">[] = PRODUCT_GOALS.map((g) => ({
-  id: g.badgeId,
-  title: g.title,
-  description: g.tagline,
-}));
+const GOAL_BADGES: Omit<Badge, "earnedAt">[] = [
+  ...PRODUCT_GOALS.map((g) => ({
+    id: g.badgeId,
+    title: g.title,
+    description: g.tagline,
+  })),
+  ...SOLID_PERFUME_GOALS.map((g) => ({
+    id: g.badgeId,
+    title: g.title,
+    description: g.tagline,
+  })),
+];
 
 const PERFUME_BADGES: Omit<Badge, "earnedAt">[] = PERFUME_RECIPES.map((p) => ({
   id: p.badgeId,
@@ -345,7 +352,9 @@ export const useProgressStore = create<ProgressState>()(
             }),
           );
           if (!badges.some((b) => b.id === badgeId)) {
-            const goal = PRODUCT_GOALS.find((g) => g.badgeId === badgeId);
+            const goal =
+              PRODUCT_GOALS.find((g) => g.badgeId === badgeId) ??
+              SOLID_PERFUME_GOALS.find((g) => g.badgeId === badgeId);
             const perfume = PERFUME_RECIPES.find((p) => p.badgeId === badgeId);
             badges.push({
               id: badgeId,

@@ -33,6 +33,24 @@ async function optionalUid(req: Request): Promise<string | null> {
   }
 }
 
+const FORBIDDEN_PROP = /key|secret|token|phone|email|dob|address|gsk_/i;
+
+function sanitizeProps(
+  props: Record<string, unknown> | undefined,
+): Record<string, unknown> {
+  if (!props || typeof props !== "object") return {};
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(props).slice(0, 20)) {
+    if (FORBIDDEN_PROP.test(k)) continue;
+    if (typeof v === "string" && /gsk_/i.test(v)) continue;
+    if (typeof v === "string") out[k] = v.slice(0, 80);
+    else if (typeof v === "number" || typeof v === "boolean") out[k] = v;
+    else if (v == null) continue;
+    else out[k] = String(v).slice(0, 80);
+  }
+  return out;
+}
+
 export async function POST(req: Request) {
   let body: {
     name?: string;
@@ -68,10 +86,9 @@ export async function POST(req: Request) {
     uid,
     anonId: body.anonId ?? null,
     path: typeof body.path === "string" ? body.path.slice(0, 200) : undefined,
-    props:
-      body.props && typeof body.props === "object"
-        ? Object.fromEntries(Object.entries(body.props).slice(0, 20))
-        : {},
+    props: sanitizeProps(
+      body.props && typeof body.props === "object" ? body.props : undefined,
+    ),
   });
 
   if (uid) void touchLastSeen(uid);

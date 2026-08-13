@@ -13,6 +13,12 @@ import type {
   FluidLayer,
   FluidState,
 } from "./types";
+import {
+  clamp01,
+  stirImpulseDurationMs,
+  stirImpulseStrength,
+  waxAmount,
+} from "./fluidMath";
 
 const IMPULSE_KINDS = new Set<EngineEffectKind>([
   "blast",
@@ -94,8 +100,6 @@ function impulsesFromFx(fx: VesselFx | undefined): FluidImpulse[] {
   const out: FluidImpulse[] = [];
   const pour = fxImpulse("pour", fx.pourAt ?? fx.transferAt, 0.85);
   if (pour) out.push(pour);
-  const stir = fxImpulse("stir", fx.stirAt, 0.45);
-  if (stir) out.push(stir);
   const shake = fxImpulse("shake", fx.shakeAt, 0.75);
   if (shake) out.push(shake);
   return out;
@@ -144,6 +148,12 @@ export type FluidVesselInput = Pick<
   agitation?: number;
   meltFraction?: number;
   mixBlend?: number;
+  /** Tin / solid perfume — wax shader path, not ice. */
+  isSolidVessel?: boolean;
+  /** Mass fraction of wax in contents (0–1). */
+  waxFrac?: number;
+  /** Prefer still-water in the renderer (also detected on the canvas). */
+  reducedMotion?: boolean;
 };
 
 /**
@@ -210,6 +220,8 @@ export function livePreviewToFluidState(
     vessel.meltFraction ?? 0,
   );
   const freeze = Math.max(0, solidAmt - meltAmt * 0.9);
+  const materialVisc =
+    typeof vessel.simViscosity === "number" ? vessel.simViscosity : 0.18;
   const viscosityBase =
     typeof vessel.simViscosity === "number"
       ? vessel.simViscosity
@@ -218,6 +230,12 @@ export function livePreviewToFluidState(
         : meltAmt > 0.05
           ? Math.max(0.05, 0.32 - meltAmt * 0.22)
           : 0.18;
+  const wax = waxAmount({
+    viscosity: materialVisc,
+    isSolidVessel: vessel.isSolidVessel,
+    waxFrac: vessel.waxFrac,
+    meltFraction: vessel.meltFraction,
+  });
 
   const temperature = Math.min(
     1,
@@ -234,8 +252,26 @@ export function livePreviewToFluidState(
     ),
   );
 
+  const cool = clamp01(
+    Math.max(
+      intensities.cool,
+      vessel.coolAttached ? 0.62 : 0,
+      freeze * (1 - wax) * 0.4,
+    ),
+  );
+
+  const viscForStir = clamp01(viscosityBase);
+  const stirHit = fxImpulse(
+    "stir",
+    vessel.fx?.stirAt,
+    stirImpulseStrength(viscForStir),
+  );
+  if (stirHit) {
+    stirHit.durationMs = stirImpulseDurationMs(viscForStir);
+  }
   const impulses = [
     ...impulsesFromFx(vessel.fx),
+    ...(stirHit ? [stirHit] : []),
     ...impulsesFromEffects(effects, vessel.fx?.mixAt ?? vessel.fx?.heatFlashAt),
   ];
 
@@ -301,5 +337,8 @@ export function livePreviewToFluidState(
     solidify: freeze,
     agitation,
     overflow,
+    wax,
+    cool,
+    stillWater: Boolean(vessel.reducedMotion),
   };
 }

@@ -1,0 +1,187 @@
+/* Full-card heat / cool — clipped by the vessel card. Presence, not fireworks. */
+
+.lab-card-heat-wash {
+  background: radial-gradient(
+    ellipse 120% 70% at 50% 100%,
+    rgba(184, 149, 108, 0.38) 0%,
+    rgba(184, 149, 108, 0.12) 42%,
+    transparent 74%
+  );
+}
+
+.lab-card-heat-rim {
+  box-shadow:
+    inset 0 0 0 1px rgba(184, 149, 108, 0.45),
+    inset 0 -28px 36px rgba(184, 149, 108, 0.16);
+}
+
+.lab-card-heat-haze {
+  background: linear-gradient(
+    180deg,
+    transparent,
+    rgba(255, 236, 200, 0.1) 40%,
+    rgba(184, 149, 108, 0.18)
+  );
+  filter: blur(8px);
+  animation: lab-card-haze 1.8s ease-in-out infinite;
+}
+
+@keyframes lab-card-haze {
+  0%,
+  100% {
+    opacity: 0.45;
+    transform: translateY(0) scaleX(1);
+  }
+  50% {
+    opacity: 0.8;
+    transform: translateY(-3px) scaleX(1.02);
+  }
+}
+
+.lab-card-heat-rail {
+  background: linear-gradient(
+    180deg,
+    #5a5046 0%,
+    #2a221c 38%,
+    #1a1612 100%
+  );
+  box-shadow:
+    inset 0 1px 0 rgba(196, 180, 154, 0.35),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.45);
+}
+
+.lab-bunsen-canvas {
+  filter: contrast(1.08) saturate(1.05);
+}
+
+.lab-bunsen-glow {
+  animation: lab-bunsen-glow 0.9s ease-in-out infinite;
+}
+
+@keyframes lab-bunsen-glow {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 0.9;
+  }
+}
+
+.lab-bunsen-tongue {
+  transform-origin: 50% 100%;
+  animation: lab-bunsen-tongue 0.38s ease-in-out infinite;
+}
+
+.lab-bunsen-tongue-b {
+  animation-duration: 0.46s;
+  animation-delay: 0.08s;
+}
+
+.lab-bunsen-tongue-c {
+  animation-duration: 0.41s;
+  animation-delay: 0.14s;
+}
+
+@keyframes lab-bunsen-tongue {
+  0%,
+  100% {
+    transform: scaleY(1) scaleX(1) skewX(0deg);
+  }
+  40% {
+    transform: scaleY(1.12) scaleX(0.92) skewX(-1.4deg);
+  }
+  70% {
+    transform: scaleY(0.94) scaleX(1.06) skewX(1.1deg);
+  }
+}
+
+.lab-bunsen-ember {
+  animation: lab-bunsen-ember 1.6s ease-out infinite;
+}
+
+@keyframes lab-bunsen-ember {
+  0% {
+    opacity: 0;
+    transform: translateY(0) scale(0.6);
+  }
+  18% {
+    opacity: 0.7;
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-22px) scale(0.2);
+  }
+}
+
+.lab-card-cool-wash {
+  background: radial-gradient(
+    ellipse 120% 75% at 50% 100%,
+    rgba(12, 74, 110, 0.34) 0%,
+    rgba(125, 211, 252, 0.1) 46%,
+    transparent 76%
+  );
+}
+
+.lab-card-cool-rim {
+  box-shadow:
+    inset 0 0 0 1px rgba(125, 211, 252, 0.4),
+    inset 0 18px 28px rgba(224, 242, 254, 0.22),
+    inset 0 -24px 32px rgba(12, 74, 110, 0.18);
+}
+
+.lab-card-cool-tray {
+  background: linear-gradient(
+    180deg,
+    #3d4a52 0%,
+    #1e2a32 42%,
+    #0c4a6e 100%
+  );
+  box-shadow:
+    inset 0 1px 0 rgba(186, 230, 253, 0.28),
+    inset 0 -1px 0 rgba(8, 47, 73, 0.5);
+}
+
+.lab-frost-dendrite {
+  stroke: rgba(255, 255, 255, 0.72);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  fill: none;
+}
+
+.lab-frost-film {
+  animation: lab-frost-breathe 3.2s ease-in-out infinite;
+}
+
+@keyframes lab-frost-breathe {
+  0%,
+  100% {
+    opacity: 0.85;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+.lab-liquid-flame-group {
+  transform-origin: 50% 100%;
+  animation: lab-bunsen-tongue 0.42s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lab-card-heat-haze,
+  .lab-bunsen-glow,
+  .lab-bunsen-tongue,
+  .lab-bunsen-tongue-b,
+  .lab-bunsen-tongue-c,
+  .lab-bunsen-ember,
+  .lab-frost-film,
+  .lab-liquid-flame-group {
+    animation: none !important;
+  }
+
+  .lab-card-heat-haze {
+    opacity: 0.35;
+    filter: blur(4px);
+  }
+}

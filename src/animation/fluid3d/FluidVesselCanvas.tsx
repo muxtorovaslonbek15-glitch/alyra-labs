@@ -59,6 +59,10 @@ export function FluidVesselCanvas({
         return;
       }
       handleRef.current = handle;
+      const reduce =
+        typeof window !== "undefined" &&
+        window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      handle.setStillWater(reduce || stateRef.current.stillWater);
       handle.setState(stateRef.current);
     })().catch(() => {
       if (!cancelled) {
@@ -73,6 +77,17 @@ export function FluidVesselCanvas({
       handle?.dispose();
     };
   }, [failed, onUnavailable]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const apply = () => {
+      handleRef.current?.setStillWater(mq.matches || stateRef.current.stillWater);
+    };
+    apply();
+    mq.addEventListener("change", apply);
+    return () => mq.removeEventListener("change", apply);
+  }, [failed]);
 
   useEffect(() => {
     const el = wrapRef.current;

@@ -1,11 +1,5 @@
-import {
-  doc,
-  getDoc,
-  setDoc,
-  updateDoc,
-  type DocumentData,
-} from "firebase/firestore";
-import { getFirebaseDb } from "./client";
+import { getAuthHeaders } from "@/lib/client/authHeaders";
+import type { DocumentData } from "firebase/firestore";
 
 export type Gender = "male" | "female" | "other" | "prefer_not_to_say";
 
@@ -69,8 +63,24 @@ export function isProfileComplete(profile: UserProfile | null | undefined): bool
   );
 }
 
-function usersRef(uid: string) {
-  return doc(getFirebaseDb(), "users", uid);
+async function profileRequest(
+  method: "GET" | "POST" | "PUT",
+  body?: unknown,
+): Promise<UserProfile> {
+  const headers = await getAuthHeaders();
+  if (!headers) throw new Error("Sign in required");
+  const res = await fetch("/api/profile", {
+    method,
+    headers,
+    ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
+  });
+  const data = (await res.json().catch(() => ({}))) as DocumentData & {
+    error?: string;
+  };
+  if (!res.ok) {
+    throw new Error(data.error || `Profile ${method} failed (${res.status})`);
+  }
+  return fromDoc(data, typeof data.email === "string" ? data.email : "");
 }
 
 function fromDoc(data: DocumentData, emailFallback: string): UserProfile {
@@ -101,88 +111,45 @@ function fromDoc(data: DocumentData, emailFallback: string): UserProfile {
 }
 
 export async function getUserProfile(
-  uid: string,
+  _uid: string,
   emailFallback = "",
 ): Promise<UserProfile | null> {
-  const snap = await getDoc(usersRef(uid));
-  if (!snap.exists()) return null;
-  return fromDoc(snap.data(), emailFallback);
+  try {
+    const profile = await profileRequest("GET");
+    if (!profile.email && emailFallback) {
+      return { ...profile, email: emailFallback };
+    }
+    return profile;
+  } catch {
+    return null;
+  }
 }
 
 export async function ensureUserProfile(
-  uid: string,
+  _uid: string,
   email: string,
   _local?: { xp: number; discoveredIds: string[]; badgeIds: string[] },
   signup?: SignupProfileFields,
 ): Promise<UserProfile> {
-  const existing = await getUserProfile(uid, email);
-  if (existing) {
-    const displayName =
-      existing.displayName?.trim() || signup?.displayName.trim() || undefined;
-    const phone = existing.phone?.trim() || signup?.phone.trim() || undefined;
-    const needsMeta =
-      (!existing.displayName && displayName) || (!existing.phone && phone);
-    if (needsMeta) {
-      const updatedAt = Date.now();
-      await updateDoc(usersRef(uid), {
-        ...(displayName ? { displayName } : {}),
-        ...(phone ? { phone } : {}),
-        updatedAt,
-      });
-      return {
-        ...existing,
-        displayName,
-        phone,
-        updatedAt,
-      };
-    }
-    return existing;
-  }
-
-  const now = Date.now();
-  const profile: UserProfile = {
+  return profileRequest("POST", {
     email,
-    displayName: signup?.displayName.trim() || undefined,
-    phone: signup?.phone.trim() || undefined,
-    gender: "",
-    dob: "",
-    address: "",
-    pincode: "",
-    // Progress starts empty; merge guest XP via /api/progress (Admin).
-    xp: 0,
-    discoveredIds: [],
-    badgeIds: [],
-    stars: 0,
-    lastDailyStarAt: 0,
-    unlockedShopItemIds: [],
-    completedPerfumeIds: [],
-    createdAt: now,
-    updatedAt: now,
-  };
-  await setDoc(usersRef(uid), profile);
-  return profile;
+    displayName: signup?.displayName.trim() || "",
+    phone: signup?.phone.trim() || "",
+  });
 }
 
 export async function updateUserProfile(
-  uid: string,
+  _uid: string,
   input: ProfileInput,
 ): Promise<UserProfile> {
-  const age = ageFromDob(input.dob);
-  const updatedAt = Date.now();
-  const patch = {
+  return profileRequest("PUT", {
     gender: input.gender,
     dob: input.dob,
-    age: age ?? null,
     address: input.address.trim(),
     pincode: input.pincode.trim(),
-    displayName: input.displayName?.trim() || null,
-    phone: input.phone?.trim() || null,
-    updatedAt,
-  };
-  await updateDoc(usersRef(uid), patch);
-  const next = await getUserProfile(uid);
-  if (!next) throw new Error("Profile missing after update");
-  return next;
+    displayName: input.displayName?.trim() || "",
+    phone: input.phone?.trim() || "",
+  });
 }
 
 export async function syncProgressToFirestore(

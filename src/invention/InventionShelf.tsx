@@ -49,13 +49,13 @@ function InventionRow({
           <p className="truncate font-display text-base text-lab-ink">
             {inv.name}
           </p>
-          <p className="text-[10px] uppercase tracking-wider text-lab-muted">
+          <p className="text-[10px] uppercase tracking-label text-lab-muted">
             {inv.kind} · v{latest?.version ?? 1} · {tierLabel(latest?.tier ?? "make")}
           </p>
         </div>
         <div className="shrink-0 text-right">
           <p className="font-display text-lg text-lab-teal">{inv.bestScore}</p>
-          <p className="text-[9px] uppercase tracking-wider text-lab-muted">
+          <p className="text-[9px] uppercase tracking-label text-lab-muted">
             best
           </p>
         </div>
@@ -74,7 +74,7 @@ function InventionRow({
               onClick={() => setDossierOpen(true)}
               className="w-full rounded-lg border border-lab-teal/30 bg-lab-teal/5 px-2.5 py-1.5 text-left transition hover:bg-lab-teal/10"
             >
-              <p className="text-[10px] font-semibold uppercase tracking-wider text-lab-teal">
+              <p className="text-[10px] font-semibold uppercase tracking-label text-lab-teal">
                 Perfume dossier
               </p>
               <p className="mt-0.5 line-clamp-2 text-[11px] text-lab-ink/85">
@@ -87,7 +87,7 @@ function InventionRow({
           ) : (
             <div>
               <div className="mb-1 flex items-center justify-between">
-                <p className="text-[10px] font-semibold uppercase tracking-wider text-lab-teal">
+                <p className="text-[10px] font-semibold uppercase tracking-label text-lab-teal">
                   Perfume dossier
                 </p>
                 <button
@@ -160,7 +160,7 @@ function ComparePanel({
   return (
     <div className="mt-3 rounded-xl border border-lab-teal/30 bg-lab-wash/60 p-3">
       <div className="flex items-center justify-between">
-        <p className="text-[10px] font-semibold uppercase tracking-wider text-lab-teal">
+        <p className="text-[10px] font-semibold uppercase tracking-label text-lab-teal">
           Version compare
         </p>
         <button
@@ -178,7 +178,7 @@ function ComparePanel({
             key={v.version}
             className="rounded-lg border border-lab-line/50 bg-white px-2 py-2"
           >
-            <p className="text-[10px] uppercase tracking-wider text-lab-muted">
+            <p className="text-[10px] uppercase tracking-label text-lab-muted">
               v{v.version} · {tierLabel(v.tier)}
             </p>
             <p className="font-display text-xl text-lab-teal">{v.score}</p>
@@ -285,7 +285,7 @@ export function InventionShelf() {
       >
         <div className="flex items-center justify-between border-b border-lab-line/50 px-4 py-3">
           <div>
-            <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-lab-teal">
+            <p className="text-[10px] font-semibold uppercase tracking-label text-lab-teal">
               My Shelf
             </p>
             <h2 className="font-display text-xl text-lab-ink">
@@ -303,7 +303,7 @@ export function InventionShelf() {
 
         {brief ? (
           <div className="border-b border-lab-amber/30 bg-lab-amber/10 px-4 py-2">
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-lab-amber">
+            <p className="text-[10px] font-semibold uppercase tracking-label text-lab-amber">
               Today&apos;s brief
             </p>
             <p className="text-[12px] text-lab-ink">{brief.message}</p>

@@ -1,5 +1,6 @@
 "use client";
 
+/** Retired from product chrome — `/api/stars/unlock` returns 410. Keep file for catalog reference. */
 import { useMemo, useState } from "react";
 import { STAR_CATALOG, type StarShopItem } from "@/domains/chemistry/perfume";
 import { useProgressStore } from "@/store/progressStore";
@@ -102,7 +103,7 @@ export function StarShopModal({
       >
         <div className="flex items-center justify-between border-b border-lab-line/50 px-4 py-3">
           <div>
-            <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-lab-amber">
+            <p className="text-[10px] font-semibold uppercase tracking-label text-lab-amber">
               Star catalog
             </p>
             <h2 className="font-display text-xl text-lab-ink">
@@ -135,7 +136,7 @@ export function StarShopModal({
                     {item.title}
                   </p>
                   <p className="text-[11px] text-lab-muted">{item.description}</p>
-                  <p className="mt-0.5 text-[10px] uppercase tracking-wider text-lab-muted">
+                  <p className="mt-0.5 text-[10px] uppercase tracking-label text-lab-muted">
                     {item.category.replace("-", " ")}
                   </p>
                 </div>

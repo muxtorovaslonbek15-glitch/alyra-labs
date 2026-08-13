@@ -1,50 +1,72 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useRef } from "react";
 import { useDroppable } from "@dnd-kit/core";
 import { DESK_SURFACE } from "@/drag/types";
 import { useDeskStore } from "@/store/deskStore";
 import { VesselSlot } from "./VesselSlot";
-import { showToast } from "@/gamification/ToastHost";
-import { PourStream } from "@/animation/PourStream";
+import { PourStream, pourSurfaceLocalY } from "@/animation/PourStream";
 import { resolveGlassShape } from "@/animation/glassware/shapes";
 import {
   computeFxIntensities,
   deskMotionClass,
   POUR_WINDOW_MS,
+  pourHomeFactor,
+  pourPoseLiftPx,
   pourPoseTiltDeg,
+  transferDisplayFillPct,
 } from "@/animation/fxIntensity";
-import { useFxClock } from "@/animation/useFxClock";
+import { useFxClock, usePrefersReducedMotion } from "@/animation/useFxClock";
 import { getChemical } from "@/domains/chemistry/data/chemicals";
+import { trySeedDemoReaction } from "@/lab/labActions";
 import {
-  trySeedDemoReaction,
-  tryToggleMixActive,
-  tryToggleShakeActive,
-  tryToggleStirActive,
-} from "@/lab/labActions";
-import { labCopy } from "@/lab/labCopy";
-import { LAB_GLASS_FALLBACK, VESSEL_CARD } from "@/desk/vesselLayout";
+  LAB_GLASS_FALLBACK,
+  vesselCardMetrics,
+  wearOnlyTins,
+} from "@/desk/vesselLayout";
+import { useMdUp } from "@/desk/useMdUp";
+import { DeskToolButtons } from "@/desk/DeskToolButtons";
+import { useWearStore } from "@/wear/wearStore";
+import {
+  fillPctFromContents,
+  getVesselContents,
+} from "@/desk/vesselContents";
 import { hadSolidSession } from "@/perfumer/solidDetect";
 import { ensureSim } from "@/desk/vesselSim";
-import { VesselSimHud } from "@/desk/VesselSimHud";
+import { planBuildCta, useBuilderStore } from "@/store/builderStore";
+import { useBuilderBuildActions } from "@/desk/useBuilderBuildActions";
 
 export function DeskWorkspace({
   onOpenAtelier,
   flushBottom = false,
+  hideTools = false,
 }: {
   onOpenAtelier?: () => void;
   /** When chat is bottom-docked: square bottom edge flush to panel */
   flushBottom?: boolean;
+  /** Wear chrome: tin is hero; Place / Process / React stay composer-only. */
+  hideTools?: boolean;
 } = {}) {
-  const vessels = useDeskStore((s) => s.vessels);
-  const activeVesselId = useDeskStore((s) => s.activeVesselId);
-  const placeEquipment = useDeskStore((s) => s.placeEquipment);
-  const toggleHeat = useDeskStore((s) => s.toggleHeat);
-  const toggleCool = useDeskStore((s) => s.toggleCool);
-  const clearDesk = useDeskStore((s) => s.clearDesk);
+  const storedVessels = useDeskStore((s) => s.vessels);
+  const skuChooserNeeded = useWearStore((s) => s.skuChooserNeeded);
+  const vessels = hideTools
+    ? skuChooserNeeded
+      ? []
+      : wearOnlyTins(storedVessels)
+    : storedVessels;
   const deskRef = useRef<HTMLElement | null>(null);
-  const [confirmClear, setConfirmClear] = useState(false);
   const tinBiasEmpty = hadSolidSession();
+  const mdUp = useMdUp();
+  const card = vesselCardMetrics(mdUp);
+  const builderMode = useBuilderStore((s) => s.mode);
+  const plan = useBuilderStore((s) => s.plan);
+  const { onBuild } = useBuilderBuildActions();
+  const mappedCount = plan?.mappingReport?.mappedCount ?? 0;
+  const showDeskBuild =
+    !hideTools &&
+    mdUp &&
+    planBuildCta(builderMode) === "build" &&
+    mappedCount > 0;
 
   const { setNodeRef, isOver } = useDroppable({
     id: DESK_SURFACE,
@@ -56,8 +78,7 @@ export function DeskWorkspace({
     setNodeRef(node);
   }
 
-  const active = vessels.find((v) => v.instanceId === activeVesselId) ?? vessels[0];
-  const solidActive = active?.equipmentId === "tin";
+  const reducedMotion = usePrefersReducedMotion();
 
   const simAlive = vessels.some(
     (v) =>
@@ -126,71 +147,91 @@ export function DeskWorkspace({
     ? vessels.find((v) => v.instanceId === transferSource.fx.transferToId)
     : undefined;
 
-  const streaming = sourceInten?.pourPhase === "stream";
+  const pourLive =
+    sourceInten?.pourPhase === "stream" || sourceInten?.pourPhase === "settle";
 
   const streamProps =
     transferSource &&
     transferTarget &&
     transferSource.fx.transferAt &&
-    streaming
+    pourLive
       ? (() => {
           const fromGeo = resolveGlassShape(transferSource.equipmentId);
           const toGeo = resolveGlassShape(transferTarget.equipmentId);
-          const scaleX =
-            (VESSEL_CARD.width - VESSEL_CARD.glassInsetX * 2) / 100;
-          const scaleY = VESSEL_CARD.glassH / 140;
-          const poseTilt = pourPoseTiltDeg(
-            sourceInten!.pourPhase,
-            sourceInten!.pourElapsed,
-          );
+          const scaleX = (card.width - card.glassInsetX * 2) / 100;
+          const scaleY = card.glassH / 140;
+          const poseTilt = reducedMotion
+            ? 0
+            : pourPoseTiltDeg(
+                sourceInten!.pourPhase,
+                sourceInten!.pourElapsed,
+              );
+          const liftPx = reducedMotion
+            ? 0
+            : pourPoseLiftPx(
+                sourceInten!.pourPhase,
+                sourceInten!.pourElapsed,
+              );
+          const homeT = reducedMotion
+            ? 1
+            : pourHomeFactor(
+                sourceInten!.pourPhase,
+                sourceInten!.pourElapsed,
+              );
+          const home = transferSource.fx.pourHome;
+          const homeDx = home
+            ? (home.x - transferSource.position.x) * homeT
+            : 0;
+          const homeDy = home
+            ? (home.y - transferSource.position.y) * homeT
+            : 0;
           const lipDesk = (
             v: typeof transferSource,
             geo: typeof fromGeo,
             tiltDeg = 0,
           ) => {
-            const localX =
-              VESSEL_CARD.glassInsetX + geo.lip.x * scaleX;
-            const localY = VESSEL_CARD.glassTop + geo.lip.y * scaleY;
+            const localX = card.glassInsetX + geo.lip.x * scaleX;
+            const localY = card.glassTop + geo.lip.y * scaleY;
             // Match card pour pose origin (72% 85%)
-            const ox = VESSEL_CARD.width * 0.72;
-            const oy = VESSEL_CARD.height * 0.85;
+            const ox = card.width * 0.72;
+            const oy = card.height * 0.85;
             const rad = (tiltDeg * Math.PI) / 180;
             const dx = localX - ox;
             const dy = localY - oy;
             const rx = dx * Math.cos(rad) - dy * Math.sin(rad);
             const ry = dx * Math.sin(rad) + dy * Math.cos(rad);
             return {
-              x: v.position.x + ox + rx,
-              y: v.position.y + oy + ry,
+              x: v.position.x + ox + rx + homeDx,
+              y: v.position.y + oy + ry + homeDy - liftPx,
             };
           };
-          const mouthDesk = (
-            v: typeof transferTarget,
-            geo: typeof toGeo,
-          ) => ({
-            x: v.position.x + VESSEL_CARD.glassInsetX + geo.mouth.x * scaleX,
-            y:
-              v.position.y +
-              VESSEL_CARD.glassTop +
-              geo.mouth.y * scaleY +
-              8,
+          const targetFill = transferDisplayFillPct({
+            role: "target",
+            phase: sourceInten!.pourPhase,
+            elapsed: sourceInten!.pourElapsed,
+            storeFillPct:
+              transferTarget.livePreview?.fillPct ??
+              fillPctFromContents(
+                getVesselContents(transferTarget),
+                transferTarget.equipmentId,
+              ),
+            targetFillPct: transferTarget.fx.targetFillPct,
           });
-          // Use stamped pourFrom (lip at transfer start), then apply pose tilt
-          const from = transferSource.fx.pourFrom
-            ? (() => {
-                const ox =
-                  transferSource.position.x + VESSEL_CARD.width * 0.72;
-                const oy =
-                  transferSource.position.y + VESSEL_CARD.height * 0.85;
-                const rad = (poseTilt * Math.PI) / 180;
-                const dx = transferSource.fx.pourFrom.x - ox;
-                const dy = transferSource.fx.pourFrom.y - oy;
-                return {
-                  x: ox + dx * Math.cos(rad) - dy * Math.sin(rad),
-                  y: oy + dx * Math.sin(rad) + dy * Math.cos(rad),
-                };
-              })()
-            : lipDesk(transferSource, fromGeo, poseTilt);
+          const surfaceLocalY = pourSurfaceLocalY(
+            targetFill,
+            toGeo.wellBounds,
+          );
+          const to = {
+            x:
+              transferTarget.position.x +
+              card.glassInsetX +
+              toGeo.mouth.x * scaleX,
+            y:
+              transferTarget.position.y +
+              card.glassTop +
+              surfaceLocalY * scaleY,
+          };
+          const from = lipDesk(transferSource, fromGeo, poseTilt);
           const color =
             transferSource.fx.pourColor ??
             transferTarget.fx.pourColor ??
@@ -205,12 +246,21 @@ export function DeskWorkspace({
           const layerColors =
             transferSource.livePreview?.layerColors ??
             transferTarget.livePreview?.layerColors;
+          const targetIdx = vessels.findIndex(
+            (v) => v.instanceId === transferTarget.instanceId,
+          );
+          const targetSplash =
+            targetIdx >= 0 ? (vesselIntensities[targetIdx]?.splash ?? 0) : 0;
           return {
             from,
-            to: mouthDesk(transferTarget, toGeo),
+            to,
             color,
             layerColors,
             activeKey: transferSource.fx.transferAt,
+            viscosity: ensureSim(transferSource).viscosity,
+            splash: Math.max(sourceInten!.splash, targetSplash),
+            phase: sourceInten!.pourPhase,
+            streaming: sourceInten!.pourPhase === "stream",
           };
         })()
       : null;
@@ -233,186 +283,54 @@ export function DeskWorkspace({
       <div className="pointer-events-none absolute inset-x-0 top-0 h-24 bg-gradient-to-b from-black/15 to-transparent" />
           <div className="pointer-events-none absolute inset-0 lab-desk-sheen" />
 
-      {active &&
-      (active.heatAttached ||
-        active.coolAttached ||
-        ensureSim(active).stirActive ||
-        ensureSim(active).shakeActive ||
-        ensureSim(active).mixActive ||
-        ensureSim(active).agitation > 0.05 ||
-        ensureSim(active).frost > 0.08) ? (
-        <div className="pointer-events-none absolute left-3 top-3 z-30 md:left-4 md:top-4">
-          <VesselSimHud vessel={active} now={now} />
-        </div>
-      ) : null}
-
       {streamProps ? (
-        <div className="pointer-events-none absolute inset-0 z-20">
+        <div className="pointer-events-none absolute inset-0 z-[25] overflow-visible">
           <PourStream
             from={streamProps.from}
             to={streamProps.to}
             color={streamProps.color}
             layerColors={streamProps.layerColors}
             activeKey={streamProps.activeKey}
-            streaming
+            streaming={streamProps.streaming}
+            viscosity={streamProps.viscosity}
+            splash={streamProps.splash}
+            phase={streamProps.phase}
           />
         </div>
       ) : null}
 
-      {vessels.length > 0 ? (
-        <div className="absolute bottom-[max(0.5rem,env(safe-area-inset-bottom,0px))] left-1/2 z-40 flex w-[calc(100%-1rem)] max-w-[calc(100%-5.5rem)] -translate-x-1/2 flex-wrap items-center justify-center gap-y-1.5 rounded-xl border border-white/20 bg-lab-ink/90 px-2 py-1.5 pb-[max(0.4rem,env(safe-area-inset-bottom,0px))] shadow-2xl backdrop-blur-md md:bottom-2 md:w-auto md:max-w-none md:pb-1.5">
-          <span className="hidden px-2 text-[9px] font-semibold uppercase tracking-[0.14em] text-lab-foam/55 sm:inline">
-            Tools
-          </span>
-          <span
-            className="mx-1 hidden h-5 w-px bg-white/15 sm:block"
-            aria-hidden
-          />
-          <div className="flex items-center gap-1.5">
-            <button
-              type="button"
-              onClick={() => {
-                const n = vessels.length;
-                placeEquipment("beaker", {
-                  x: 60 + (n % 3) * (VESSEL_CARD.width + 6),
-                  y: 50 + Math.floor(n / 3) * 200,
-                });
-              }}
-              className="min-h-9 rounded-lg bg-white/10 px-2.5 py-2 text-[10px] font-semibold text-lab-foam transition hover:bg-white/20 md:min-h-7 md:py-1.5"
-            >
-              + Beaker
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                const n = vessels.length;
-                placeEquipment("tin", {
-                  x: 60 + (n % 3) * (VESSEL_CARD.width + 6),
-                  y: 50 + Math.floor(n / 3) * 200,
-                });
-              }}
-              className="min-h-9 rounded-lg bg-white/10 px-2.5 py-2 text-[10px] font-semibold text-lab-foam transition hover:bg-white/20 md:min-h-7 md:py-1.5"
-            >
-              + Tin
-            </button>
-          </div>
-          <span className="mx-1 h-5 w-px bg-white/15" aria-hidden />
-          <div className="flex items-center gap-1.5">
-            <button
-              type="button"
-              onClick={() => {
-                if (!active) return;
-                tryToggleStirActive(active.instanceId);
-              }}
-              aria-pressed={Boolean(active && ensureSim(active).stirActive)}
-              className={`min-h-9 rounded-lg px-2.5 py-2 text-[10px] font-semibold transition md:min-h-7 md:py-1.5 ${
-                active && ensureSim(active).stirActive
-                  ? "bg-white/25 text-lab-foam shadow-[0_0_0_1px_rgba(255,255,255,0.25)]"
-                  : "bg-white/10 text-lab-foam hover:bg-white/20"
-              }`}
-            >
-              Stir
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                if (!active) return;
-                toggleHeat(active.instanceId);
-              }}
-              aria-pressed={Boolean(active?.heatAttached)}
-              className={`min-h-9 rounded-lg px-2.5 py-2 text-[10px] font-semibold transition md:min-h-7 md:py-1.5 ${
-                active?.heatAttached
-                  ? "bg-lab-amber text-white shadow-[0_0_0_1px_rgba(255,200,120,0.45)]"
-                  : "bg-white/10 text-lab-foam hover:bg-white/20"
-              }`}
-            >
-              {solidActive ? "Melt" : "Heat"}
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                if (!active) return;
-                toggleCool(active.instanceId);
-              }}
-              aria-pressed={Boolean(active?.coolAttached)}
-              className={`min-h-9 rounded-lg px-2.5 py-2 text-[10px] font-semibold transition md:min-h-7 md:py-1.5 ${
-                active?.coolAttached
-                  ? "bg-[#0c4a6e] text-[#e0f2fe] shadow-[0_0_0_1px_rgba(125,211,252,0.4)]"
-                  : "bg-white/10 text-lab-foam hover:bg-white/20"
-              }`}
-            >
-              {solidActive ? "Set" : "Cool"}
-            </button>
-            {!solidActive ? (
-              <button
-                type="button"
-                onClick={() => {
-                  if (!active) return;
-                  tryToggleShakeActive(active.instanceId);
-                }}
-                aria-pressed={Boolean(active && ensureSim(active).shakeActive)}
-                className={`min-h-9 rounded-lg px-2.5 py-2 text-[10px] font-semibold transition md:min-h-7 md:py-1.5 ${
-                  active && ensureSim(active).shakeActive
-                    ? "bg-white/25 text-lab-foam shadow-[0_0_0_1px_rgba(255,255,255,0.25)]"
-                    : "bg-white/10 text-lab-foam hover:bg-white/20"
-                }`}
-              >
-                Shake
-              </button>
-            ) : null}
-          </div>
-          <span className="mx-1 h-5 w-px bg-white/15" aria-hidden />
-          <div className="flex items-center gap-1.5">
-            <button
-              type="button"
-              onClick={() => {
-                if (!active) return;
-                tryToggleMixActive(active.instanceId);
-              }}
-              aria-pressed={Boolean(active && ensureSim(active).mixActive)}
-              className={`min-h-9 rounded-lg px-2.5 py-2 text-[10px] font-semibold transition md:min-h-7 md:py-1.5 ${
-                active && ensureSim(active).mixActive
-                  ? "bg-lab-teal text-white shadow-[0_0_0_1px_rgba(255,255,255,0.35)]"
-                  : "bg-lab-teal px-2.5 text-white hover:bg-lab-teal/90"
-              }`}
-            >
-              {solidActive ? "Cast" : "Mix"}
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                if (!confirmClear) {
-                  setConfirmClear(true);
-                  window.setTimeout(() => setConfirmClear(false), 2500);
-                  return;
-                }
-                clearDesk();
-                setConfirmClear(false);
-                showToast(labCopy.deskCleared);
-              }}
-              className="min-h-9 rounded-lg border border-lab-hazard/40 bg-lab-hazard/25 px-2.5 py-2 text-[10px] font-semibold text-lab-foam transition hover:bg-lab-hazard/55 md:min-h-7 md:py-1.5"
-            >
-              {confirmClear ? "Confirm clear?" : "Clear board"}
-            </button>
-          </div>
+      {vessels.length > 0 && !hideTools ? (
+        <div className="absolute bottom-2 left-1/2 z-40 hidden w-auto -translate-x-1/2 flex-wrap items-center justify-center gap-y-1.5 overflow-visible rounded-xl border border-white/20 bg-lab-ink/90 px-2 py-1.5 shadow-2xl backdrop-blur-md md:flex">
+          <DeskToolButtons layout="desktop" />
         </div>
       ) : null}
 
-      <div className="relative z-10 h-full min-h-0 w-full md:min-h-[22rem]">
-        {vessels.length === 0 ? (
+      <div className="relative z-10 h-full min-h-0 w-full overflow-visible md:min-h-[22rem]">
+        {vessels.length === 0 && !(hideTools && skuChooserNeeded) ? (
           <div className="lab-empty-desk absolute inset-0 flex items-center justify-center p-3">
             <div className="lab-empty-desk-inner max-w-md px-3 text-center">
-              <p className="lab-empty-desk-item font-display text-2xl tracking-tight text-lab-foam">
+              {hideTools ? (
+                <>
+                  <p className="lab-empty-desk-item font-display text-2xl tracking-display text-lab-foam">
+                    Your compact
+                  </p>
+                  <p className="lab-empty-desk-item mt-1.5 text-xs leading-snug text-lab-foam/75">
+                    Press. Warm. Wear.
+                  </p>
+                </>
+              ) : (
+                <>
+              <p className="lab-empty-desk-item font-display text-2xl tracking-display text-lab-foam">
                 Compose a signature
               </p>
               <p className="lab-empty-desk-item mt-1.5 text-xs leading-snug text-lab-foam/75 md:hidden">
                 {tinBiasEmpty
                   ? "Place a tin. Melt the chassis. Blend notes. Cast the balm."
-                  : "Place a beaker or tin. Pour notes. Mix — or cast a balm."}
+                  : "Place a beaker or tin. Pour notes. Mix, or cast a balm."}
               </p>
               <p className="lab-empty-desk-item mt-1.5 hidden text-xs leading-snug text-lab-foam/70 md:block">
                 {tinBiasEmpty
-                  ? "Fine perfume, in solid form — press, warm, wear. Chat plans; Build casts here."
+                  ? "Fine perfume, in solid form. Press, warm, wear. Chat plans; Build casts here."
                   : "Desk is the canvas. Chat plans; Build pours or casts here."}
               </p>
               <dl className="lab-empty-cheat mt-6 hidden space-y-2.5 text-left md:block">
@@ -423,7 +341,7 @@ export function DeskWorkspace({
                     ["Toggle inventory", "⌘B"],
                     ["Toggle chat", "⌘T"],
                     ["Dock chat", "⋮⋮ drag · double-click"],
-                    ["Build", "Plan ready → Build"],
+                    ["Build", "Lock plan → Build"],
                     ["Guide", "⋯ → How it works"],
                   ] as const
                 ).map(([label, hint], i) => (
@@ -442,10 +360,23 @@ export function DeskWorkspace({
                 ))}
               </dl>
               <div className="lab-empty-desk-item mt-5 flex flex-col items-stretch gap-2">
+                {showDeskBuild ? (
+                  <button
+                    type="button"
+                    onClick={onBuild}
+                    className="lab-build-cta lab-build-cta-ready rounded-lg bg-lab-foam px-3 py-1.5 text-xs font-semibold text-lab-ink shadow-lg transition hover:bg-white active:scale-[0.98]"
+                  >
+                    Build
+                  </button>
+                ) : null}
                 <button
                   type="button"
                   onClick={() => trySeedDemoReaction()}
-                  className="rounded-lg bg-lab-foam px-3 py-1.5 text-xs font-semibold text-lab-ink shadow-lg transition hover:bg-white active:scale-[0.98]"
+                  className={`rounded-lg px-3 py-1.5 text-xs font-semibold shadow-lg transition active:scale-[0.98] ${
+                    showDeskBuild
+                      ? "border border-lab-foam/35 bg-transparent text-lab-foam hover:bg-white/10"
+                      : "bg-lab-foam text-lab-ink hover:bg-white"
+                  }`}
                 >
                   Try starter: HCl + NaOH
                 </button>
@@ -459,6 +390,8 @@ export function DeskWorkspace({
                   </button>
                 ) : null}
               </div>
+                </>
+              )}
             </div>
           </div>
         ) : (

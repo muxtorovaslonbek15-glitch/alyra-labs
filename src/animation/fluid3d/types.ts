@@ -43,4 +43,10 @@ export interface FluidState {
   agitation: number;
   /** 0–1 overflow / spill energy (overfill past lip) */
   overflow: number;
+  /** 0–1 wax / balm path (vs ice). Ice is water + Cool. */
+  wax: number;
+  /** 0–1 chill (bath / frost). Independent of wax. */
+  cool: number;
+  /** Cheaper still-water: no waves, particles, or time. */
+  stillWater: boolean;
 }

@@ -31,7 +31,7 @@ function FormulaRow({
               {formula.title}
             </p>
             <span
-              className={`shrink-0 rounded px-1 py-0.5 text-[8px] font-semibold uppercase tracking-wider ${
+              className={`shrink-0 rounded px-1 py-0.5 text-[8px] font-semibold uppercase tracking-label ${
                 formula.badge === "screened"
                   ? "bg-lab-teal/15 text-lab-teal"
                   : "bg-lab-amber/15 text-lab-amber"
@@ -223,7 +223,7 @@ export function MarketPanel({
       >
         <div className="flex items-center justify-between border-b border-lab-line/50 px-3 py-2">
           <div>
-            <p className="font-display text-[10px] uppercase tracking-[0.18em] text-lab-teal">
+            <p className="text-[10px] font-semibold uppercase tracking-label text-lab-muted">
               Atelier Market
             </p>
             <h2 className="font-display text-lg text-lab-ink">

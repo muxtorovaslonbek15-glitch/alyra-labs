@@ -23,7 +23,7 @@ function NotePicker({
 }) {
   return (
     <div>
-      <p className="text-[10px] font-semibold uppercase tracking-wider text-lab-muted">
+      <p className="text-[10px] font-semibold uppercase tracking-label text-lab-muted">
         {label}
       </p>
       <div className="mt-1 flex flex-wrap gap-1">
@@ -184,7 +184,7 @@ export function FreeformPerfumeBuilder({
       >
         <div className="flex items-center justify-between border-b border-lab-line/50 px-4 py-3">
           <div>
-            <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-lab-teal">
+            <p className="text-[10px] font-semibold uppercase tracking-label text-lab-teal">
               Freeform
             </p>
             <h2 className="font-display text-xl text-lab-ink">
@@ -219,7 +219,7 @@ export function FreeformPerfumeBuilder({
             onToggle={(id) => toggle(base, setBase, id)}
           />
           <label className="block">
-            <span className="text-[10px] font-semibold uppercase tracking-wider text-lab-muted">
+            <span className="text-[10px] font-semibold uppercase tracking-label text-lab-muted">
               Name your blend
             </span>
             <input

@@ -4,6 +4,7 @@ import { useDraggable } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
 import type { Item } from "@/types";
 import type { DragPayload } from "./types";
+import { ItemGlyph } from "@/animation/heatSource";
 
 interface Props {
   item: Item;
@@ -58,7 +59,7 @@ export function DraggableItem({
           className="relative flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-lab-wash text-sm"
           aria-hidden
         >
-          {item.icon}
+          <ItemGlyph id={item.id} icon={item.icon} />
           {accentColor ? (
             <span
               className="absolute bottom-0.5 right-0.5 h-1.5 w-1.5 rounded-full ring-1 ring-white"

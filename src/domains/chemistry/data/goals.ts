@@ -8,6 +8,8 @@ import {
   vesselHas,
 } from "./goalSteps";
 import { getPerfumeGoal } from "../perfume/perfumeGoalFactory";
+import { SOLID_PERFUME_GOAL_BY_ID } from "./solidPerfume/solidPerfumeGoals";
+import { getSolidFormulaGoal } from "./solidPerfume/solidPerfumeGoalFactory";
 import {
   difficultyFromSteps,
   type GoalDifficulty,
@@ -1129,5 +1131,10 @@ export const GOAL_BY_ID: Record<string, ProductGoal> = Object.fromEntries(
 );
 
 export function getGoal(id: string): ProductGoal | undefined {
-  return GOAL_BY_ID[id] ?? getPerfumeGoal(id);
+  return (
+    GOAL_BY_ID[id] ??
+    SOLID_PERFUME_GOAL_BY_ID[id] ??
+    getSolidFormulaGoal(id) ??
+    getPerfumeGoal(id)
+  );
 }

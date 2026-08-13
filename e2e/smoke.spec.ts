@@ -11,30 +11,30 @@ test.describe("Alyra Labs smoke", () => {
     await expect(page.getByRole("link", { name: "Open the atelier" }).first()).toBeVisible();
   });
 
-  test("lab loads desk chrome", async ({ page }) => {
+  test("lab loads Wear chooser by default", async ({ page }) => {
     await page.goto("/lab");
     await expect(page.getByText("Alyra Labs").first()).toBeVisible({
       timeout: 45_000,
     });
-    // IDE chrome: Tutor | Chat (Lab segment removed — desk stays canvas)
-    await expect(page.getByRole("button", { name: /^Tutor$/i })).toBeVisible({
-      timeout: 45_000,
-    });
-    await expect(page.getByRole("button", { name: /^Chat$/i })).toBeVisible();
-    await expect(page.getByRole("button", { name: /^Lab$/i })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: /^Wear$/ })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    await expect(page.getByText("Which compact?")).toBeVisible();
     await expect(
-      page.getByRole("button", { name: /Open equipment|Equipment/i }).first(),
+      page.getByRole("button", { name: /Try to make your own Alyra/i }),
     ).toBeVisible();
   });
 
   test("place beaker and open chemicals", async ({ page }) => {
-    await page.goto("/lab");
+    await page.goto("/lab?audience=composer");
     await expect(
-      page.getByRole("button", { name: "Equipment", exact: true }),
+      page.getByRole("button", { name: "Oils", exact: true }),
     ).toBeVisible({
       timeout: 45_000,
     });
 
+    await page.getByRole("button", { name: "Equipment", exact: true }).click();
     await page.getByRole("button", { name: "+", exact: true }).first().click();
     await page.getByRole("button", { name: "Chemicals", exact: true }).click();
     await expect(
@@ -49,12 +49,12 @@ test.describe("Alyra Labs smoke", () => {
   });
 
   test("perfume atelier button opens catalog", async ({ page }) => {
-    await page.goto("/lab");
-    const perfume = page.getByRole("button", { name: "Perfume", exact: true });
-    await expect(perfume).toBeVisible({
+    await page.goto("/lab?audience=composer");
+    await expect(page.getByText("Alyra Labs").first()).toBeVisible({
       timeout: 45_000,
     });
-    await perfume.click();
+    await page.getByRole("button", { name: "More", exact: true }).click();
+    await page.getByRole("button", { name: "Perfume Atelier" }).click();
     await expect(
       page.getByRole("heading", { name: /inspired scents/i }),
     ).toBeVisible();

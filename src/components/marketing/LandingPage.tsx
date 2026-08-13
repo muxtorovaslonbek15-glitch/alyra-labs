@@ -89,7 +89,7 @@ export function LandingPage() {
               className="h-20 w-20 sm:h-[7.5rem] sm:w-[7.5rem]"
             />
           </div>
-          <h1 className="landing-rise landing-rise-delay mt-6 font-display text-5xl leading-[0.95] tracking-tight text-white sm:text-7xl md:text-8xl">
+          <h1 className="landing-rise landing-rise-delay mt-6 font-display text-5xl font-semibold leading-[0.95] tracking-display text-white sm:text-7xl md:text-8xl">
             Alyra Labs
           </h1>
           <p className="landing-rise landing-rise-delay-2 mt-5 max-w-md text-base leading-relaxed text-white/85 sm:text-lg">
@@ -125,7 +125,7 @@ export function LandingPage() {
         <div className="mx-auto grid max-w-5xl gap-14 sm:gap-16 md:grid-cols-3 md:gap-10">
           {BELOW.map((s) => (
             <div key={s.title}>
-              <h2 className="font-display text-2xl leading-tight sm:text-3xl">
+              <h2 className="font-display text-2xl leading-tight tracking-display sm:text-3xl">
                 {s.title}
               </h2>
               <p className="mt-3 text-sm leading-relaxed text-lab-muted sm:text-[15px]">
@@ -149,7 +149,7 @@ export function LandingPage() {
           aria-hidden
         />
         <div className="relative mx-auto max-w-lg">
-          <h2 className="font-display text-4xl text-lab-foam sm:text-5xl">
+          <h2 className="font-display text-4xl tracking-display text-lab-foam sm:text-5xl">
             Get early access
           </h2>
           <p className="mt-3 text-sm leading-relaxed text-lab-foam/75 sm:text-base">
@@ -174,7 +174,7 @@ export function LandingPage() {
       </section>
 
       <footer className="bg-lab-ink px-5 py-8 text-center text-[11px] text-lab-foam/40">
-        Alyra Labs — compose scent.{" "}
+        Alyra Labs · compose scent.{" "}
         <a
           href="https://github.com/Ghost-ops721/alyra-labs"
           className="text-lab-foam/55 underline-offset-2 hover:text-lab-foam hover:underline"

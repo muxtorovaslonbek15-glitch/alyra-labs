@@ -3,6 +3,9 @@
 import { useState } from "react";
 import type { LabBridgeFormula, StructuredPayload } from "./types";
 import { chassisFromLines } from "./solidDetect";
+import { planBuildCta, useBuilderStore } from "@/store/builderStore";
+import { track } from "@/lib/analytics/track";
+import { celebrateChatAchievement } from "./chatAchievements";
 
 export function PlanPanel({
   bridge,
@@ -38,17 +41,14 @@ export function PlanPanel({
 
   const mapped = bridge.mappingReport?.mappedCount ?? 0;
   const unmapped = bridge.mappingReport?.unmappedCount ?? 0;
-  const costInr =
-    bridge.costInr?.totalCostInr ??
-    structured?.cost?.totalCostInr ??
-    structured?.formula?.cost?.totalCostInr;
   const india =
     bridge.indiaContext?.climateNote ||
     structured?.indiaContext?.wearAdvice ||
     structured?.indiaContext?.occasion;
   const building = mode === "building";
-  const canBuild =
-    mode === "plan_ready" || mode === "stopped" || mode === "built";
+  const cta = planBuildCta(mode);
+  const canBuild = cta === "build" && mapped > 0;
+  const canLock = cta === "lock";
   const canUndo = (mode === "built" || mode === "stopped") && Boolean(onUndo);
   const stepLabel =
     building && buildTotal != null && buildStepIndex != null
@@ -60,6 +60,20 @@ export function PlanPanel({
       : 0;
   const solid = bridge.format === "Solid";
   const chassis = chassisFromLines(bridge.lines, bridge.solidChassis);
+
+  function handleLock() {
+    const plan = useBuilderStore.getState().plan;
+    const locked = useBuilderStore.getState().lockPlan();
+    if (!locked || !plan) return;
+    track("builder_plan_ready", {
+      mapped: plan.mappingReport?.mappedCount ?? 0,
+      unmapped: plan.mappingReport?.unmappedCount ?? 0,
+      title: plan.title,
+    });
+    celebrateChatAchievement("plan_ready", {
+      detail: plan.title || undefined,
+    });
+  }
 
   return (
     <div
@@ -85,7 +99,7 @@ export function PlanPanel({
           className="min-w-0 flex-1 text-left"
           aria-expanded={expanded}
         >
-          <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-lab-muted">
+          <p className="text-[10px] font-semibold uppercase tracking-label text-lab-muted">
             Plan{stepLabel ? ` · ${stepLabel}` : ""}
           </p>
           <p className="mt-0.5 truncate text-sm font-medium text-lab-ink">
@@ -98,13 +112,10 @@ export function PlanPanel({
             {chassis
               ? ` · wax ${chassis.waxPercent}:oil ${chassis.oilPercent}:FO ${chassis.fragranceLoadPercent}`
               : ""}
-            {costInr != null
-              ? ` · ₹${Math.round(costInr).toLocaleString("en-IN")}`
-              : ""}
           </p>
         </button>
         <div className="flex shrink-0 items-center gap-1.5">
-          {building ? (
+          {cta === "stop" ? (
             <button
               type="button"
               onClick={onStop}
@@ -112,7 +123,17 @@ export function PlanPanel({
             >
               Stop
             </button>
-          ) : (
+          ) : cta === "lock" ? (
+            <button
+              type="button"
+              onClick={handleLock}
+              disabled={bridge.lines.length === 0}
+              aria-label="Lock plan"
+              className="lab-build-cta min-h-9 rounded-md bg-lab-ink px-3.5 text-xs font-semibold text-lab-foam transition hover:bg-black disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              Lock
+            </button>
+          ) : cta === "build" ? (
             <button
               type="button"
               onClick={() => {
@@ -120,14 +141,14 @@ export function PlanPanel({
                 window.setTimeout(() => setPressed(false), 180);
                 onBuild();
               }}
-              disabled={!canBuild || mapped === 0}
+              disabled={!canBuild}
               className={`lab-build-cta min-h-9 rounded-md bg-lab-ink px-3.5 text-xs font-semibold text-lab-foam transition hover:bg-black disabled:cursor-not-allowed disabled:opacity-40 ${
-                canBuild && mapped > 0 ? "lab-build-cta-ready" : ""
+                canBuild ? "lab-build-cta-ready" : ""
               } ${pressed ? "lab-build-cta-pressed" : ""}`}
             >
               Build
             </button>
-          )}
+          ) : null}
           <button
             type="button"
             onClick={() => setExpanded((v) => !v)}
@@ -218,11 +239,15 @@ export function PlanPanel({
             <p className="text-xs leading-relaxed text-lab-muted">
               {solid
                 ? "Build complete. Press the puck, or refine in chat."
-                : "Build complete. Refine in chat or open Tutor for notes."}
+                : "Build complete. Refine in chat or open Information for notes."}
             </p>
           ) : mode === "stopped" ? (
             <p className="text-xs leading-relaxed text-lab-muted">
               Stopped. Undo to restore the pre-build desk, or Build again.
+            </p>
+          ) : canLock ? (
+            <p className="text-xs leading-relaxed text-lab-muted">
+              Lock the Plan when it looks right. Build pours only after that.
             </p>
           ) : null}
         </div>

@@ -50,7 +50,7 @@ function Pyramid({ recipe }: { recipe: PerfumeRecipe }) {
     <div className="mt-2 space-y-1.5">
       {rows.map((row) => (
         <div key={row.label}>
-          <p className="text-[9px] font-semibold uppercase tracking-wider text-lab-muted">
+          <p className="text-[9px] font-semibold uppercase tracking-label text-lab-muted">
             {row.label}
           </p>
           <p className="text-[11px] text-lab-ink/85">
@@ -142,7 +142,7 @@ export function PerfumeAtelier({
       >
         <div className="flex shrink-0 items-start justify-between gap-2 border-b border-lab-line/50 px-4 py-3">
           <div>
-            <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-lab-teal">
+            <p className="text-[10px] font-semibold uppercase tracking-label text-lab-teal">
               Perfume atelier
             </p>
             <h2 className="font-display text-xl text-lab-ink">
@@ -189,7 +189,7 @@ export function PerfumeAtelier({
             role="group"
             aria-label="Difficulty"
           >
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-lab-muted">
+            <p className="text-[10px] font-semibold uppercase tracking-label text-lab-muted">
               Level
             </p>
             <div className="flex flex-wrap gap-2">
@@ -215,7 +215,7 @@ export function PerfumeAtelier({
             role="group"
             aria-label="Fragrance family"
           >
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-lab-muted">
+            <p className="text-[10px] font-semibold uppercase tracking-label text-lab-muted">
               Family
             </p>
             <div className="flex flex-wrap gap-2">
@@ -338,8 +338,7 @@ export function PerfumeAtelier({
                   Make this on the desk →
                 </button>
                 <p className="mt-1.5 text-center text-[10px] text-lab-muted">
-                  {diffLabel} · {stepCount} steps · +{selected.xpReward} XP · +
-                  {selected.starReward}★
+                  {diffLabel} · {stepCount} steps · +{selected.starReward}★
                 </p>
               </>
             ) : (

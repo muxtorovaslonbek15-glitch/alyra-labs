@@ -2,10 +2,14 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
+import { MOTION_MS } from "@/animation/motion";
+import { usePresence } from "@/animation/usePresence";
+import { useMdUp } from "@/desk/useMdUp";
 import { getAllEquipment, getAllItems } from "@/domains/registry";
 import { getChemical } from "@/domains/chemistry/data/chemicals";
 import { EQUIPMENT_BY_ID } from "@/domains/chemistry/data/equipment";
 import { DraggableItem } from "@/drag/DraggableItem";
+import { ItemGlyph } from "@/animation/heatSource";
 import { useDeskStore } from "@/store/deskStore";
 import { showToast } from "@/gamification/ToastHost";
 import { useGoalStore } from "@/store/goalStore";
@@ -22,35 +26,40 @@ import { isOilItem } from "@/domains/chemistry/perfume/oilMeta";
 import { useInventoryStockStore } from "@/store/inventoryStockStore";
 import { formatAmount } from "@/desk/unitDisplay";
 import { useUnitPrefStore } from "@/store/unitPrefStore";
+import { currentVesselCard } from "@/desk/vesselLayout";
 import { PanelResizeHandle } from "@/desk/PanelResizeHandle";
-import { PANEL_WIDTH } from "@/store/builderStore";
+import { PANEL_WIDTH, useBuilderStore } from "@/store/builderStore";
 
-type BrowseKind = "equipment" | "chemicals" | "oils";
+type BrowseKind = "oils" | "equipment" | "chemicals";
 
 /** Keep the left rail scannable; full catalog lives in the Show more modal. */
 const SIDEBAR_PREVIEW_LIMIT = 8;
 
 export function ItemPanel({
-  onOpenTutor,
-  onOpenChat,
   /** Desktop only — closable left rail. Never affects `< md` (phone stays sheet/FAB). */
   desktopOpen = true,
   onToggleDesktop,
   desktopWidth,
   onDesktopResize,
 }: {
-  onOpenTutor?: () => void;
   onOpenChat?: () => void;
   desktopOpen?: boolean;
   onToggleDesktop?: () => void;
   desktopWidth?: number;
   onDesktopResize?: (deltaPx: number) => void;
 } = {}) {
-  const [browse, setBrowse] = useState<BrowseKind>("equipment");
+  /** Neil veto D: atelier inventory opens Oils-first. Do not default to Equipment. */
+  const [browse, setBrowse] = useState<BrowseKind>("oils");
   const [expanded, setExpanded] = useState(false);
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState<string>("all");
-  const [mounted] = useState(() => typeof window !== "undefined");
+  const [canPortal] = useState(() => typeof window !== "undefined");
+  const mdUp = useMdUp();
+  const { mounted: sheetMounted, visible: sheetVisible } = usePresence(
+    expanded,
+    mdUp ? 0 : MOTION_MS.chrome,
+  );
+  const showExpanded = canPortal && (mdUp ? expanded : sheetMounted);
 
   const vessels = useDeskStore((s) => s.vessels);
   const activeVesselId = useDeskStore((s) => s.activeVesselId);
@@ -64,6 +73,7 @@ export function ItemPanel({
   const stockMap = useInventoryStockStore((s) => s.stockMlByChemicalId);
   const restockAll = useInventoryStockStore((s) => s.restockAll);
   const stockMl = useInventoryStockStore((s) => s.stockMl);
+  const chatSheetOpen = useBuilderStore((s) => s.chatSheetOpen);
   const unit = useUnitPrefStore((s) => s.unit);
   const cycleUnit = useUnitPrefStore((s) => s.cycleUnit);
 
@@ -95,7 +105,7 @@ export function ItemPanel({
   const equipment = getAllEquipment("chemistry");
 
   useEffect(() => {
-    if (!expanded) return;
+    if (!showExpanded) return;
     function onKey(e: KeyboardEvent) {
       if (e.key === "Escape") setExpanded(false);
     }
@@ -106,7 +116,7 @@ export function ItemPanel({
       document.body.style.overflow = prev;
       window.removeEventListener("keydown", onKey);
     };
-  }, [expanded]);
+  }, [showExpanded]);
 
   function selectBrowse(kind: BrowseKind) {
     setQuery("");
@@ -302,7 +312,7 @@ export function ItemPanel({
     if (have + 0.05 < pourAmountMl) {
       showToast({
         title: "Bottle empty",
-        detail: `Only ${have.toFixed(1)} ml left — refill bottles.`,
+        detail: `Only ${have.toFixed(1)} ml left. Refill bottles.`,
       });
       return;
     }
@@ -358,10 +368,18 @@ export function ItemPanel({
       return;
     }
     const n = vessels.length;
-    placeEquipment(id, {
-      x: 48 + (n % 4) * 190,
-      y: 48 + Math.floor(n / 4) * 210,
-    });
+    const card = currentVesselCard();
+    if (card.scale < 1) {
+      placeEquipment(id, {
+        x: 8 + (n % 3) * (card.width + 8),
+        y: 8 + Math.floor(n / 3) * (card.height + 12),
+      });
+    } else {
+      placeEquipment(id, {
+        x: 48 + (n % 4) * 190,
+        y: 48 + Math.floor(n / 4) * 210,
+      });
+    }
   }
 
   const list =
@@ -389,7 +407,7 @@ export function ItemPanel({
       ? "Drag onto desk, or tap + to place / use."
       : browse === "oils"
         ? targetVessel
-          ? `Pour oils into ${EQUIPMENT_BY_ID[targetVessel.equipmentId]?.name ?? "vessel"} — adjust ml below.`
+          ? `Pour oils into ${EQUIPMENT_BY_ID[targetVessel.equipmentId]?.name ?? "vessel"}. Adjust ml below.`
           : "Place glassware first, then pour oils."
         : targetVessel
           ? `Pour into ${EQUIPMENT_BY_ID[targetVessel.equipmentId]?.name ?? "vessel"}${
@@ -428,10 +446,10 @@ export function ItemPanel({
               key={c}
               type="button"
               onClick={() => setCategory(c)}
-              className={`shrink-0 rounded-full font-medium capitalize transition ${
+              className={`shrink-0 rounded-full font-medium capitalize outline-none transition focus-visible:ring-1 focus-visible:ring-lab-line ${
                 compact
                   ? "px-1.5 py-0.5 text-[9px]"
-                  : "px-2 py-0.5 text-[10px]"
+                  : "min-h-11 px-3 text-xs md:min-h-0 md:px-2 md:py-0.5 md:text-[10px]"
               } ${
                 active
                   ? "bg-lab-teal text-lab-foam"
@@ -502,22 +520,24 @@ export function ItemPanel({
   }
 
   const expandedUi =
-    mounted && expanded
+    showExpanded
       ? createPortal(
           <div
             role="dialog"
             aria-modal="true"
             aria-labelledby="inventory-modal-title"
-            className="fixed inset-0 z-[300] flex flex-col justify-end md:items-stretch md:justify-stretch"
+            className="lab-inventory-overlay fixed inset-0 z-[300] flex flex-col justify-end overflow-hidden bg-transparent md:items-stretch md:justify-stretch md:overflow-visible"
           >
             <button
               type="button"
-              className="absolute inset-0 bg-lab-ink/45 md:bg-lab-ink/30"
+              className="lab-inventory-scrim absolute inset-0 bg-lab-ink/45 md:bg-lab-ink/30"
+              data-open={sheetVisible ? "true" : "false"}
               aria-label="Close inventory"
               onClick={() => setExpanded(false)}
             />
             <div
-              className="relative flex max-h-[85dvh] w-full flex-col rounded-t-2xl border border-lab-line bg-lab-panel pb-[env(safe-area-inset-bottom,0px)] shadow-2xl md:max-h-none md:h-dvh md:rounded-none md:border-0 md:pb-0"
+              className="lab-inventory-sheet relative flex max-h-[85dvh] w-full flex-col rounded-t-2xl border border-lab-line bg-lab-panel pb-[env(safe-area-inset-bottom,0px)] shadow-2xl md:max-h-none md:h-dvh md:rounded-none md:border-0 md:pb-0"
+              data-open={sheetVisible ? "true" : "false"}
               style={{
                 background:
                   "radial-gradient(ellipse at 12% 0%, rgba(196, 180, 154, 0.12), transparent 42%), var(--lab-panel)",
@@ -528,12 +548,12 @@ export function ItemPanel({
               <div className="mx-auto flex w-full max-w-5xl items-center justify-between gap-2">
                 <div className="min-w-0">
                   <div className="flex items-baseline gap-2">
-                    <p className="font-display text-[9px] uppercase tracking-[0.18em] text-lab-muted">
+                    <p className="text-[9px] font-semibold uppercase tracking-label text-lab-muted">
                       Inventory
                     </p>
                     <h2
                       id="inventory-modal-title"
-                      className="font-display text-lg leading-none tracking-tight text-lab-ink"
+                      className="font-display text-lg leading-none tracking-display text-lab-ink"
                     >
                       {browseTitle}
                     </h2>
@@ -545,7 +565,7 @@ export function ItemPanel({
                 <button
                   type="button"
                   onClick={() => setExpanded(false)}
-                  className="min-h-11 shrink-0 rounded-lg bg-lab-ink px-3 text-xs font-semibold text-lab-foam transition hover:bg-lab-ink/90 md:min-h-0 md:rounded-md md:px-2.5 md:py-1 md:text-[11px] md:font-medium"
+                  className="min-h-11 shrink-0 rounded-lg bg-lab-ink px-3 text-xs font-semibold text-lab-foam outline-none transition hover:bg-lab-ink/90 focus-visible:ring-1 focus-visible:ring-lab-line md:min-h-0 md:rounded-md md:px-2.5 md:py-1 md:text-[11px] md:font-medium"
                 >
                   Done
                 </button>
@@ -557,8 +577,8 @@ export function ItemPanel({
                 <div className="flex gap-2">
                   {(
                     [
-                      ["equipment", "Equipment"],
                       ["oils", "Oils"],
+                      ["equipment", "Equipment"],
                       ["chemicals", "Chemicals"],
                     ] as const
                   ).map(([kind, label]) => (
@@ -566,7 +586,7 @@ export function ItemPanel({
                       key={kind}
                       type="button"
                       onClick={() => selectBrowse(kind)}
-                      className={`min-h-11 flex-1 rounded-lg px-2.5 py-2 text-xs font-semibold transition md:min-h-0 md:flex-none md:py-1 md:text-[11px] md:font-medium ${
+                      className={`min-h-11 flex-1 rounded-lg px-2.5 py-2 text-xs font-semibold outline-none transition focus-visible:ring-1 focus-visible:ring-lab-line md:min-h-0 md:flex-none md:py-1 md:text-[11px] md:font-medium ${
                         browse === kind
                           ? kind === "oils"
                             ? "bg-lab-amber text-white"
@@ -642,7 +662,7 @@ export function ItemPanel({
                               className="relative flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-lab-wash text-sm"
                               aria-hidden
                             >
-                              {item.icon}
+                              <ItemGlyph id={item.id} icon={item.icon} />
                               {chem?.color ? (
                                 <span
                                   className="absolute bottom-0 right-0 h-1.5 w-1.5 rounded-full ring-1 ring-white"
@@ -696,7 +716,7 @@ export function ItemPanel({
                             className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-lab-wash text-base"
                             aria-hidden
                           >
-                            {item.icon}
+                            <ItemGlyph id={item.id} icon={item.icon} />
                           </span>
                           <span className="min-w-0 flex-1">
                             <span className="block truncate text-xs font-medium leading-tight text-lab-ink">
@@ -724,47 +744,21 @@ export function ItemPanel({
 
   return (
     <>
-      {/* Mobile right rail — one column, equal width, right edge aligned */}
+      {/* Phone: oils FAB only — Chat lives in the bottom nav. Hidden while chat is open so Send stays clear. */}
+      {!chatSheetOpen ? (
       <div className="pointer-events-none absolute inset-x-0 bottom-[calc(4.5rem+env(safe-area-inset-bottom,0px))] z-40 px-3 md:hidden">
-        <div className="ml-auto flex w-12 flex-col items-stretch gap-2">
-          {onOpenChat ? (
-            <button
-              type="button"
-              onClick={onOpenChat}
-              className="pointer-events-auto flex h-11 w-full items-center justify-center rounded-xl border border-lab-line/70 bg-lab-panel/95 text-[10px] font-bold tracking-wide text-lab-ink shadow-lg backdrop-blur-md"
-              aria-label="Open perfume chat"
-            >
-              Chat
-            </button>
-          ) : null}
-          {onOpenTutor ? (
-            <button
-              type="button"
-              onClick={onOpenTutor}
-              className="pointer-events-auto flex h-11 w-full items-center justify-center rounded-xl border border-lab-line/70 bg-lab-panel/95 text-[11px] font-bold tracking-wide text-lab-ink shadow-lg backdrop-blur-md"
-              aria-label="Open lab tutor"
-            >
-              Eq
-            </button>
-          ) : null}
+        <div className="ml-auto flex w-11 flex-col items-stretch gap-2">
           <button
             type="button"
             onClick={() => openExpanded("oils")}
-            className="pointer-events-auto flex h-11 w-full items-center justify-center rounded-xl border border-lab-line/70 bg-lab-panel/95 text-[10px] font-bold tracking-wide text-lab-ink shadow-lg backdrop-blur-md"
-            aria-label="Open notes and oils"
-          >
-            Notes
-          </button>
-          <button
-            type="button"
-            onClick={() => openExpanded("equipment")}
-            className="pointer-events-auto flex h-11 w-full items-center justify-center rounded-xl border border-lab-line/70 bg-lab-panel/95 text-lg font-semibold leading-none text-lab-ink shadow-lg backdrop-blur-md"
-            aria-label="Open equipment"
+            className="pointer-events-auto flex h-11 w-11 items-center justify-center rounded-xl border border-lab-line/60 bg-lab-panel/90 text-lg font-semibold leading-none text-lab-ink shadow-md backdrop-blur-md outline-none focus-visible:ring-1 focus-visible:ring-lab-line"
+              aria-label="Open oils"
           >
             +
           </button>
         </div>
       </div>
+      ) : null}
 
       {/* Collapsed grip — desktop only */}
       {!desktopOpen ? (
@@ -804,43 +798,38 @@ export function ItemPanel({
           </button>
         ) : null}
         <div className="border-b border-lab-line/50 px-2.5 pb-2 pt-2.5">
-          <p className="font-display text-[10px] uppercase tracking-[0.2em] text-lab-teal">
+          <p className="text-[10px] font-semibold uppercase tracking-label text-lab-muted">
             Inventory
           </p>
           <div className="mt-2 flex gap-3">
-            <button
-              type="button"
-              onClick={() => selectBrowse("equipment")}
-              className={`flex-1 rounded-lg border px-1.5 py-1.5 text-[11px] font-medium shadow-sm transition ${
-                browse === "equipment"
-                  ? "border-lab-ink/20 bg-lab-ink text-lab-foam"
-                  : "border-lab-line/60 bg-white/90 text-lab-ink hover:border-lab-teal/50 hover:bg-white"
-              }`}
-            >
-              Equipment
-            </button>
-            <button
-              type="button"
-              onClick={() => selectBrowse("oils")}
-              className={`flex-1 rounded-lg border px-1.5 py-1.5 text-[11px] font-medium shadow-sm transition ${
-                browse === "oils"
-                  ? "border-lab-amber bg-lab-amber text-white"
-                  : "border-lab-amber/40 bg-lab-amber/10 text-lab-amber hover:bg-lab-amber/15"
-              }`}
-            >
-              Oils
-            </button>
-            <button
-              type="button"
-              onClick={() => selectBrowse("chemicals")}
-              className={`flex-1 rounded-lg border px-1.5 py-1.5 text-[11px] font-medium shadow-sm transition ${
-                browse === "chemicals"
-                  ? "border-lab-teal bg-lab-teal text-lab-foam"
-                  : "border-lab-teal/35 bg-lab-teal/10 text-lab-teal hover:bg-lab-teal/15"
-              }`}
-            >
-              Chemicals
-            </button>
+            {(
+              [
+                ["oils", "Oils"],
+                ["equipment", "Equipment"],
+                ["chemicals", "Chemicals"],
+              ] as const
+            ).map(([kind, label]) => (
+              <button
+                key={kind}
+                type="button"
+                onClick={() => selectBrowse(kind)}
+                className={`flex-1 rounded-lg border px-1.5 py-1.5 text-[11px] font-medium shadow-sm outline-none transition focus-visible:ring-1 focus-visible:ring-lab-line ${
+                  browse === kind
+                    ? kind === "oils"
+                      ? "border-lab-amber bg-lab-amber text-white"
+                      : kind === "chemicals"
+                        ? "border-lab-teal bg-lab-teal text-lab-foam"
+                        : "border-lab-ink/20 bg-lab-ink text-lab-foam"
+                    : kind === "oils"
+                      ? "border-lab-amber/40 bg-lab-amber/10 text-lab-amber hover:bg-lab-amber/15"
+                      : kind === "chemicals"
+                        ? "border-lab-teal/35 bg-lab-teal/10 text-lab-teal hover:bg-lab-teal/15"
+                        : "border-lab-line/60 bg-white/90 text-lab-ink hover:border-lab-teal/50 hover:bg-white"
+                }`}
+              >
+                {label}
+              </button>
+            ))}
           </div>
 
           <p className="mt-2 text-[10px] leading-snug text-lab-muted">
@@ -863,8 +852,8 @@ export function ItemPanel({
 
           {goal ? (
             <p className="mt-1.5 rounded-md border border-lab-amber/30 bg-lab-amber/10 px-1.5 py-1 text-[10px] leading-snug text-lab-ink/80">
-              <span className="font-semibold text-lab-amber">For this goal:</span>{" "}
-              {goal.icon} {goal.title} — highlighted items match the recipe.
+              <span className="font-semibold text-lab-amber">For this recipe:</span>{" "}
+              {goal.icon} {goal.title} - highlighted items match the recipe.
             </p>
           ) : null}
 
@@ -911,7 +900,7 @@ export function ItemPanel({
                       payload={{ type: "equipment", itemId: item.id }}
                       subtitle={item.subcategory}
                       onQuickAdd={() => quickEquipment(item.id)}
-                      hint="Needed for your goal"
+                      hint="Needed for this recipe"
                       highlighted
                       dragIdPrefix="goal-eq"
                     />
@@ -930,7 +919,7 @@ export function ItemPanel({
                         subtitle={chem?.formula}
                         accentColor={chem?.color}
                         onQuickAdd={() => quickChemical(item.id)}
-                        hint="Needed for your goal"
+                        hint="Needed for this recipe"
                         highlighted
                         dragIdPrefix="goal-chem"
                       />
@@ -950,9 +939,8 @@ export function ItemPanel({
               : `Browse all ${browseTitle.toLowerCase()}…`}
           </button>
         </div>
-
-        {expandedUi}
       </aside>
+      {expandedUi}
       {desktopOpen && onDesktopResize ? (
         <PanelResizeHandle side="left" onResize={onDesktopResize} />
       ) : null}

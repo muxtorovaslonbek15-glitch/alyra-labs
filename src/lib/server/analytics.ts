@@ -111,6 +111,6 @@ export async function touchLastSeen(uid: string): Promise<void> {
       { merge: true },
     );
   } catch {
-    /* best-effort */
+    /* best-effort Firestore mirror */
   }
 }

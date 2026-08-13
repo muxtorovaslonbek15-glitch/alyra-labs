@@ -143,6 +143,10 @@ export interface VesselFx {
   pourFrom?: { x: number; y: number };
   /** Source fill % stamped at transfer start (drain animation while store is empty) */
   sourceFillPct?: number;
+  /** Target fill % stamped at transfer start (ease in; store already has the new volume) */
+  targetFillPct?: number;
+  /** Snap-beside home for the source after the pour uprights */
+  pourHome?: { x: number; y: number };
   /** Vessel→vessel transfer window */
   transferAt?: number;
   transferFromId?: string;
@@ -151,6 +155,8 @@ export interface VesselFx {
   transferRole?: "source" | "target";
   /** Solid cast reveal storyboard start (ms) — tin only */
   castRevealAt?: number;
+  /** Pour-to-cup set storyboard start (ms) — solid Cast */
+  cupSetAt?: number;
 }
 
 /** Compact IFRA teaching screen attached to live preview. */

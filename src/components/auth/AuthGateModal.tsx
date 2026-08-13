@@ -68,7 +68,7 @@ export function AuthGateModal() {
             </span>
           </button>
         ) : null}
-        <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-lab-teal">
+        <p className="text-[10px] font-semibold uppercase tracking-label text-lab-teal">
           Alyra Labs
         </p>
         <h2
@@ -79,7 +79,7 @@ export function AuthGateModal() {
         </h2>
         <p className="mt-2 text-sm text-lab-muted">
           You&apos;ve added two chemicals. Log in or sign up to mix, react, and
-          earn XP.
+          keep a star each day you return.
         </p>
         <div className="mt-5 flex flex-col gap-2 sm:flex-row">
           <Link

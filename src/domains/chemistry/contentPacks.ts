@@ -33,7 +33,7 @@ export const CONTENT_PACKS: Record<ContentPackId, ContentPack> = {
   products: {
     id: "products",
     label: "Everyday products",
-    description: "Soap, sanitizer, bath bombs, ink, balm, and kitchen chemistry",
+    description: "Soap, sanitizer, bath bombs, ink, balm, solid perfume tins, and kitchen chemistry",
     goalIds: "all-product",
     perfumeAtelier: false,
     freeformPerfume: false,

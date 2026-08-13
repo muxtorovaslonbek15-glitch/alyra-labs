@@ -79,6 +79,43 @@ describe("tickVesselSim cool freeze path", () => {
     r = tickVesselSim(v, 500, t0 + ICE_MS + 2000);
     expect(r.sim.phaseHint).toBe("ice");
   });
+
+  it("thickens viscosity and frost gradually (no freeze pop on attach)", () => {
+    const t0 = 1_700_000_000_000;
+    const v = vessel({
+      coolAttached: true,
+      contents: [{ chemicalId: "h2o", amountMl: 25 }],
+      contentIds: ["h2o"],
+    });
+    const early = tickVesselSim(v, 400, t0 + 400);
+    expect(early.sim.phaseHint).toBe("cooling");
+    expect(early.sim.frost).toBeLessThan(0.18);
+    expect(early.sim.viscosity).toBeLessThan(0.32);
+    expect(early.sim.viscosity).toBeGreaterThan(0.16);
+
+    const mid = tickVesselSim(
+      { ...v, sim: { ...early.sim, coolElapsedMs: 3_000 } },
+      1_000,
+      t0 + 4_000,
+    );
+    expect(mid.sim.frost).toBeGreaterThan(early.sim.frost);
+    expect(mid.sim.viscosity).toBeGreaterThan(early.sim.viscosity);
+    expect(mid.sim.phaseHint).not.toBe("ice");
+
+    const late = tickVesselSim(
+      {
+        ...v,
+        sim: {
+          ...mid.sim,
+          coolElapsedMs: ICE_MS - 200,
+        },
+      },
+      2_000,
+      t0 + ICE_MS + 1_800,
+    );
+    expect(late.sim.viscosity).toBeGreaterThan(mid.sim.viscosity);
+    expect(late.sim.frost).toBeGreaterThan(0.5);
+  });
 });
 
 describe("tickVesselSim heat evaporation", () => {
@@ -121,6 +158,53 @@ describe("tickVesselSim heat evaporation", () => {
     expect(tinR.sim.meltFraction).toBeGreaterThan(0);
     const wax = tinR.contents?.find((c) => c.chemicalId === "beeswax");
     expect(wax?.amountMl ?? 10).toBeGreaterThanOrEqual(9.5);
+  });
+
+  it("warms before simmer so convection can read", () => {
+    const t0 = 1_700_000_000_000;
+    const r = tickVesselSim(
+      vessel({ heatAttached: true }),
+      800,
+      t0 + 800,
+    );
+    expect(r.sim.temperature).toBeLessThan(0.72);
+    expect(["warming", "hot"]).toContain(r.sim.phaseHint);
+    expect(r.sim.phaseHint).not.toBe("simmer");
+  });
+
+  it("does not melt solids until the chassis is warm", () => {
+    const t0 = 1_700_000_000_000;
+    const tin = vessel({
+      equipmentId: "tin",
+      heatAttached: true,
+      contents: [{ chemicalId: "beeswax", amountMl: 12 }],
+      contentIds: ["beeswax"],
+    });
+    const early = tickVesselSim(tin, 200, t0 + 200);
+    expect(early.sim.meltFraction).toBeLessThan(0.08);
+    expect(early.sim.temperature).toBeLessThan(0.58);
+  });
+
+  it("evaporates faster at simmer than while only warming", () => {
+    const t0 = 1_700_000_000_000;
+    const base = {
+      heatAttached: true,
+      contents: [{ chemicalId: "c2h5oh", amountMl: 20 }],
+      contentIds: ["c2h5oh"],
+    };
+    const warm = tickVesselSim(
+      vessel({ ...base, sim: defaultVesselSim({ temperature: 0.64 }) }),
+      2000,
+      t0 + 2000,
+    );
+    const simmer = tickVesselSim(
+      vessel({ ...base, sim: defaultVesselSim({ temperature: 0.88 }) }),
+      2000,
+      t0 + 2000,
+    );
+    const warmLeft = warm.contents?.[0]?.amountMl ?? 20;
+    const simmerLeft = simmer.contents?.[0]?.amountMl ?? 20;
+    expect(simmerLeft).toBeLessThan(warmLeft);
   });
 });
 

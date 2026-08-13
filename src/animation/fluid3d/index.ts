@@ -9,3 +9,8 @@ export {
   type FluidVesselInput,
 } from "./livePreviewToFluidState";
 export { FluidVesselCanvas } from "./FluidVesselCanvas";
+export {
+  waxAmount,
+  fluidWaveAmp,
+  shouldEmitParticles,
+} from "./fluidMath";

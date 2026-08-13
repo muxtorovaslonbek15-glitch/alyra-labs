@@ -9,6 +9,7 @@ import { useProgressStore } from "@/store/progressStore";
 import { useInventionStore } from "@/store/inventionStore";
 import { showToast } from "@/gamification/ToastHost";
 import { track } from "@/lib/analytics/track";
+import { useWearStore } from "@/wear/wearStore";
 
 /**
  * Watches the desk and advances the active product goal.
@@ -23,8 +24,11 @@ export function GoalProgressWatcher() {
   const awardPerfumeComplete = useProgressStore((s) => s.awardPerfumeComplete);
   const beginNamingFromGoal = useInventionStore((s) => s.beginNamingFromGoal);
   const remixInventionId = useInventionStore((s) => s.remixInventionId);
+  const audience = useWearStore((s) => s.audience);
 
   useEffect(() => {
+    /** Wear auto-places an empty tin; do not let that advance composer goals. */
+    if (audience === "owner") return;
     const { newSteps, goalJustCompleted, goalId } = syncFromDesk({
       vessels,
       activeVesselId,
@@ -57,14 +61,14 @@ export function GoalProgressWatcher() {
           starsGained,
         });
         showToast({
-          title: `+${xpGained} XP${starsGained ? ` · +${starsGained}★` : ""}`,
+          title: starsGained ? `Bottled · +${starsGained}★` : "Bottled",
           detail: goal.title,
         });
       } else {
         const { xpGained } = awardGoalXp(goal.badgeId, goal.title);
         showReward(goal.id, xpGained, 0);
         showToast({
-          title: `+${xpGained} XP · Goal complete`,
+          title: "Goal complete",
           detail: goal.title,
         });
       }
@@ -84,6 +88,7 @@ export function GoalProgressWatcher() {
       }
     }
   }, [
+    audience,
     vessels,
     activeVesselId,
     syncFromDesk,

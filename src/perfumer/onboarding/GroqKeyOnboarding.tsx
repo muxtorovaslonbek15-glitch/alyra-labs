@@ -8,6 +8,7 @@ import {
   saveGroqKey,
 } from "@/perfumer/api";
 import type { GroqKeyStatus, PerfumerApiError } from "@/perfumer/types";
+import { track } from "@/lib/analytics/track";
 import {
   GROQ_GUIDE_DISCLAIMER,
   stepsForMode,
@@ -88,6 +89,8 @@ export function GroqKeyOnboarding({
         return;
       }
       setDeleted(true);
+      track("groq_key_removed", { configured: false });
+      track("groq_key_deleted", { configured: false });
       setStepIdx((i) => Math.min(i + 1, steps.length - 1));
     } finally {
       setBusy(false);
@@ -104,6 +107,8 @@ export function GroqKeyOnboarding({
         return;
       }
       setApiKey("");
+      track("groq_key_configured", { configured: true });
+      track("groq_key_saved", { configured: true });
       onConfigured?.(res);
       onClose?.();
     } finally {
@@ -129,7 +134,7 @@ export function GroqKeyOnboarding({
         onClick={(e) => e.stopPropagation()}
       >
         <header className="relative shrink-0 border-b border-lab-line bg-lab-panel px-4 py-3 pr-12">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-lab-muted">
+          <p className="text-[10px] font-semibold uppercase tracking-label text-lab-muted">
             {mode === "rotate" ? "Rotate Groq key" : "Master Perfumer setup"}
           </p>
           <h2
@@ -328,12 +333,14 @@ export function GroqKeySettingsCard({
       return;
     }
     setMsg("Key deleted.");
+    track("groq_key_removed", { configured: false });
+    track("groq_key_deleted", { configured: false });
     onRefresh();
   }
 
   return (
     <div className="rounded-xl border border-lab-line bg-lab-wash/60 px-3 py-2.5 text-sm">
-      <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-lab-muted">
+      <p className="text-[10px] font-semibold uppercase tracking-label text-lab-muted">
         Groq API key
       </p>
       {status?.configured ? (

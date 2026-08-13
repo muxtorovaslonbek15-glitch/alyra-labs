@@ -37,7 +37,15 @@ export function DesktopBuilderChrome({
   const buildStepIndex = useBuilderStore((s) => s.buildStepIndex);
 
   const onBuild = useCallback(() => {
-    const bridge = useBuilderStore.getState().plan;
+    const state = useBuilderStore.getState();
+    if (
+      state.mode !== "plan_ready" &&
+      state.mode !== "stopped" &&
+      state.mode !== "built"
+    ) {
+      return;
+    }
+    const bridge = state.plan;
     if (!bridge?.lines?.length) return;
     const steps = deriveBuildSteps(bridge);
     const snap = captureDeskSnapshot();
@@ -58,7 +66,7 @@ export function DesktopBuilderChrome({
         if (result === "done") {
           showToast({
             title: "Build complete",
-            detail: "Refine in Chat or open Tutor for notes.",
+            detail: "Refine in Chat or open Information for notes.",
           });
         }
       })
@@ -76,7 +84,15 @@ export function DesktopBuilderChrome({
   }, [undoBuild]);
 
   const onInstant = useCallback(() => {
-    const bridge = useBuilderStore.getState().plan;
+    const state = useBuilderStore.getState();
+    if (
+      state.mode !== "plan_ready" &&
+      state.mode !== "stopped" &&
+      state.mode !== "built"
+    ) {
+      return;
+    }
+    const bridge = state.plan;
     if (!bridge) return;
     const contents = deskContentsFromBridge(bridge);
     if (!contents.length) {
@@ -147,7 +163,7 @@ export function DesktopBuilderChrome({
             : "absolute inset-x-3 top-10"
         }`}
       >
-        <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-lab-muted">
+        <p className="text-[10px] font-semibold uppercase tracking-label text-lab-muted">
           Building
           {buildSteps.length
             ? ` · ${Math.min(buildStepIndex + 1, buildSteps.length)}/${buildSteps.length}`

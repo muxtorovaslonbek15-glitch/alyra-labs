@@ -27,7 +27,7 @@ interface Props {
 }
 
 /**
- * Matte solid-perfume tin / pan — no free-surface waves.
+ * Shallow solid-perfume tin — champagne metal pan on the ebony desk.
  * Reveal: melt pool → cool → matte lock → snap → seat (≈1.8s).
  * Live Melt/Set uses meltFraction for gradual gloss without evaporating wax.
  */
@@ -68,7 +68,6 @@ export function SolidTinVessel({
     setPhase("hold");
     setShowPress(false);
     const timers: number[] = [];
-    // ~1.8s storyboard (phone-friendly within 1.6–2.2s)
     timers.push(window.setTimeout(() => setPhase("cool"), 100));
     timers.push(window.setTimeout(() => setPhase("matte"), 450));
     timers.push(window.setTimeout(() => setPhase("snap"), 850));
@@ -88,10 +87,8 @@ export function SolidTinVessel({
         ? 0.35
         : 0.55
       : 0,
-    // Gradual live melt (reduced-motion: still show state, no pulse)
     melt01 > 0.08 ? (reduced ? melt01 * 0.45 : 0.2 + melt01 * 0.55) : 0,
   );
-  // Live Melt unlocks gloss even after cast "ready"; Set / idle keep matte.
   const liveMeltOpen = heatAttached || melt01 >= 0.35;
   const matteLock =
     !liveMeltOpen &&
@@ -101,7 +98,7 @@ export function SolidTinVessel({
       phase === "ready" ||
       (hasFill && !castRevealAt && melt01 < 0.35));
   const snapScale =
-    phase === "snap" ? 1.02 : phase === "seat" || phase === "ready" ? 1 : 1;
+    phase === "snap" ? 1.012 : phase === "seat" || phase === "ready" ? 1 : 1;
   const coolRim =
     coolAttached ||
     phase === "cool" ||
@@ -110,9 +107,10 @@ export function SolidTinVessel({
 
   const puckOpacity = hasFill
     ? matteLock
-      ? 0.92
+      ? 0.94
       : 0.55 + Math.min(fillPct, 100) * 0.003
     : 0;
+  const puckR = Math.min(1, 0.38 + fillPct / 140);
 
   return (
     <div
@@ -125,60 +123,137 @@ export function SolidTinVessel({
         aria-hidden
       >
         <defs>
-          <radialGradient id={`puck-${uid}`} cx="42%" cy="38%" r="65%">
+          <linearGradient id={`side-${uid}`} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#3a322a" />
+            <stop offset="45%" stopColor="#1c1814" />
+            <stop offset="100%" stopColor="#0c0a08" />
+          </linearGradient>
+          <radialGradient id={`lid-${uid}`} cx="42%" cy="32%" r="72%">
+            <stop offset="0%" stopColor="#f7f5f1" />
+            <stop offset="28%" stopColor="#e8d9c0" />
+            <stop offset="62%" stopColor="#c4b49a" />
+            <stop offset="100%" stopColor="#6e6250" />
+          </radialGradient>
+          <linearGradient id={`rim-${uid}`} x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0%" stopColor="#f7f5f1" />
+            <stop offset="35%" stopColor="#e8d9c0" />
+            <stop offset="70%" stopColor="#c4b49a" />
+            <stop offset="100%" stopColor="#8a7a62" />
+          </linearGradient>
+          <radialGradient id={`floor-${uid}`} cx="50%" cy="40%" r="70%">
+            <stop offset="0%" stopColor="#2a241e" />
+            <stop offset="100%" stopColor="#0c0a08" />
+          </radialGradient>
+          <radialGradient id={`puck-${uid}`} cx="42%" cy="34%" r="68%">
             <stop
               offset="0%"
               stopColor={tint}
-              stopOpacity={matteLock ? 0.95 : 0.75}
+              stopOpacity={matteLock ? 0.96 : 0.78}
             />
-            <stop offset="70%" stopColor={tint} stopOpacity={0.88} />
-            <stop offset="100%" stopColor={tint} stopOpacity={0.7} />
+            <stop offset="62%" stopColor={tint} stopOpacity={0.9} />
+            <stop offset="100%" stopColor={tint} stopOpacity={0.72} />
           </radialGradient>
-          <radialGradient id={`grain-${uid}`} cx="50%" cy="50%" r="50%">
-            <stop offset="0%" stopColor="rgba(255,255,255,0.12)" />
-            <stop offset="100%" stopColor="rgba(20,16,12,0.18)" />
-          </radialGradient>
-          <linearGradient id={`rim-${uid}`} x1="0" y1="0" x2="1" y2="1">
-            <stop offset="0%" stopColor="#e8d9c0" />
-            <stop offset="45%" stopColor="#c4b49a" />
-            <stop offset="100%" stopColor="#8a7a62" />
-          </linearGradient>
+          <filter id={`brushed-${uid}`} x="-20%" y="-20%" width="140%" height="140%">
+            <feTurbulence
+              type="fractalNoise"
+              baseFrequency="0.85 0.12"
+              numOctaves="2"
+              seed="3"
+              result="n"
+            />
+            <feColorMatrix
+              in="n"
+              type="matrix"
+              values="0 0 0 0 0.77
+                      0 0 0 0 0.70
+                      0 0 0 0 0.58
+                      0 0 0 0.16 0"
+            />
+          </filter>
           <filter id={`soft-${uid}`}>
-            <feGaussianBlur stdDeviation="0.6" />
+            <feGaussianBlur stdDeviation="0.55" />
           </filter>
         </defs>
 
-        {/* Desk shadow */}
+        {/* Desk contact shadow */}
         <ellipse
           cx="50"
           cy="128"
-          rx="32"
-          ry="5"
-          fill="rgba(20,16,12,0.28)"
+          rx="40"
+          ry="6"
+          fill="rgba(12,12,12,0.38)"
         />
 
-        {/* Outer tin body */}
+        {/* Cylinder wall (shallow pan) */}
+        <path
+          d="M12 70 L12 98 A38 13 0 0 0 88 98 L88 70"
+          fill={`url(#side-${uid})`}
+        />
+        <ellipse cx="50" cy="98" rx="38" ry="13" fill="#14110e" />
         <ellipse
           cx="50"
-          cy="78"
-          rx="34"
-          ry="34"
-          fill="#1a1612"
+          cy="98"
+          rx="38"
+          ry="13"
+          fill="none"
+          stroke="rgba(196,180,154,0.22)"
+          strokeWidth={0.7}
+        />
+
+        {/* Top plate + champagne rim */}
+        <ellipse
+          cx="50"
+          cy="70"
+          rx="38"
+          ry="13"
+          fill={`url(#lid-${uid})`}
+        />
+        <ellipse
+          cx="50"
+          cy="70"
+          rx="38"
+          ry="13"
+          fill="#c4b49a"
+          filter={`url(#brushed-${uid})`}
+          opacity={0.28}
+          style={{ mixBlendMode: "overlay" }}
+        />
+        <ellipse
+          cx="50"
+          cy="70"
+          rx="38"
+          ry="13"
+          fill="none"
           stroke={`url(#rim-${uid})`}
-          strokeWidth={2.2}
+          strokeWidth={2.1}
+        />
+
+        {/* Inner lip — the pan recess */}
+        <ellipse
+          cx="50"
+          cy="72"
+          rx="31"
+          ry="10.2"
+          fill="#1a1612"
+          stroke="rgba(232,217,192,0.4)"
+          strokeWidth={1.15}
         />
         <ellipse
           cx="50"
-          cy="78"
-          rx="30"
-          ry="30"
-          fill="#2a241e"
-          stroke="rgba(196,180,154,0.55)"
-          strokeWidth={1.2}
+          cy="74.5"
+          rx="28"
+          ry="9"
+          fill={`url(#floor-${uid})`}
         />
 
-        {/* Inner pan well */}
-        <ellipse cx="50" cy="78" rx="24" ry="24" fill="#12100e" />
+        {/* Specular kiss on the front rim */}
+        <path
+          d="M22 76 Q50 84 78 76"
+          fill="none"
+          stroke="rgba(247,245,241,0.45)"
+          strokeWidth={1.05}
+          strokeLinecap="round"
+        />
 
         {/* Melt / balm puck */}
         {hasFill ? (
@@ -191,7 +266,7 @@ export function SolidTinVessel({
                   : ""
             }
             style={{
-              transformOrigin: "50px 78px",
+              transformOrigin: "50px 75px",
               transform: `scale(${snapScale})`,
               transition: reduced
                 ? "opacity 0.15s ease"
@@ -200,9 +275,9 @@ export function SolidTinVessel({
           >
             <ellipse
               cx="50"
-              cy="78"
-              rx={22 * Math.min(1, 0.35 + fillPct / 140)}
-              ry={22 * Math.min(1, 0.35 + fillPct / 140)}
+              cy="75"
+              rx={27 * puckR}
+              ry={8.6 * puckR}
               fill={`url(#puck-${uid})`}
               opacity={puckOpacity}
               style={{
@@ -212,63 +287,59 @@ export function SolidTinVessel({
                   : "opacity 0.35s ease-out, filter 0.4s ease",
               }}
             />
-            {/* Soft grain when set */}
             {matteLock ? (
               <ellipse
                 cx="50"
-                cy="78"
-                rx={20 * Math.min(1, 0.35 + fillPct / 140)}
-                ry={20 * Math.min(1, 0.35 + fillPct / 140)}
-                fill={`url(#grain-${uid})`}
-                opacity={0.45}
+                cy="75"
+                rx={25 * puckR}
+                ry={7.8 * puckR}
+                fill="#c4b49a"
+                filter={`url(#brushed-${uid})`}
+                opacity={0.4}
                 style={{ mixBlendMode: "multiply" }}
               />
             ) : null}
-            {/* Melt gloss */}
             {meltGloss > 0.05 && !matteLock ? (
               <ellipse
                 cx="44"
-                cy="70"
-                rx="10"
-                ry="6"
+                cy="71"
+                rx="9"
+                ry="3.4"
                 fill="rgba(255,248,230,0.55)"
                 opacity={meltGloss}
               />
             ) : null}
-            {/* Amber melt wash when heat on */}
             {heatAttached && !matteLock ? (
               <ellipse
                 cx="50"
-                cy="78"
-                rx="22"
-                ry="22"
+                cy="75"
+                rx={27 * puckR}
+                ry={8.6 * puckR}
                 fill="rgba(184,149,108,0.28)"
               />
             ) : null}
           </g>
         ) : null}
 
-        {/* Cool rim flash */}
         {coolRim ? (
           <ellipse
             cx="50"
-            cy="78"
-            rx="25"
-            ry="25"
+            cy="70"
+            rx="38.6"
+            ry="13.4"
             fill="none"
-            stroke="rgba(125,211,252,0.45)"
-            strokeWidth={1.4}
+            stroke="rgba(125,211,252,0.28)"
+            strokeWidth={1.2}
             className={reduced ? undefined : "lab-frost-rim"}
           />
         ) : null}
 
-        {/* Champagne rim light kiss after seat */}
         {phase === "seat" || phase === "ready" ? (
           <ellipse
             cx="50"
-            cy="78"
-            rx="34"
-            ry="34"
+            cy="70"
+            rx="38"
+            ry="13"
             fill="none"
             stroke="rgba(232,217,192,0.55)"
             strokeWidth={1}
@@ -276,23 +347,22 @@ export function SolidTinVessel({
           />
         ) : null}
 
-        {/* Tin label ring highlight */}
+        {/* Tiny hinge at the back of the tin */}
         <ellipse
           cx="50"
-          cy="52"
-          rx="8"
-          ry="2.5"
+          cy="58.5"
+          rx="5.5"
+          ry="1.8"
           fill="none"
-          stroke="rgba(196,180,154,0.35)"
-          strokeWidth={0.8}
+          stroke="rgba(196,180,154,0.4)"
+          strokeWidth={0.85}
         />
       </svg>
 
-      {/* Press affordance — post reveal only */}
       {showPress && hasFill ? (
         <button
           type="button"
-          className="lab-press-affordance absolute left-1/2 top-[52%] z-[4] flex h-11 w-11 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border border-white/25 bg-black/20 text-[9px] font-semibold uppercase tracking-[0.12em] text-lab-foam/90 backdrop-blur-[1px] transition hover:bg-black/35 md:h-10 md:w-10"
+          className="lab-press-affordance absolute left-1/2 top-[54%] z-[4] flex h-11 w-11 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border border-white/25 bg-black/20 text-[9px] font-semibold uppercase tracking-label text-lab-foam/90 backdrop-blur-[1px] transition hover:bg-black/35 md:h-10 md:w-10"
           onClick={(e) => {
             e.stopPropagation();
             onPress?.();

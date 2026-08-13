@@ -47,7 +47,6 @@ export const MAX_XP_DELTA = 200;
 /** Max stars a single perfume-progress sync may add */
 export const MAX_STARS_DELTA = 5;
 const MAX_DISCOVERY_ID_LEN = 240;
-export const DAILY_STAR_COOLDOWN_MS = 24 * 60 * 60 * 1000;
 
 /**
  * discoveryId format: `${reactionType}::${sortedReactantIds}::${label}`
@@ -444,18 +443,4 @@ export function mergeProgress(
   );
 
   return { xp, discoveredIds, badgeIds, completedPerfumeIds, stars, starsGranted };
-}
-
-export function nextDailyClaimState(
-  lastDailyStarAt: number | undefined,
-  now: number,
-): { canClaim: boolean; nextClaimInMs: number } {
-  if (!lastDailyStarAt || lastDailyStarAt <= 0) {
-    return { canClaim: true, nextClaimInMs: 0 };
-  }
-  const elapsed = now - lastDailyStarAt;
-  if (elapsed >= DAILY_STAR_COOLDOWN_MS) {
-    return { canClaim: true, nextClaimInMs: 0 };
-  }
-  return { canClaim: false, nextClaimInMs: DAILY_STAR_COOLDOWN_MS - elapsed };
 }

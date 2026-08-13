@@ -8,7 +8,7 @@ import {
   primarySimHud,
 } from "@/desk/vesselSim";
 
-/** Compact live process readout on a vessel card or tool rail. */
+/** Compact live process readout — always wraps inside the vessel card. */
 export function VesselSimHud({
   vessel,
   compact,
@@ -39,6 +39,14 @@ export function VesselSimHud({
   const elapsedMs = hud?.elapsedMs ?? 0;
   const label = hud?.phase ?? phaseLabel(sim.phaseHint, solid);
   const action = hud?.label;
+  const extras: string[] = [];
+  if (vessel.heatAttached && !solid && sim.temperature >= 0.68) extras.push("evap");
+  if (solid && (vessel.heatAttached || sim.meltFraction > 0.05)) {
+    extras.push(`melt ${Math.round(sim.meltFraction * 100)}%`);
+  }
+  if (sim.frost > 0.2 && !vessel.heatAttached) {
+    extras.push(`frost ${Math.round(sim.frost * 100)}%`);
+  }
 
   const intensity = Math.round(
     clamp01(
@@ -54,41 +62,30 @@ export function VesselSimHud({
 
   return (
     <div
-      className={`pointer-events-none font-mono text-[9px] tracking-wide text-lab-foam ${
+      className={`pointer-events-none min-w-0 max-w-full overflow-hidden font-mono tracking-wide text-lab-foam ${
         compact
-          ? "rounded bg-black/45 px-1.5 py-0.5"
-          : "rounded-md border border-white/10 bg-black/50 px-2 py-1 shadow-sm"
+          ? "rounded bg-black/45 px-1 py-0.5 text-[7px] leading-tight md:px-1.5 md:text-[8px]"
+          : "rounded-md border border-white/10 bg-black/50 px-2 py-1 text-[9px] shadow-sm"
       }`}
       data-lab-sim-hud
       aria-live="polite"
     >
-      {action && action !== label ? (
-        <>
-          <span className="text-lab-foam/95">{action}</span>
-          <span className="mx-1 text-lab-foam/40">·</span>
-        </>
-      ) : null}
-      <span className="text-lab-foam/95">{label}</span>
-      {elapsedMs > 0 ? (
-        <>
-          <span className="mx-1 text-lab-foam/40">·</span>
-          <span>{formatSimElapsed(elapsedMs)}</span>
-        </>
-      ) : null}
-      <span className="mx-1 text-lab-foam/40">·</span>
-      <span>{intensity}%</span>
-      {vessel.heatAttached && !solid && sim.temperature >= 0.68 ? (
-        <span className="ml-1 text-lab-amber/90">evap</span>
-      ) : null}
-      {solid && (vessel.heatAttached || sim.meltFraction > 0.05) ? (
-        <span className="ml-1 text-lab-amber/90">
-          melt {Math.round(sim.meltFraction * 100)}%
-        </span>
-      ) : null}
-      {sim.frost > 0.2 && !vessel.heatAttached ? (
-        <span className="ml-1 text-[#7dd3fc]/90">
-          frost {Math.round(sim.frost * 100)}%
-        </span>
+      <div className="flex min-w-0 items-baseline gap-x-1">
+        {action && action !== label ? (
+          <span className="min-w-0 truncate text-lab-foam/95">{action}</span>
+        ) : null}
+        <span className="min-w-0 truncate text-lab-foam/95">{label}</span>
+        {elapsedMs > 0 ? (
+          <span className="shrink-0 tabular-nums">
+            {formatSimElapsed(elapsedMs)}
+          </span>
+        ) : null}
+        <span className="ml-auto shrink-0 tabular-nums">{intensity}%</span>
+      </div>
+      {extras.length > 0 ? (
+        <div className="min-w-0 truncate text-[8px] leading-tight text-lab-foam/75">
+          {extras.join(" · ")}
+        </div>
       ) : null}
     </div>
   );

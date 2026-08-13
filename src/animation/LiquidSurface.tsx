@@ -47,8 +47,20 @@ function clamp(n: number, a: number, b: number) {
   return Math.max(a, Math.min(b, n));
 }
 
+/** Leave a rim of well empty so the surface never clips the glass lip. */
+const HEADROOM = 0.035;
+
+function visualFill01(fillPct: number) {
+  return clamp(fillPct, 0, 100) / 100;
+}
+
+function surfaceBaseY(wb: GlassGeometry["wellBounds"], fillPct: number) {
+  const fill = visualFill01(fillPct);
+  return wb.y + wb.height * (1 - fill * (1 - HEADROOM));
+}
+
 function hexWithAlpha(hex: string, alpha: number) {
-  if (!hex || hex === "transparent") return `rgba(143, 192, 181, ${alpha})`;
+  if (!hex || hex === "transparent") return `rgba(196, 180, 154, ${alpha})`;
   const raw = hex.replace("#", "");
   const full =
     raw.length === 3
@@ -57,7 +69,7 @@ function hexWithAlpha(hex: string, alpha: number) {
           .map((c) => c + c)
           .join("")
       : raw.slice(0, 6);
-  if (full.length !== 6) return `rgba(143, 192, 181, ${alpha})`;
+  if (full.length !== 6) return `rgba(196, 180, 154, ${alpha})`;
   const r = parseInt(full.slice(0, 2), 16);
   const g = parseInt(full.slice(2, 4), 16);
   const b = parseInt(full.slice(4, 6), 16);
@@ -65,7 +77,7 @@ function hexWithAlpha(hex: string, alpha: number) {
 }
 
 function staticSurface(wb: GlassGeometry["wellBounds"], fillPct: number) {
-  const topY = wb.y + wb.height * (1 - clamp(fillPct, 0, 100) / 100);
+  const topY = surfaceBaseY(wb, fillPct);
   return `M${wb.x} ${topY} L${wb.x + wb.width} ${topY} L${wb.x + wb.width} ${wb.y + wb.height} L${wb.x} ${wb.y + wb.height} Z`;
 }
 
@@ -76,20 +88,28 @@ function buildWaveSurface(
   amp: number,
   freq: number,
   tiltBias: number,
+  freeze: number,
 ) {
-  const baseY = wb.y + wb.height * (1 - clamp(fillPct, 0, 100) / 100);
-  const steps = 10;
+  const baseY = surfaceBaseY(wb, fillPct);
+  const minY = wb.y + 1.35;
+  const maxY = wb.y + wb.height - 0.4;
+  const fill01 = visualFill01(fillPct);
+  const ampScale = fill01 > 0.86 ? Math.max(0.18, (1 - fill01) / 0.14) : 1;
+  const samples = freeze > 0.55 ? 4 : 10;
   const pts: string[] = [];
-  for (let i = 0; i <= steps; i++) {
-    const u = i / steps;
+  for (let i = 0; i <= samples; i++) {
+    const u = i / samples;
     const x = wb.x + wb.width * u;
+    const capillary = Math.sin(u * Math.PI) * (1.35 + amp * 0.12) * (1 - freeze);
     const wave =
-      Math.sin(u * Math.PI * 2 * freq + t * freq * 2.2) * amp * 0.55 +
-      Math.sin(u * Math.PI * 3 + t * 3.1) * amp * 0.25 +
-      tiltBias * (u - 0.5) * 2;
-    pts.push(
-      `${i === 0 ? "M" : "L"}${x.toFixed(2)} ${(baseY + wave).toFixed(2)}`,
-    );
+      freeze > 0.55
+        ? -capillary * 0.35
+        : Math.sin(u * Math.PI * 2 * freq + t * freq * 2.2) * amp * 0.55 * ampScale +
+          Math.sin(u * Math.PI * 3 + t * 3.1) * amp * 0.25 * ampScale +
+          tiltBias * (u - 0.5) * 2 -
+          capillary;
+    const y = clamp(baseY + wave, minY, maxY);
+    pts.push(`${i === 0 ? "M" : "L"}${x.toFixed(2)} ${y.toFixed(2)}`);
   }
   pts.push(
     `L${wb.x + wb.width} ${wb.y + wb.height} L${wb.x} ${wb.y + wb.height} Z`,
@@ -102,17 +122,24 @@ function meniscusStroke(
   fillPct: number,
   t: number,
   amp: number,
+  freeze: number,
 ) {
-  const baseY = wb.y + wb.height * (1 - clamp(fillPct, 0, 100) / 100);
-  const steps = 8;
+  const baseY = surfaceBaseY(wb, fillPct);
+  const minY = wb.y + 1.5;
+  const maxY = wb.y + wb.height - 0.6;
+  const steps = freeze > 0.55 ? 4 : 8;
   const pts: string[] = [];
   for (let i = 0; i <= steps; i++) {
     const u = i / steps;
-    const x = wb.x + 1 + (wb.width - 2) * u;
-    const y =
+    const x = wb.x + 1.6 + (wb.width - 3.2) * u;
+    const capillary = Math.sin(u * Math.PI) * (1.4 + amp * 0.15) * (1 - freeze);
+    const y = clamp(
       baseY +
-      Math.sin(u * Math.PI * 2 + t * 2.4) * amp * 0.5 -
-      Math.sin(u * Math.PI) * 0.8;
+        Math.sin(u * Math.PI * 2 + t * 2.4) * amp * 0.35 * (1 - freeze) -
+        capillary,
+      minY,
+      maxY,
+    );
     pts.push(`${i === 0 ? "M" : "L"}${x.toFixed(2)} ${y.toFixed(2)}`);
   }
   return pts.join(" ");
@@ -181,7 +208,6 @@ export function LiquidSurface({
           meniscus: "",
           bubbles: [],
         });
-        // Reduced motion: stop looping after one static frame
         return;
       }
 
@@ -206,7 +232,6 @@ export function LiquidSurface({
       const out = m.transferringOut ? 1 : 0;
       const solid = m.solidify ?? 0;
       const meltAmt = m.melt ?? 0;
-      // Solidify freezes waves; melt unlocks
       const freeze = Math.max(0, solid - meltAmt * 0.85);
 
       const energy =
@@ -219,7 +244,6 @@ export function LiquidSurface({
         Math.abs(target - currentPct) +
         (morphT < 1 ? 1 : 0) +
         (freeze > 0.4 ? 0 : 0.01);
-      // Idle: ~8fps gentle wave instead of full 60fps
       if (energy < 0.05 && freeze < 0.3) {
         const idleFrame = Math.floor(t * 8);
         if (idleFrame === lastIdleFrame) {
@@ -251,7 +275,6 @@ export function LiquidSurface({
       const bubbles: Bubble[] =
         bubbleN > 0
           ? Array.from({ length: bubbleN }, (_, i) => {
-              // Nucleation from bottom; wobble + grow; pop near surface
               const speed = 1.05 + boil * 0.55 + (i % 3) * 0.08;
               const phase = (t * speed + i * 0.31) % 1.4;
               const life = Math.min(1, phase / 1.4);
@@ -259,16 +282,19 @@ export function LiquidSurface({
               const wobble =
                 Math.sin(t * 3.2 + i * 1.7) * (2 + life * 5) * (1 - freeze);
               const pop = life > 0.88 ? Math.max(0.2, 1 - (life - 0.88) / 0.12) : 1;
+              const surfaceY = surfaceBaseY(wb, currentPct);
               return {
                 x:
                   wb.x +
                   wb.width * (0.14 + ((i * 0.17 + i * 0.03) % 0.72)) +
                   wobble,
-                y:
+                y: Math.max(
+                  surfaceY + 1.2,
                   wb.y +
-                  wb.height -
-                  (wb.height * (currentPct / 100)) * life -
-                  2,
+                    wb.height -
+                    (wb.height * visualFill01(currentPct)) * life -
+                    2,
+                ),
                 r: (1.6 + (i % 5) * 0.9) * coalesce * (0.7 + life * 0.55) * pop,
                 opacity:
                   (0.95 - life * 0.4) *
@@ -288,14 +314,15 @@ export function LiquidSurface({
           amp,
           freq,
           tilt * 0.35,
+          freeze,
         ),
-        sloshDeg: tilt,
+        sloshDeg: tilt * 0.12,
         morphT,
         colorA,
         colorB,
         meniscus:
           currentPct > 2
-            ? meniscusStroke(wb, currentPct, t, 1 + pour * 3 + stir * 0.8)
+            ? meniscusStroke(wb, currentPct, t, 1 + pour * 3 + stir * 0.8, freeze)
             : "",
         bubbles,
       });
@@ -315,11 +342,11 @@ export function LiquidSurface({
   const bodyPath = frame.surfacePath || staticSurface(wb, frame.displayPct);
   const colorA =
     frame.colorA === "transparent"
-      ? "var(--lab-glass, #8fc0b5)"
+      ? "var(--lab-glass, #c4b49a)"
       : frame.colorA;
   const colorB =
     frame.colorB === "transparent"
-      ? "var(--lab-glass, #8fc0b5)"
+      ? "var(--lab-glass, #c4b49a)"
       : frame.colorB;
   const showMorph = frame.morphT < 1 && colorA !== colorB;
 

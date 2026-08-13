@@ -52,7 +52,7 @@ function HistoryListBody({
   return (
     <>
       <div className="flex h-10 shrink-0 items-center gap-2 border-b border-lab-line/60 px-3">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-lab-muted">
+        <p className="text-[11px] font-semibold uppercase tracking-label text-lab-muted">
           Chats
         </p>
         <div className="flex-1" />

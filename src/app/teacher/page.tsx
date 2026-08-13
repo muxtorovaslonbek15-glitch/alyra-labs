@@ -189,7 +189,7 @@ export default function TeacherPage() {
         ) : (
           <>
             <section className="mt-6 rounded-xl border border-lab-line/50 bg-lab-panel/80 p-4">
-              <h2 className="text-sm font-semibold uppercase tracking-wider text-lab-muted">
+              <h2 className="text-sm font-semibold uppercase tracking-label text-lab-muted">
                 New class
               </h2>
               <div className="mt-2 flex flex-wrap gap-2">

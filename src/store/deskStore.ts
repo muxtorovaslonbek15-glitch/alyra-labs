@@ -21,7 +21,16 @@ import {
   transferContents,
 } from "@/desk/vesselContents";
 import { resolveGlassShape } from "@/animation/glassware/shapes";
-import { VESSEL_CARD } from "@/desk/vesselLayout";
+import {
+  SNAP_GAP_PX,
+  currentVesselCard,
+  findFreeSlot,
+  separateOverlappingPositions,
+  slotOrigin,
+  stampSlotFrom,
+  snapAlignPosition,
+} from "@/desk/vesselLayout";
+import { POUR_WINDOW_MS } from "@/animation/fxIntensity";
 import { useInventoryStockStore, defaultStockMl } from "@/store/inventoryStockStore";
 import { showToast } from "@/gamification/ToastHost";
 import { labCopy } from "@/lab/labCopy";
@@ -31,6 +40,7 @@ import {
   simNeedsTick,
   tickVesselSim,
 } from "@/desk/vesselSim";
+import { mixToggleDecision, shouldStampCupSet } from "@/desk/mixCastGuard";
 
 if (typeof window !== "undefined") {
   try {
@@ -58,6 +68,8 @@ interface DeskState {
     position?: { x: number; y: number },
   ) => string | null;
   moveVessel: (vesselId: string, position: { x: number; y: number }) => void;
+  /** Park overlapping cards into a gapped row. No-op during transfer pour. */
+  nudgeOverlappingVessels: () => void;
   addChemicalToVessel: (
     vesselId: string,
     chemicalId: string,
@@ -208,7 +220,13 @@ export const useDeskStore = create<DeskState>()(
         }
 
         const instanceId = uid();
-        const n = get().vessels.length;
+        const card = currentVesselCard();
+        const occupied = get().vessels.map((v) => v.position);
+        const from = position
+          ? { x: Math.max(8, position.x), y: Math.max(8, position.y) }
+          : slotOrigin(card);
+        const to = findFreeSlot(occupied, position, card);
+        stampSlotFrom(instanceId, from, to);
         const vessel: DeskVessel = {
           instanceId,
           equipmentId,
@@ -221,10 +239,7 @@ export const useDeskStore = create<DeskState>()(
           sim: defaultVesselSim(
             equipmentId === "tin" ? { meltFraction: 0, viscosity: 0.7 } : undefined,
           ),
-          position: position ?? {
-            x: 48 + (n % 4) * 200,
-            y: 56 + Math.floor(n / 4) * 220,
-          },
+          position: to,
         };
         labSound.place();
         set((s) => ({
@@ -247,6 +262,39 @@ export const useDeskStore = create<DeskState>()(
                 }
               : v,
           ),
+        }));
+      },
+
+      nudgeOverlappingVessels: () => {
+        const now = Date.now();
+        const vessels = get().vessels;
+        if (
+          vessels.some(
+            (v) =>
+              v.fx?.transferAt != null && now - v.fx.transferAt < POUR_WINDOW_MS,
+          )
+        ) {
+          return;
+        }
+        const next = separateOverlappingPositions(
+          vessels.map((v) => ({ id: v.instanceId, position: v.position })),
+          currentVesselCard(),
+        );
+        if (!next) return;
+        const byId = new Map(next.map((p) => [p.id, p.position]));
+        set((s) => ({
+          vessels: s.vessels.map((v) => {
+            const pos = byId.get(v.instanceId);
+            if (!pos) return v;
+            if (
+              Math.abs(pos.x - v.position.x) < 0.5 &&
+              Math.abs(pos.y - v.position.y) < 0.5
+            ) {
+              return v;
+            }
+            stampSlotFrom(v.instanceId, v.position, pos);
+            return { ...v, position: pos };
+          }),
         }));
       },
 
@@ -378,18 +426,27 @@ export const useDeskStore = create<DeskState>()(
           fromContents,
           from.equipmentId,
         );
+        const targetFillPct = fillPctFromContents(
+          toContents,
+          to.equipmentId,
+        );
         // Stamp desk-local lip origin so PourStream / dead pourFrom path stay live
         const geo = resolveGlassShape(from.equipmentId);
-        const scaleX =
-          (VESSEL_CARD.width - VESSEL_CARD.glassInsetX * 2) / 100;
-        const scaleY = VESSEL_CARD.glassH / 140;
+        const card = currentVesselCard();
+        const scaleX = (card.width - card.glassInsetX * 2) / 100;
+        const scaleY = card.glassH / 140;
         const pourFrom = {
-          x:
-            from.position.x +
-            VESSEL_CARD.glassInsetX +
-            geo.lip.x * scaleX,
-          y: from.position.y + VESSEL_CARD.glassTop + geo.lip.y * scaleY,
+          x: from.position.x + card.glassInsetX + geo.lip.x * scaleX,
+          y: from.position.y + card.glassTop + geo.lip.y * scaleY,
         };
+        const pourHome =
+          snapAlignPosition(from.position, [to.position], card) ?? {
+            x:
+              from.position.x >= to.position.x
+                ? to.position.x + card.width + SNAP_GAP_PX
+                : Math.max(8, to.position.x - card.width - SNAP_GAP_PX),
+            y: to.position.y,
+          };
 
         // Pour audio fires on stream phase start (VesselEffects), not here
         set((s) => ({
@@ -407,7 +464,9 @@ export const useDeskStore = create<DeskState>()(
                   transferRole: "source",
                   pourColor,
                   sourceFillPct,
+                  targetFillPct,
                   pourFrom,
+                  pourHome,
                 }),
               });
             }
@@ -425,6 +484,7 @@ export const useDeskStore = create<DeskState>()(
                   transferToId: toId,
                   transferRole: "target",
                   pourFrom,
+                  targetFillPct,
                 }),
               });
             }
@@ -687,7 +747,19 @@ export const useDeskStore = create<DeskState>()(
         if (!vessel) return;
         const sim = ensureSim(vessel);
         const now = Date.now();
-        if (sim.mixActive) {
+        const decision = mixToggleDecision({
+          contentsCount: getVesselContents(vessel).length,
+          mixActive: Boolean(sim.mixActive),
+          mixResolved: Boolean(sim.mixResolved),
+        });
+        if (decision === "empty") {
+          showToast(
+            vessel.equipmentId === "tin" ? labCopy.emptyCast : labCopy.emptyMix,
+          );
+          return;
+        }
+        if (decision === "hold") return;
+        if (decision === "off") {
           set((s) => ({
             vessels: s.vessels.map((v) =>
               v.instanceId === vesselId
@@ -800,7 +872,12 @@ export const useDeskStore = create<DeskState>()(
         const vessel = get().vessels.find((v) => v.instanceId === vesselId);
         if (!vessel) return null;
         const contents = getVesselContents(vessel);
-        if (contents.length < 1) return null;
+        if (contents.length < 1) {
+          showToast(
+            vessel.equipmentId === "tin" ? labCopy.emptyCast : labCopy.emptyMix,
+          );
+          return null;
+        }
 
         const result = resolveMix(vessel);
         if (result.effects.some((e) => e.kind === "hazard" || e.kind === "blast" || e.kind === "flash")) {
@@ -828,8 +905,12 @@ export const useDeskStore = create<DeskState>()(
                     mixAt: Date.now(),
                     shakeAt: Date.now(),
                     stirAt: Date.now(),
-                    ...(v.equipmentId === "tin"
-                      ? { castRevealAt: Date.now() }
+                    ...(shouldStampCupSet({
+                      equipmentId: v.equipmentId,
+                      cupSetAt: v.fx.cupSetAt,
+                      now: Date.now(),
+                    })
+                      ? { castRevealAt: Date.now(), cupSetAt: Date.now() }
                       : {}),
                   }),
                   sim: {
@@ -892,7 +973,25 @@ export const useDeskStore = create<DeskState>()(
         });
         set({ vessels: next, lastSimTickAt: now });
         for (const id of resolveIds) {
-          get().mixVessel(id);
+          const mixed = get().mixVessel(id);
+          if (!mixed) {
+            set((s) => ({
+              vessels: s.vessels.map((v) =>
+                v.instanceId === id
+                  ? {
+                      ...v,
+                      sim: {
+                        ...ensureSim(v),
+                        mixActive: false,
+                        mixStartedAt: undefined,
+                        mixResolved: false,
+                      },
+                    }
+                  : v,
+              ),
+            }));
+            continue;
+          }
           // Keep mixActive visuals after resolve until user toggles off
           set((s) => ({
             vessels: s.vessels.map((v) =>
@@ -917,8 +1016,16 @@ export const useDeskStore = create<DeskState>()(
         set({ vessels: [], activeVesselId: null, lastExplanationVesselId: null });
         const id = get().placeEquipment("beaker", { x: 140, y: 90 });
         if (!id) return null;
-        get().addChemicalToVessel(id, "hcl");
-        get().addChemicalToVessel(id, "naoh");
+        get().addChemicalToVessel(id, "hcl", undefined, {
+          consumeStock: false,
+          bypassGuestLimit: true,
+        });
+        get().addChemicalToVessel(id, "naoh", undefined, {
+          consumeStock: false,
+          bypassGuestLimit: true,
+        });
+        const auth = useAuthStore.getState();
+        if (!auth.user) auth.recordGuestChemicalAdd();
         get().stirVessel(id);
         return get().mixVessel(id);
       },
@@ -928,8 +1035,16 @@ export const useDeskStore = create<DeskState>()(
         set({ vessels: [], activeVesselId: null, lastExplanationVesselId: null });
         const id = get().placeEquipment(equipmentId, { x: 140, y: 90 });
         if (!id) return null;
-        get().addChemicalToVessel(id, a);
-        get().addChemicalToVessel(id, b);
+        get().addChemicalToVessel(id, a, undefined, {
+          consumeStock: false,
+          bypassGuestLimit: true,
+        });
+        get().addChemicalToVessel(id, b, undefined, {
+          consumeStock: false,
+          bypassGuestLimit: true,
+        });
+        const auth = useAuthStore.getState();
+        if (!auth.user) auth.recordGuestChemicalAdd();
         if (heat) get().attachHeat(id);
         get().stirVessel(id);
         return get().mixVessel(id);
