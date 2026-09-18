@@ -2,14 +2,10 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { useAuthStore } from "@/store/authStore";
-import { signOut } from "@/lib/firebase/auth";
 import { labSound } from "@/desk/labSound";
 
+/** Ro'yxatdan o'tish olib tashlandi — Log in / Sign up / Log out tugmalari yo'q. */
 export function NavChrome({ onDark = false }: { onDark?: boolean } = {}) {
-  const user = useAuthStore((s) => s.user);
-  const profile = useAuthStore((s) => s.profile);
-  const authReady = useAuthStore((s) => s.authReady);
   const [muted, setMuted] = useState(() => labSound.isMuted());
   const [menuOpen, setMenuOpen] = useState(false);
 
@@ -21,11 +17,6 @@ export function NavChrome({ onDark = false }: { onDark?: boolean } = {}) {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [menuOpen]);
-
-  async function onLogout() {
-    setMenuOpen(false);
-    await signOut();
-  }
 
   const linkOnBar = onDark
     ? "rounded-md px-2 py-1.5 font-semibold text-lab-foam/80 hover:bg-white/10 hover:text-lab-foam"
@@ -117,79 +108,9 @@ export function NavChrome({ onDark = false }: { onDark?: boolean } = {}) {
             >
               {muted ? "Unmute" : "Mute"}
             </button>
-            <div className="my-1 border-t border-lab-line/60" />
-            {!authReady ? (
-              <span className="px-2 py-1.5 text-lab-muted">…</span>
-            ) : user ? (
-              <button
-                type="button"
-                onClick={() => void onLogout()}
-                className={mutedInMenu}
-              >
-                Log out
-              </button>
-            ) : (
-              <>
-                <Link
-                  href="/login"
-                  onClick={() => setMenuOpen(false)}
-                  className={mutedInMenu}
-                >
-                  Log in
-                </Link>
-                <Link
-                  href="/signup"
-                  onClick={() => setMenuOpen(false)}
-                  className="rounded-md bg-lab-ink px-2 py-1.5 font-semibold text-lab-foam"
-                >
-                  Sign up
-                </Link>
-              </>
-            )}
           </div>
         </>
       ) : null}
-
-      <div className="hidden items-center gap-1 md:flex">
-        {!authReady ? (
-          <span className={`px-2 py-1 ${onDark ? "text-lab-foam/50" : "text-lab-muted"}`}>
-            …
-          </span>
-        ) : user ? (
-          <>
-            <span
-              className={`hidden max-w-[7rem] truncate px-1 sm:inline ${
-                onDark ? "text-lab-foam/55" : "text-lab-muted"
-              }`}
-            >
-              {profile?.displayName || user.email}
-            </span>
-            <button
-              type="button"
-              onClick={() => void onLogout()}
-              className={mutedOnBar}
-            >
-              Log out
-            </button>
-          </>
-        ) : (
-          <>
-            <Link href="/login" className={mutedOnBar}>
-              Log in
-            </Link>
-            <Link
-              href="/signup"
-              className={
-                onDark
-                  ? "rounded-md bg-lab-foam px-2 py-1 font-semibold text-lab-ink hover:bg-white"
-                  : "rounded-md bg-lab-teal px-2 py-1 font-semibold text-white hover:bg-lab-teal/90"
-              }
-            >
-              Sign up
-            </Link>
-          </>
-        )}
-      </div>
     </nav>
   );
 }
