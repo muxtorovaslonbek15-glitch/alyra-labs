@@ -2,8 +2,6 @@
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
-import { useAuthStore } from "@/store/authStore";
-import { signOut } from "@/lib/firebase/auth";
 import { labSound } from "@/desk/labSound";
 import { usePresence } from "@/animation/usePresence";
 
@@ -28,9 +26,6 @@ export function LabOverflowMenu({
   const [open, setOpen] = useState(false);
   const { mounted, visible } = usePresence(open);
   const rootRef = useRef<HTMLDivElement>(null);
-  const user = useAuthStore((s) => s.user);
-  const profile = useAuthStore((s) => s.profile);
-  const authReady = useAuthStore((s) => s.authReady);
   const [muted, setMuted] = useState(() => labSound.isMuted());
 
   useEffect(() => {
@@ -75,12 +70,6 @@ export function LabOverflowMenu({
           }`}
           data-open={visible}
         >
-          {authReady && user ? (
-            <p className="truncate px-2.5 py-1.5 text-[11px] text-lab-muted">
-              {profile?.displayName || user.email}
-            </p>
-          ) : null}
-
           {actions.map((a) => (
             <div key={a.id}>
               {a.dividerBefore ? (
@@ -120,37 +109,6 @@ export function LabOverflowMenu({
           >
             {muted ? "Unmute" : "Mute"}
           </button>
-          {!authReady ? (
-            <span className="px-2.5 py-2 text-xs text-lab-muted">…</span>
-          ) : user ? (
-            <button
-              type="button"
-              className={itemClass}
-              onClick={() => {
-                setOpen(false);
-                void signOut();
-              }}
-            >
-              Log out
-            </button>
-          ) : (
-            <>
-              <Link
-                href="/login"
-                className={itemClass}
-                onClick={() => setOpen(false)}
-              >
-                Log in
-              </Link>
-              <Link
-                href="/signup"
-                className="mt-0.5 flex w-full items-center justify-center rounded-md bg-lab-ink px-2.5 py-2 text-xs font-semibold text-lab-foam outline-none hover:bg-black focus-visible:ring-1 focus-visible:ring-lab-line"
-                onClick={() => setOpen(false)}
-              >
-                Sign up
-              </Link>
-            </>
-          )}
         </div>
       ) : null}
     </div>
