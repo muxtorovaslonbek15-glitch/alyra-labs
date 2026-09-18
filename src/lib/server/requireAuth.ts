@@ -1,4 +1,3 @@
-import { getAdminAuth, isFirebaseAdminConfigured } from "./firebaseAdmin";
 import { rateLimit, RATE_LIMITS } from "./rateLimit";
 
 export type AuthOk = { uid: string; email?: string };
@@ -15,52 +14,24 @@ function clientIp(req: Request): string {
   );
 }
 
+/** Faqat harf/raqam — header orqali kelgan qiymatni tozalaymiz. */
+function safeGuestId(raw: string | null): string | null {
+  if (!raw) return null;
+  const cleaned = raw.replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 64);
+  return cleaned.length >= 6 ? cleaned : null;
+}
+
+/**
+ * Ro'yxatdan o'tish tizimi olib tashlandi: endi bu funksiya hech kimni
+ * rad etmaydi. Har bir tashrifchi mehmon (guest) ID oladi — u faqat
+ * rate-limit va log uchun ishlatiladi.
+ */
 export async function requireFirebaseUser(
   req: Request,
 ): Promise<AuthOk | AuthFail> {
-  if (!isFirebaseAdminConfigured()) {
-    return {
-      response: Response.json(
-        {
-          error:
-            "Server auth is not configured. Set Firebase Admin credentials.",
-        },
-        { status: 503 },
-      ),
-    };
-  }
-
-  const header = req.headers.get("authorization");
-  if (!header?.startsWith("Bearer ")) {
-    return {
-      response: Response.json(
-        { error: "Sign in required." },
-        { status: 401 },
-      ),
-    };
-  }
-
-  const token = header.slice("Bearer ".length).trim();
-  if (!token) {
-    return {
-      response: Response.json(
-        { error: "Sign in required." },
-        { status: 401 },
-      ),
-    };
-  }
-
-  try {
-    const decoded = await getAdminAuth().verifyIdToken(token);
-    return { uid: decoded.uid, email: decoded.email };
-  } catch {
-    return {
-      response: Response.json(
-        { error: "Invalid or expired session. Sign in again." },
-        { status: 401 },
-      ),
-    };
-  }
+  const guest =
+    safeGuestId(req.headers.get("x-guest-id")) ?? `ip-${clientIp(req)}`;
+  return { uid: `guest:${guest}` };
 }
 
 export function enforceRateLimit(
