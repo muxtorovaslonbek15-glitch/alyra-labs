@@ -2,22 +2,39 @@
 
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import type { User } from "firebase/auth";
 import {
   isProfileComplete,
   type SignupProfileFields,
   type UserProfile,
 } from "@/lib/firebase/profile";
 
+/**
+ * Ro'yxatdan o'tish (registration) tizimi olib tashlandi.
+ * Sayt hammaga ochiq: har bir brauzer uchun doimiy "local" foydalanuvchi bor,
+ * shuning uchun barcha `if (!user)` tekshiruvlari o'tadi va hech qanday
+ * auth gate / guest cap ishlamaydi.
+ */
+export interface LocalUser {
+  uid: string;
+  email: string | null;
+  displayName: string | null;
+}
+
+export const LOCAL_USER: LocalUser = {
+  uid: "local",
+  email: null,
+  displayName: "Guest",
+};
+
 interface AuthState {
-  user: User | null;
+  user: LocalUser | null;
   profile: UserProfile | null;
   authReady: boolean;
   guestChemicalAdds: number;
   authGateOpen: boolean;
-  /** Name/phone captured on signup — consumed when creating the lab profile */
+  /** Eski API bilan moslik uchun saqlangan (endi ishlatilmaydi). */
   pendingSignup: SignupProfileFields | null;
-  setUser: (user: User | null) => void;
+  setUser: (user: LocalUser | null) => void;
   setProfile: (profile: UserProfile | null) => void;
   setAuthReady: (ready: boolean) => void;
   setPendingSignup: (fields: SignupProfileFields | null) => void;
@@ -33,14 +50,14 @@ interface AuthState {
 export const useAuthStore = create<AuthState>()(
   persist(
     (set, get) => ({
-      user: null,
+      user: LOCAL_USER,
       profile: null,
-      authReady: false,
+      authReady: true,
       guestChemicalAdds: 0,
       authGateOpen: false,
       pendingSignup: null,
 
-      setUser: (user) => set({ user }),
+      setUser: (user) => set({ user: user ?? LOCAL_USER }),
       setProfile: (profile) => set({ profile }),
       setAuthReady: (authReady) => set({ authReady }),
       setPendingSignup: (pendingSignup) => set({ pendingSignup }),
@@ -50,45 +67,28 @@ export const useAuthStore = create<AuthState>()(
         return fields;
       },
 
-      recordGuestChemicalAdd: () => {
-        const { user } = get();
-        if (user) return;
-        set((s) => {
-          const guestChemicalAdds = s.guestChemicalAdds + 1;
-          return {
-            guestChemicalAdds,
-            authGateOpen: guestChemicalAdds >= 2 ? true : s.authGateOpen,
-          };
-        });
-      },
+      /** Guest limiti yo'q — hech narsa sanalmaydi. */
+      recordGuestChemicalAdd: () => {},
 
-      openAuthGate: () => set({ authGateOpen: true }),
+      /** Auth gate butunlay o'chirilgan. */
+      openAuthGate: () => {},
       closeAuthGate: () => set({ authGateOpen: false }),
       resetGuestProgress: () =>
         set({ guestChemicalAdds: 0, authGateOpen: false }),
 
       isProfileComplete: () => isProfileComplete(get().profile),
 
-          // Guest 2-chemical soft-cap only. Signed-in users are never blocked by
-      // incomplete demographics (gender/DOB/phone) — collect those in Settings.
-      isLabBlocked: () => {
-        const { user, guestChemicalAdds } = get();
-        if (!user) return guestChemicalAdds >= 2;
-        return false;
-      },
+      /** Laboratoriya hech qachon bloklanmaydi. */
+      isLabBlocked: () => false,
     }),
     {
       name: "chemlab-auth-guest",
-      partialize: (s) => ({
-        guestChemicalAdds: s.guestChemicalAdds,
-      }),
+      partialize: () => ({}),
     },
   ),
 );
 
+/** Har doim ruxsat — hech qanday ro'yxatdan o'tish talab qilinmaydi. */
 export function assertLabActionAllowed(): boolean {
-  const store = useAuthStore.getState();
-  if (!store.isLabBlocked()) return true;
-  store.openAuthGate();
-  return false;
+  return true;
 }
