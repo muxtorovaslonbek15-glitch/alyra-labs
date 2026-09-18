@@ -1,16 +1,34 @@
 "use client";
 
-import { getFirebaseAuth } from "@/lib/firebase/client";
+const GUEST_KEY = "alyra-guest-id";
 
-/** Returns Authorization header with Firebase ID token, or null if signed out. */
+/** Brauzerga bog'liq doimiy anonim ID (faqat rate-limit uchun). */
+function guestId(): string {
+  if (typeof window === "undefined") return "ssr";
+  try {
+    let id = window.localStorage.getItem(GUEST_KEY);
+    if (!id) {
+      id =
+        typeof crypto !== "undefined" && "randomUUID" in crypto
+          ? crypto.randomUUID()
+          : `guest-${Date.now()}`;
+      window.localStorage.setItem(GUEST_KEY, id);
+    }
+    return id;
+  } catch {
+    return `guest-${Date.now()}`;
+  }
+}
+
+/**
+ * Ro'yxatdan o'tish olib tashlangani uchun Firebase ID token yo'q.
+ * Har doim oddiy JSON header qaytadi — API chaqiruvlari mehmon sifatida ishlaydi.
+ */
 export async function getAuthHeaders(): Promise<
   Record<string, string> | null
 > {
-  const user = getFirebaseAuth().currentUser;
-  if (!user) return null;
-  const token = await user.getIdToken();
   return {
-    Authorization: `Bearer ${token}`,
     "Content-Type": "application/json",
+    "X-Guest-Id": guestId(),
   };
 }
