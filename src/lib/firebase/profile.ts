@@ -1,5 +1,8 @@
-import { getAuthHeaders } from "@/lib/client/authHeaders";
-import type { DocumentData } from "firebase/firestore";
+/**
+ * Ro'yxatdan o'tish olib tashlandi — profil endi serverga emas,
+ * faqat shu brauzerning localStorage'iga saqlanadi.
+ * Eksportlar va tiplar o'zgarmadi, shuning uchun qolgan kod ishlashda davom etadi.
+ */
 
 export type Gender = "male" | "female" | "other" | "prefer_not_to_say";
 
@@ -50,7 +53,6 @@ export function ageFromDob(dob: string): number | undefined {
 
 /**
  * Soft completeness for Settings / prompts — NOT a Lab or Chat gate.
- * Lab unlock = signed-in; Chat = signed-in + BYOK. Prefer ageBand over DOB in P1.
  */
 export function isProfileComplete(profile: UserProfile | null | undefined): boolean {
   if (!profile) return false;
@@ -63,66 +65,62 @@ export function isProfileComplete(profile: UserProfile | null | undefined): bool
   );
 }
 
-async function profileRequest(
-  method: "GET" | "POST" | "PUT",
-  body?: unknown,
-): Promise<UserProfile> {
-  const headers = await getAuthHeaders();
-  if (!headers) throw new Error("Sign in required");
-  const res = await fetch("/api/profile", {
-    method,
-    headers,
-    ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
-  });
-  const data = (await res.json().catch(() => ({}))) as DocumentData & {
-    error?: string;
+const PROFILE_KEY = "alyra-local-profile";
+
+function emptyProfile(email = ""): UserProfile {
+  const now = Date.now();
+  return {
+    email,
+    displayName: "",
+    phone: "",
+    gender: "",
+    dob: "",
+    address: "",
+    pincode: "",
+    xp: 0,
+    discoveredIds: [],
+    badgeIds: [],
+    stars: 0,
+    lastDailyStarAt: 0,
+    unlockedShopItemIds: [],
+    completedPerfumeIds: [],
+    createdAt: now,
+    updatedAt: now,
   };
-  if (!res.ok) {
-    throw new Error(data.error || `Profile ${method} failed (${res.status})`);
-  }
-  return fromDoc(data, typeof data.email === "string" ? data.email : "");
 }
 
-function fromDoc(data: DocumentData, emailFallback: string): UserProfile {
-  return {
-    email: typeof data.email === "string" ? data.email : emailFallback,
-    displayName: typeof data.displayName === "string" ? data.displayName : undefined,
-    phone: typeof data.phone === "string" ? data.phone : undefined,
-    gender: (data.gender as Gender | "") || "",
-    dob: typeof data.dob === "string" ? data.dob : "",
-    age: typeof data.age === "number" ? data.age : ageFromDob(data.dob ?? ""),
-    address: typeof data.address === "string" ? data.address : "",
-    pincode: typeof data.pincode === "string" ? data.pincode : "",
-    xp: typeof data.xp === "number" ? data.xp : 0,
-    discoveredIds: Array.isArray(data.discoveredIds) ? data.discoveredIds : [],
-    badgeIds: Array.isArray(data.badgeIds) ? data.badgeIds : [],
-    stars: typeof data.stars === "number" ? data.stars : 0,
-    lastDailyStarAt:
-      typeof data.lastDailyStarAt === "number" ? data.lastDailyStarAt : 0,
-    unlockedShopItemIds: Array.isArray(data.unlockedShopItemIds)
-      ? data.unlockedShopItemIds
-      : [],
-    completedPerfumeIds: Array.isArray(data.completedPerfumeIds)
-      ? data.completedPerfumeIds
-      : [],
-    createdAt: typeof data.createdAt === "number" ? data.createdAt : Date.now(),
-    updatedAt: typeof data.updatedAt === "number" ? data.updatedAt : Date.now(),
-  };
+function readLocal(): UserProfile | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem(PROFILE_KEY);
+    if (!raw) return null;
+    const data = JSON.parse(raw) as Partial<UserProfile>;
+    return { ...emptyProfile(), ...data } as UserProfile;
+  } catch {
+    return null;
+  }
+}
+
+function writeLocal(profile: UserProfile): UserProfile {
+  if (typeof window === "undefined") return profile;
+  try {
+    window.localStorage.setItem(PROFILE_KEY, JSON.stringify(profile));
+  } catch {
+    /* localStorage to'lgan / o'chirilgan bo'lishi mumkin */
+  }
+  return profile;
 }
 
 export async function getUserProfile(
   _uid: string,
   emailFallback = "",
 ): Promise<UserProfile | null> {
-  try {
-    const profile = await profileRequest("GET");
-    if (!profile.email && emailFallback) {
-      return { ...profile, email: emailFallback };
-    }
-    return profile;
-  } catch {
-    return null;
+  const profile = readLocal();
+  if (!profile) return null;
+  if (!profile.email && emailFallback) {
+    return { ...profile, email: emailFallback };
   }
+  return profile;
 }
 
 export async function ensureUserProfile(
@@ -131,10 +129,13 @@ export async function ensureUserProfile(
   _local?: { xp: number; discoveredIds: string[]; badgeIds: string[] },
   signup?: SignupProfileFields,
 ): Promise<UserProfile> {
-  return profileRequest("POST", {
-    email,
-    displayName: signup?.displayName.trim() || "",
-    phone: signup?.phone.trim() || "",
+  const current = readLocal() ?? emptyProfile(email);
+  return writeLocal({
+    ...current,
+    email: email || current.email,
+    displayName: signup?.displayName.trim() || current.displayName,
+    phone: signup?.phone.trim() || current.phone,
+    updatedAt: Date.now(),
   });
 }
 
@@ -142,18 +143,26 @@ export async function updateUserProfile(
   _uid: string,
   input: ProfileInput,
 ): Promise<UserProfile> {
-  return profileRequest("PUT", {
+  const current = readLocal() ?? emptyProfile();
+  return writeLocal({
+    ...current,
     gender: input.gender,
     dob: input.dob,
+    age: ageFromDob(input.dob),
     address: input.address.trim(),
     pincode: input.pincode.trim(),
-    displayName: input.displayName?.trim() || "",
-    phone: input.phone?.trim() || "",
+    displayName: input.displayName?.trim() || current.displayName,
+    phone: input.phone?.trim() || current.phone,
+    updatedAt: Date.now(),
   });
 }
 
+/**
+ * Bulutga sinxronizatsiya o'chirilgan — progress zustand `persist` orqali
+ * allaqachon localStorage'da saqlanadi.
+ */
 export async function syncProgressToFirestore(
-  uid: string,
+  _uid: string,
   progress: {
     xp: number;
     discoveredIds: string[];
@@ -162,24 +171,21 @@ export async function syncProgressToFirestore(
     starsDelta?: number;
   },
 ): Promise<void> {
-  // Prefer server Admin path when running in the browser.
-  if (typeof window !== "undefined") {
-    const { getAuthHeaders } = await import("@/lib/client/authHeaders");
-    const headers = await getAuthHeaders();
-    if (!headers) return;
-    const res = await fetch("/api/progress", {
-      method: "POST",
-      headers,
-      body: JSON.stringify(progress),
-    });
-    if (!res.ok) {
-      throw new Error(`Progress sync failed (${res.status})`);
-    }
-    return;
-  }
-
-  // Server-side fallback (should use Admin route instead).
-  void uid;
-  void progress;
-  throw new Error("syncProgressToFirestore must be called from the client");
+  const current = readLocal();
+  if (!current) return;
+  writeLocal({
+    ...current,
+    xp: Math.max(current.xp, progress.xp),
+    discoveredIds: Array.from(
+      new Set([...current.discoveredIds, ...progress.discoveredIds]),
+    ),
+    badgeIds: Array.from(new Set([...current.badgeIds, ...progress.badgeIds])),
+    completedPerfumeIds: Array.from(
+      new Set([
+        ...current.completedPerfumeIds,
+        ...(progress.completedPerfumeIds ?? []),
+      ]),
+    ),
+    updatedAt: Date.now(),
+  });
 }
