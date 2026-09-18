@@ -2,9 +2,6 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { useEffect } from "react";
-import { useRouter } from "next/navigation";
-import { useAuthStore } from "@/store/authStore";
 import { WaitlistForm } from "@/components/marketing/WaitlistForm";
 import { AlyraMark } from "@/components/brand/AlyraMark";
 
@@ -24,16 +21,6 @@ const BELOW = [
 ] as const;
 
 export function LandingPage() {
-  const user = useAuthStore((s) => s.user);
-  const authReady = useAuthStore((s) => s.authReady);
-  const router = useRouter();
-
-  useEffect(() => {
-    if (authReady && user) {
-      router.replace("/lab");
-    }
-  }, [authReady, user, router]);
-
   return (
     <div className="min-h-dvh bg-lab-ink text-lab-foam">
       <header className="absolute inset-x-0 top-0 z-20 flex items-center justify-between px-5 py-5 sm:px-8">
@@ -48,10 +35,10 @@ export function LandingPage() {
             Shop Alyra
           </a>
           <Link
-            href="/login"
+            href="/lab"
             className="rounded-md px-3 py-1.5 font-medium text-lab-foam/70 transition hover:text-lab-foam"
           >
-            Log in
+            Open the atelier
           </Link>
           <a
             href="#waitlist"
@@ -161,11 +148,7 @@ export function LandingPage() {
             <WaitlistForm intent="premium" />
           </div>
           <p className="mt-8 text-sm text-lab-foam/55">
-            Already in?{" "}
-            <Link href="/login" className="font-semibold text-lab-glass">
-              Log in
-            </Link>
-            {" · "}
+            Ready to start?{" "}
             <Link href="/lab" className="font-semibold text-lab-glass">
               Open the atelier
             </Link>
